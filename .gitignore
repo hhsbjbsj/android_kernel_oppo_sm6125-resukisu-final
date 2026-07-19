@@ -1,0 +1,15 @@
+/out/
+/out-*/
+/dist/
+/dist-*/
+*.o
+*.ko
+*.cmd
+*.tmp
+*.log
+*.img
+*.tar
+*.tar.gz
+*.zip
+.pytest_cache/
+__pycache__/

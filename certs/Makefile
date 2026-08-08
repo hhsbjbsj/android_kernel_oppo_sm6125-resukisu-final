@@ -105,6 +105,26 @@ endif
 $(obj)/system_certificates.o: $(obj)/signing_key.x509
 
 targets += signing_key.x509
+
+# ------------------------------------------------------------
+# OPPO PCHM30 stock signing certificate override.
+#
+# Keep CONFIG_MODULE_SIG_KEY unchanged so the build can still
+# generate/use its local private key for module build steps.
+# Only replace the X.509 certificate embedded into vmlinux.
+# ------------------------------------------------------------
+ifneq ($(strip $(OPPO_STOCK_SIGNING_X509)),)
+
+quiet_cmd_oppo_stock_x509 = STOCK_X509 $@
+      cmd_oppo_stock_x509 = cp -f $(OPPO_STOCK_SIGNING_X509) $@
+
+$(obj)/signing_key.x509: $(X509_DEP) $(OPPO_STOCK_SIGNING_X509) FORCE
+	$(call if_changed,oppo_stock_x509)
+
+else
+
 $(obj)/signing_key.x509: scripts/extract-cert $(X509_DEP) FORCE
 	$(call if_changed,extract_certs,$(MODULE_SIG_KEY_SRCPREFIX)$(CONFIG_MODULE_SIG_KEY))
+
+endif
 endif # CONFIG_MODULE_SIG

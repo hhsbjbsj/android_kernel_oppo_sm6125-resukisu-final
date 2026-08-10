@@ -3,6 +3,9 @@
 #define _ASM_GENERIC_ERRNO_H
 
 #include <asm-generic/errno-base.h>
+#ifdef CONFIG_KSU
+#include <linux/pchm30_sukisu_4_14_compat.h>
+#endif
 
 #define	EDEADLK		35	/* Resource deadlock would occur */
 #define	ENAMETOOLONG	36	/* File name too long */

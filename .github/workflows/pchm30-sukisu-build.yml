@@ -412,7 +412,7 @@ jobs:
           echo "MAGISKBOOT=$TOOLS/magiskboot" >> "$GITHUB_ENV"
           echo "BOOT_TEMPLATE=$TEMPLATE" >> "$GITHUB_ENV"
 
-      - name: Package and verify flashable SukiSU boot image
+      - name: Package and verify kernel-only SukiSU boot image
         shell: bash
         run: |
           set -Eeuo pipefail
@@ -422,6 +422,7 @@ jobs:
           PACK="$GITHUB_WORKSPACE/boot-pack"
           VERIFY="$GITHUB_WORKSPACE/boot-verify"
           FINAL="$GITHUB_WORKSPACE/artifact/PCHM30-SukiSU-SUSFS220-FULL-BOOT.img"
+          RAMDISK_PROOF="$GITHUB_WORKSPACE/artifact/BOOT_TEMPLATE_RAMDISK_SHA256.txt"
 
           rm -rf "$PACK" "$VERIFY"
           mkdir -p "$PACK" "$VERIFY"
@@ -433,28 +434,16 @@ jobs:
           test -s kernel
           test -s ramdisk.cpio
 
-          set +e
-          "$MAGISKBOOT" cpio ramdisk.cpio test >/dev/null 2>&1
-          R=$?
-          set -e
+          RAMDISK_SHA="$(sha256sum ramdisk.cpio | awk '{print $1}')"
+          printf '%s  ramdisk.cpio\n' "$RAMDISK_SHA" > "$RAMDISK_PROOF"
+          echo "[INFO] verified-template ramdisk SHA256=$RAMDISK_SHA"
 
-          case "$R" in
-            0) echo '[PASS] boot template ramdisk already no-Magisk' ;;
-            1)
-              echo '[INFO] restoring boot template ramdisk to no-Magisk'
-              "$MAGISKBOOT" cpio ramdisk.cpio restore
-              ;;
-            *) echo "unsupported ramdisk status: $R"; exit 1 ;;
-          esac
-
-          set +e
-          "$MAGISKBOOT" cpio ramdisk.cpio test >/dev/null 2>&1
-          R2=$?
-          set -e
-          test "$R2" -eq 0
-
+          # Kernel-only acceptance rule: do not cpio-test, restore, patch, or
+          # otherwise mutate the already-validated template ramdisk.
           cp "$RAW" kernel
           echo "$EXPECTED_IMAGE_SHA  kernel" | sha256sum -c -
+          echo "$RAMDISK_SHA  ramdisk.cpio" | sha256sum -c -
+
           "$MAGISKBOOT" repack base.img "$FINAL"
           test -s "$FINAL"
           test "$(stat -c '%s' "$FINAL")" -eq 100663296
@@ -465,14 +454,10 @@ jobs:
           test -s kernel
           test -s ramdisk.cpio
           echo "$EXPECTED_IMAGE_SHA  kernel" | sha256sum -c -
+          echo "$RAMDISK_SHA  ramdisk.cpio" | sha256sum -c -
 
-          set +e
-          "$MAGISKBOOT" cpio ramdisk.cpio test >/dev/null 2>&1
-          RF=$?
-          set -e
-          test "$RF" -eq 0
-
-          echo '[PASS] SukiSU boot image repack verified'
+          echo '[PASS] final boot contains exact GitHub Actions Image'
+          echo '[PASS] verified-template ramdisk preserved byte-for-byte'
           ls -lh "$FINAL"
           sha256sum "$FINAL"
 
@@ -486,6 +471,7 @@ jobs:
             PCHM30-SukiSU-SUSFS220-FULL-BOOT.img \
             vmlinux System.map PCHM30.config build.log SUKISU_COMMIT.txt \
             SUKISU_4.14_COMPAT_PATCH_SHA256.txt \
+            BOOT_TEMPLATE_RAMDISK_SHA256.txt \
             > SHA256SUMS.txt
           cat SHA256SUMS.txt
 

@@ -1,0 +1,430 @@
+name: PCHM30 SukiSU SUSFS 2.2.0 Build
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [pchm30-sukisu-susfs220-full]
+    paths:
+      - '.github/workflows/pchm30-sukisu-build.yml'
+      - 'configs/**'
+      - 'fs/**'
+      - 'kernel/**'
+      - 'drivers/**'
+      - 'include/**'
+      - 'security/**'
+      - 'certs/**'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pchm30-sukisu-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  TOOLCHAIN_RELEASE_TAG: pchm30-build-environment-20260810
+  TOOLCHAIN_ROOT: /opt/pchm30-toolchains
+  KERNEL_REL: source/android/kernel/msm-4.14
+  OUT_DIR: out-pchm30-sukisu
+  CONFIG_FILE: configs/PCHM30-resukisu-susfs220-full.config
+
+  SUKISU_REPO: https://github.com/SukiSU-Ultra/SukiSU-Ultra.git
+  SUKISU_BRANCH: builtin
+  SUKISU_COMMIT: b1d534bc41941b2c818d7a1a1dac341e4aabfc2d
+  SUKISU_MAIN_COMMIT: 35467545b2826e3acfc88699755981a889956b1a
+
+  STOCK_X509_SHA256: 984030282928748f924a2ffd19b124e1885ef58529d878cacfc1b8c0043fdc33
+  OPPO_VENDOR_REPO: https://github.com/oppo-source/android_kernel_modules_and_devicetree_oppo_sm6125.git
+  OPPO_VENDOR_COMMIT: 5e7bee452c72c948427b9131bec8cd5d92934f83
+
+  BOOT_TEMPLATE_RELEASE_TAG: pchm30-verified-kernels-20260809
+  BOOT_TEMPLATE_ASSET: PCHM30-ReSukiSU-SUSFS-v2.2.0-FULL.img
+  BOOT_TEMPLATE_SHA256: 6882f62ac15dbf19ed497824accee74dcb03dfbbcb5fe654088e515adeca5f66
+  MAGISK_VERSION: v30.7
+  MAGISK_APK_SHA256: e0d32d2123532860f97123d927b1bb86c4e08e6fd8a48bfc6b5bee0afae9ebd5
+
+jobs:
+  build:
+    name: Build PCHM30 SukiSU + boot.img
+    runs-on: ubuntu-22.04
+    timeout-minutes: 120
+
+    steps:
+      - name: Checkout verified PCHM30 SUSFS kernel tree
+        uses: actions/checkout@v4
+        with:
+          ref: pchm30-sukisu-susfs220-full
+          path: source/android/kernel/msm-4.14
+          fetch-depth: 1
+          submodules: false
+
+      - name: Install pinned SukiSU builtin tree
+        working-directory: source/android/kernel/msm-4.14
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+
+          rm -rf KernelSU
+          git clone --filter=blob:none --no-checkout "$SUKISU_REPO" KernelSU
+          git -C KernelSU fetch origin \
+            "$SUKISU_MAIN_COMMIT" \
+            "$SUKISU_COMMIT" \
+            --tags
+          git -C KernelSU checkout --detach "$SUKISU_COMMIT"
+
+          test "$(git -C KernelSU rev-parse HEAD)" = "$SUKISU_COMMIT"
+          test -f KernelSU/kernel/Kconfig
+          test -f KernelSU/kernel/Makefile
+          grep -q '^config KSU_SUSFS$' KernelSU/kernel/Kconfig
+          grep -q 'SUSFS_INLINE_HOOK' KernelSU/kernel/Makefile
+
+          test -L drivers/kernelsu
+          test -f drivers/kernelsu/Kconfig
+
+          echo "kernel=$(git rev-parse HEAD)"
+          echo "SukiSU=$(git -C KernelSU rev-parse HEAD)"
+          echo "SukiSU branch pin=$SUKISU_BRANCH"
+
+          grep -F '#define SUSFS_VERSION "v2.2.0"' include/linux/susfs.h
+          ! grep -q 'filter_count' include/linux/seccomp.h
+          grep -F 'extern void put_seccomp_filter(struct task_struct *tsk);' include/linux/seccomp.h
+          echo "$STOCK_X509_SHA256  certs/pchm30-stock-signing-key.x509" | sha256sum -c -
+
+      - name: Reconstruct pinned OPPO vendor tree
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          rm -rf oppo-vendor-source source/android/vendor
+          git clone --filter=blob:none --no-checkout "$OPPO_VENDOR_REPO" oppo-vendor-source
+          git -C oppo-vendor-source sparse-checkout init --cone
+          git -C oppo-vendor-source sparse-checkout set source/android/vendor
+          git -C oppo-vendor-source checkout --detach "$OPPO_VENDOR_COMMIT"
+          test "$(git -C oppo-vendor-source rev-parse HEAD)" = "$OPPO_VENDOR_COMMIT"
+          cp -a oppo-vendor-source/source/android/vendor source/android/vendor
+          test -f source/android/vendor/oplus/kernel/oplus_performance/oppo_foreground_io_opt/Makefile
+
+      - name: Audit OPPO external symlinks
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          KERNEL="$GITHUB_WORKSPACE/$KERNEL_REL"
+          ALL="$GITHUB_WORKSPACE/broken-symlinks-all.txt"
+          BAD="$GITHUB_WORKSPACE/broken-symlinks-unexpected.txt"
+          KNOWN="$KERNEL/drivers/soc/oplus/sensor"
+
+          find "$KERNEL" -xtype l -print | sort > "$ALL" || true
+          grep -Fvx "$KNOWN" "$ALL" > "$BAD" || true
+
+          if [ -s "$BAD" ]; then
+            echo 'Unexpected broken symlinks:'
+            cat "$BAD"
+            exit 1
+          fi
+
+          if grep -Fxq "$KNOWN" "$ALL"; then
+            echo "[KNOWN UNUSED] $KNOWN -> $(readlink "$KNOWN")"
+          fi
+
+          test -f "$KERNEL/block/oppo_foreground_io_opt/Kconfig"
+          echo '[PASS] all build-relevant external symlinks resolved'
+
+      - name: Install host build dependencies
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential make git curl ca-certificates \
+            python3 python3-jinja2 bc bison flex \
+            libssl-dev libelf-dev libncurses-dev libtinfo5 libncurses5 \
+            device-tree-compiler cpio gzip xz-utils zstd rsync unzip zip tar \
+            openssl coreutils binutils file perl
+          make --version | sed -n '1p'
+          python3 --version
+          echo "nproc=$(nproc)"
+
+      - name: Download and verify archived toolchains
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          mkdir -p toolchain-assets "$TOOLCHAIN_ROOT"
+          gh release download "$TOOLCHAIN_RELEASE_TAG" \
+            --repo "$GITHUB_REPOSITORY" --dir toolchain-assets \
+            --pattern 'PCHM30-Snapdragon-LLVM-10.0.7.tar.zst' \
+            --pattern 'PCHM30-GCC64-4.9-binutils2.27.tar.zst' \
+            --pattern 'PCHM30-GCC32-4.9.tar.zst' \
+            --pattern 'PCHM30-Qualcomm-MPGen-2.1.1-Python3-PATCHED.tar.zst' \
+            --pattern 'SHA256SUMS.txt'
+
+          pushd toolchain-assets >/dev/null
+          grep -E 'PCHM30-(Snapdragon-LLVM-10\.0\.7|GCC64-4\.9-binutils2\.27|GCC32-4\.9|Qualcomm-MPGen-2\.1\.1-Python3-PATCHED)\.tar\.zst$' SHA256SUMS.txt > required.sums
+          sha256sum -c required.sums
+          popd >/dev/null
+
+          for a in toolchain-assets/*.tar.zst; do
+            sudo tar --zstd -xf "$a" -C "$TOOLCHAIN_ROOT"
+          done
+          sudo chown -R "$USER:$USER" "$TOOLCHAIN_ROOT"
+
+      - name: Resolve and validate toolchains
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          SD="$TOOLCHAIN_ROOT/Snapdragon-LLVM-ARM-Compiler-10.0.7-for-Android-NDK"
+          G64="$TOOLCHAIN_ROOT/aarch64-linux-android-4.9"
+          G32="$TOOLCHAIN_ROOT/arm-linux-androideabi-4.9"
+          MP="$TOOLCHAIN_ROOT/mpgen-2.1.1-py3"
+
+          test -x "$SD/bin/clang"
+          test -x "$G64/bin/aarch64-linux-android-gcc"
+          test -x "$G64/bin/aarch64-linux-android-ld"
+          test -x "$G32/bin/arm-linux-androideabi-gcc"
+          test -f "$MP/mpgen.py"
+
+          ln -sfn aarch64-linux-android-ld "$G64/bin/aarch64-linux-gnu-ld"
+
+          "$SD/bin/clang" --version | head -n2
+          "$G64/bin/aarch64-linux-android-gcc" --version | head -n1
+          "$G64/bin/aarch64-linux-android-ld" --version | head -n1
+          "$G32/bin/arm-linux-androideabi-gcc" --version | head -n1
+          python3 -m compileall -q "$MP"
+
+          echo "SDCLANG_DIR=$SD" >> "$GITHUB_ENV"
+          echo "GCC64_DIR=$G64" >> "$GITHUB_ENV"
+          echo "GCC32_DIR=$G32" >> "$GITHUB_ENV"
+          echo "MPGEN_DIR=$MP" >> "$GITHUB_ENV"
+
+      - name: Export proven PCHM30 build environment
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          KERNEL="$GITHUB_WORKSPACE/$KERNEL_REL"
+          {
+            echo "KERNEL_DIR=$KERNEL"
+            echo "ARCH=arm64"
+            echo "TARGET_PRODUCT=trinket"
+            echo "KCONFIG_NOTIMESTAMP=true"
+            echo "KBUILD_BUILD_USER=root"
+            echo "KBUILD_BUILD_HOST=ubuntu-8-196"
+            echo "KBUILD_BUILD_VERSION=2"
+            echo "KBUILD_BUILD_TIMESTAMP=Mon May 16 17:39:41 CST 2022"
+            echo "SHIPPING_API_LEVEL=28"
+            echo "CLANG_TRIPLE=aarch64-linux-gnu-"
+            echo "LOCALVERSION=+"
+            echo "CC=$SDCLANG_DIR/bin/clang"
+            echo "REAL_CC=$SDCLANG_DIR/bin/clang"
+            echo "CROSS_COMPILE=$GCC64_DIR/bin/aarch64-linux-android-"
+            echo "CROSS_COMPILE_ARM32=$GCC32_DIR/bin/arm-linux-androideabi-"
+            echo "LD=$GCC64_DIR/bin/aarch64-linux-android-ld"
+            echo "RTIC_MPGEN=python3 $MPGEN_DIR/mpgen.py"
+            echo "OPPO_STOCK_SIGNING_X509=$KERNEL/certs/pchm30-stock-signing-key.x509"
+            echo "PATH=$SDCLANG_DIR/bin:$GCC64_DIR/bin:$GCC32_DIR/bin:$PATH"
+            echo "PYTHONPATH=$MPGEN_DIR${PYTHONPATH:+:$PYTHONPATH}"
+            echo "JOBS=$(nproc)"
+          } >> "$GITHUB_ENV"
+
+      - name: Prepare SukiSU FULL config
+        working-directory: source/android/kernel/msm-4.14
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          rm -rf "$OUT_DIR"
+          mkdir -p "$OUT_DIR"
+          cp "$CONFIG_FILE" "$OUT_DIR/.config"
+
+          for opt in \
+            KSU KSU_SUSFS KSU_SUSFS_SUS_PATH KSU_SUSFS_SUS_MOUNT \
+            KSU_SUSFS_SUS_KSTAT KSU_SUSFS_SPOOF_UNAME KSU_SUSFS_ENABLE_LOG \
+            KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG \
+            KSU_SUSFS_OPEN_REDIRECT KSU_SUSFS_SUS_MAP; do
+            grep -q "^CONFIG_${opt}=y$" "$OUT_DIR/.config"
+          done
+
+      - name: olddefconfig
+        working-directory: source/android/kernel/msm-4.14
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          unset LLVM LLVM_IAS KBUILD_COMPILER_STRING
+          make O="$OUT_DIR" ARCH=arm64 LOCALVERSION=+ \
+            CC="$CC" REAL_CC="$REAL_CC" LD="$LD" \
+            CROSS_COMPILE="$CROSS_COMPILE" \
+            CROSS_COMPILE_ARM32="$CROSS_COMPILE_ARM32" \
+            CLANG_TRIPLE="$CLANG_TRIPLE" olddefconfig
+
+          for opt in \
+            KSU KSU_SUSFS KSU_SUSFS_SUS_PATH KSU_SUSFS_SUS_MOUNT \
+            KSU_SUSFS_SUS_KSTAT KSU_SUSFS_SPOOF_UNAME KSU_SUSFS_ENABLE_LOG \
+            KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG \
+            KSU_SUSFS_OPEN_REDIRECT KSU_SUSFS_SUS_MAP; do
+            grep -q "^CONFIG_${opt}=y$" "$OUT_DIR/.config"
+          done
+
+      - name: Build SukiSU kernel
+        working-directory: source/android/kernel/msm-4.14
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          unset LLVM LLVM_IAS KBUILD_COMPILER_STRING
+          make O="$OUT_DIR" ARCH=arm64 LOCALVERSION=+ \
+            CC="$CC" REAL_CC="$REAL_CC" LD="$LD" \
+            CROSS_COMPILE="$CROSS_COMPILE" \
+            CROSS_COMPILE_ARM32="$CROSS_COMPILE_ARM32" \
+            CLANG_TRIPLE="$CLANG_TRIPLE" -j"$JOBS" \
+            2>&1 | tee "$GITHUB_WORKSPACE/build.log"
+
+      - name: Verify linked SukiSU kernel
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          KERNEL="$GITHUB_WORKSPACE/$KERNEL_REL"
+          OUT="$KERNEL/$OUT_DIR"
+
+          test -s "$OUT/vmlinux"
+          test -s "$OUT/arch/arm64/boot/Image"
+          test -s "$OUT/System.map"
+          test -s "$OUT/.config"
+          test -s "$GITHUB_WORKSPACE/build.log"
+
+          grep -q '^CONFIG_KSU=y$' "$OUT/.config"
+          grep -q '^CONFIG_KSU_SUSFS=y$' "$OUT/.config"
+          grep -Fq '#define SUSFS_VERSION "v2.2.0"' "$KERNEL/include/linux/susfs.h"
+          ! grep -q 'filter_count' "$KERNEL/include/linux/seccomp.h"
+          echo "$STOCK_X509_SHA256  $KERNEL/certs/pchm30-stock-signing-key.x509" | sha256sum -c -
+
+          echo '===== SukiSU / SUSFS linked symbols (informational) ====='
+          nm -n "$OUT/vmlinux" | grep -Ei 'sukisu|kernelsu|ksu_|susfs|rtic_mp' | sed -n '1,80p' || true
+
+          mkdir -p "$GITHUB_WORKSPACE/artifact"
+          cp "$OUT/arch/arm64/boot/Image" "$GITHUB_WORKSPACE/artifact/Image"
+          cp "$OUT/vmlinux" "$GITHUB_WORKSPACE/artifact/vmlinux"
+          cp "$OUT/System.map" "$GITHUB_WORKSPACE/artifact/System.map"
+          cp "$OUT/.config" "$GITHUB_WORKSPACE/artifact/PCHM30.config"
+          cp "$GITHUB_WORKSPACE/build.log" "$GITHUB_WORKSPACE/artifact/build.log"
+          git -C "$KERNEL/KernelSU" rev-parse HEAD > "$GITHUB_WORKSPACE/artifact/SUKISU_COMMIT.txt"
+
+      - name: Prepare pinned x86_64 magiskboot and verified boot template
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+
+          TOOLS="$GITHUB_WORKSPACE/boot-tools"
+          TEMPLATE_DIR="$GITHUB_WORKSPACE/boot-template"
+          mkdir -p "$TOOLS" "$TEMPLATE_DIR"
+
+          gh release download "$BOOT_TEMPLATE_RELEASE_TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --pattern "$BOOT_TEMPLATE_ASSET" \
+            --dir "$TEMPLATE_DIR"
+
+          TEMPLATE="$TEMPLATE_DIR/$BOOT_TEMPLATE_ASSET"
+          echo "$BOOT_TEMPLATE_SHA256  $TEMPLATE" | sha256sum -c -
+          test "$(stat -c '%s' "$TEMPLATE")" -eq 100663296
+
+          APK="$TOOLS/Magisk-$MAGISK_VERSION.apk"
+          curl --http1.1 -fL \
+            --retry 4 --retry-delay 2 --retry-all-errors \
+            --progress-bar \
+            "https://github.com/topjohnwu/Magisk/releases/download/$MAGISK_VERSION/Magisk-$MAGISK_VERSION.apk" \
+            -o "$APK"
+          echo "$MAGISK_APK_SHA256  $APK" | sha256sum -c -
+
+          unzip -j "$APK" 'lib/x86_64/libmagiskboot.so' -d "$TOOLS"
+          mv "$TOOLS/libmagiskboot.so" "$TOOLS/magiskboot"
+          chmod +x "$TOOLS/magiskboot"
+
+          file "$TOOLS/magiskboot" | tee "$TOOLS/magiskboot.file.txt"
+          grep -qiE 'x86-64|x86_64' "$TOOLS/magiskboot.file.txt"
+          ! grep -qi 'ARM aarch64' "$TOOLS/magiskboot.file.txt"
+          "$TOOLS/magiskboot" 2>&1 | head -n 12 || true
+
+          echo "MAGISKBOOT=$TOOLS/magiskboot" >> "$GITHUB_ENV"
+          echo "BOOT_TEMPLATE=$TEMPLATE" >> "$GITHUB_ENV"
+
+      - name: Package and verify flashable SukiSU boot image
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+
+          RAW="$GITHUB_WORKSPACE/artifact/Image"
+          EXPECTED_IMAGE_SHA="$(sha256sum "$RAW" | awk '{print $1}')"
+          PACK="$GITHUB_WORKSPACE/boot-pack"
+          VERIFY="$GITHUB_WORKSPACE/boot-verify"
+          FINAL="$GITHUB_WORKSPACE/artifact/PCHM30-SukiSU-SUSFS220-FULL-BOOT.img"
+
+          rm -rf "$PACK" "$VERIFY"
+          mkdir -p "$PACK" "$VERIFY"
+          cd "$PACK"
+
+          cp "$BOOT_TEMPLATE" base.img
+          "$MAGISKBOOT" cleanup >/dev/null 2>&1 || true
+          "$MAGISKBOOT" unpack base.img
+          test -s kernel
+          test -s ramdisk.cpio
+
+          set +e
+          "$MAGISKBOOT" cpio ramdisk.cpio test >/dev/null 2>&1
+          R=$?
+          set -e
+
+          case "$R" in
+            0) echo '[PASS] boot template ramdisk already no-Magisk' ;;
+            1)
+              echo '[INFO] restoring boot template ramdisk to no-Magisk'
+              "$MAGISKBOOT" cpio ramdisk.cpio restore
+              ;;
+            *) echo "unsupported ramdisk status: $R"; exit 1 ;;
+          esac
+
+          set +e
+          "$MAGISKBOOT" cpio ramdisk.cpio test >/dev/null 2>&1
+          R2=$?
+          set -e
+          test "$R2" -eq 0
+
+          cp "$RAW" kernel
+          echo "$EXPECTED_IMAGE_SHA  kernel" | sha256sum -c -
+          "$MAGISKBOOT" repack base.img "$FINAL"
+          test -s "$FINAL"
+          test "$(stat -c '%s' "$FINAL")" -eq 100663296
+
+          cd "$VERIFY"
+          "$MAGISKBOOT" cleanup >/dev/null 2>&1 || true
+          "$MAGISKBOOT" unpack "$FINAL"
+          test -s kernel
+          test -s ramdisk.cpio
+          echo "$EXPECTED_IMAGE_SHA  kernel" | sha256sum -c -
+
+          set +e
+          "$MAGISKBOOT" cpio ramdisk.cpio test >/dev/null 2>&1
+          RF=$?
+          set -e
+          test "$RF" -eq 0
+
+          echo '[PASS] SukiSU boot image repack verified'
+          ls -lh "$FINAL"
+          sha256sum "$FINAL"
+
+      - name: Finalize artifact checksums
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          cd "$GITHUB_WORKSPACE/artifact"
+          sha256sum \
+            Image \
+            PCHM30-SukiSU-SUSFS220-FULL-BOOT.img \
+            vmlinux System.map PCHM30.config build.log SUKISU_COMMIT.txt \
+            > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+
+      - name: Upload SukiSU kernel and flashable boot artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: PCHM30-SukiSU-SUSFS220-FULL-${{ github.run_number }}
+          path: artifact/
+          if-no-files-found: error
+          retention-days: 30

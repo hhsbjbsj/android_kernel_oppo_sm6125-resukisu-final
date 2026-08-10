@@ -78,12 +78,22 @@ jobs:
           grep -q '^config KSU_SUSFS$' KernelSU/kernel/Kconfig
           grep -q 'SUSFS_INLINE_HOOK' KernelSU/kernel/Makefile
 
+          PATCH="$PWD/tools/pchm30/sukisu-builtin-4.14-compat.patch"
+          test -f "$PATCH"
+          git -C KernelSU apply --check "$PATCH"
+          git -C KernelSU apply "$PATCH"
+          git -C KernelSU diff --check
+          grep -Fq 'ksu_strncpy_from_user_nofault(arg' KernelSU/kernel/sulog/event.c
+          grep -Fq '#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0)' KernelSU/kernel/runtime/ksud.c
+          ! grep -q '^[[:space:]]*fallthrough;' KernelSU/kernel/policy/allowlist.c
+
           test -L drivers/kernelsu
           test -f drivers/kernelsu/Kconfig
 
           echo "kernel=$(git rev-parse HEAD)"
           echo "SukiSU=$(git -C KernelSU rev-parse HEAD)"
           echo "SukiSU branch pin=$SUKISU_BRANCH"
+          echo "SukiSU 4.14 compat patch=$(sha256sum "$PATCH" | awk '{print $1}')"
 
           grep -F '#define SUSFS_VERSION "v2.2.0"' include/linux/susfs.h
           ! grep -q 'filter_count' include/linux/seccomp.h

@@ -201,26 +201,43 @@ jobs:
 
           python3 - "$MP/mpgen_kernel.py" <<'PY'
           import pathlib
-          import re
           import sys
 
           path = pathlib.Path(sys.argv[1])
           text = path.read_text()
-          fixed, count = re.subn(
-              r"str\(f\.read\(\)\)\.decode\((['\"])latin-?1\1\)",
-              "f.read().decode('latin1')",
-              text,
-              count=1,
+          fn = "def get_symbol_contents_as_str(self, symbol_name):"
+          nxt = "def get_section_sha256(self, section_name):"
+          fn_pos = text.find(fn)
+          next_pos = text.find(nxt, fn_pos + len(fn))
+          if fn_pos < 0 or next_pos < 0:
+              raise SystemExit("MPGen function boundary not found")
+
+          line_start = text.rfind("\n", 0, fn_pos) + 1
+          next_line_start = text.rfind("\n", 0, next_pos) + 1
+          indent = text[line_start:fn_pos]
+          body = indent + ("\t" if "\t" in indent else "    ")
+          body2 = body + ("\t" if "\t" in indent else "    ")
+
+          replacement = (
+              indent + fn + "\n"
+              + body + "MODULE_DD_BIN = self.dd_symbol(symbol_name)\n"
+              + body + "try:\n"
+              + body2 + "with open(MODULE_DD_BIN, 'rb') as f:\n"
+              + body2 + ("\t" if "\t" in indent else "    ") + "return f.read().decode('latin1')\n"
+              + body + "finally:\n"
+              + body2 + "mpgen_shell.rm(MODULE_DD_BIN)\n\n"
           )
-          if count == 0:
-              if "f.read().decode('latin1')" not in text and 'f.read().decode("latin1")' not in text:
-                  raise SystemExit("MPGen banner decode pattern not found")
-              fixed = text
+
+          print("===== ORIGINAL MPGEN BANNER READER =====")
+          print(text[line_start:next_line_start])
+          fixed = text[:line_start] + replacement + text[next_line_start:]
           path.write_text(fixed)
+          print("===== PATCHED MPGEN BANNER READER =====")
+          print(replacement)
           PY
 
-          grep -Fq "f.read().decode('latin1')" "$MP/mpgen_kernel.py"
-          ! grep -Eq 'str\(f\.read\(\)\)\.decode' "$MP/mpgen_kernel.py"
+          python3 -m py_compile "$MP/mpgen_kernel.py"
+          grep -Fq "return f.read().decode('latin1')" "$MP/mpgen_kernel.py"
 
           "$SD/bin/clang" --version | head -n2
           "$G64/bin/aarch64-linux-android-gcc" --version | head -n1

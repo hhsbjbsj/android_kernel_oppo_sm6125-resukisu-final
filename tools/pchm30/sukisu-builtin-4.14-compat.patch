@@ -48,3 +48,53 @@ index e45f01f..3333333 100644
          if (copied <= 0)
              return ksu_sulog_copy_empty_string(dst);
  
+diff --git a/kernel/feature/sucompat.h b/kernel/feature/sucompat.h
+index 2dcfe27..4444444 100644
+--- a/kernel/feature/sucompat.h
++++ b/kernel/feature/sucompat.h
+@@ -1,10 +1,11 @@
+ #ifndef __KSU_H_SUCOMPAT
+ #define __KSU_H_SUCOMPAT
+ #include <asm/ptrace.h>
++#include <linux/jump_label.h>
+ #include <linux/types.h>
+ 
+-extern bool ksu_su_compat_enabled;
++extern struct static_key_true ksu_su_compat_enabled;
+ 
+ int ksu_handle_faccessat(int *dfd, const char __user **filename_user, int *mode, int *__unused_flags);
+ #if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 1, 0) && defined(CONFIG_KSU_SUSFS)
+ int ksu_handle_stat(int *dfd, struct filename **filename, int *flags);
+diff --git a/kernel/feature/sucompat.c b/kernel/feature/sucompat.c
+index f408365..5555555 100644
+--- a/kernel/feature/sucompat.c
++++ b/kernel/feature/sucompat.c
+@@ -1,7 +1,7 @@
+ #define SU_PATH "/system/bin/su"
+ #define SH_PATH "/system/bin/sh"
+ 
+-bool ksu_su_compat_enabled __read_mostly = true;
++DEFINE_STATIC_KEY_TRUE(ksu_su_compat_enabled);
+ 
+ static const char su_path[] = SU_PATH;
+ static const char sh_path[] = SH_PATH;
+@@ -9,14 +9,17 @@ static const char ksud_path[] = KSUD_PATH;
+ 
+ static int su_compat_feature_get(u64 *value)
+ {
+-    *value = ksu_su_compat_enabled ? 1 : 0;
++    *value = static_branch_likely(&ksu_su_compat_enabled) ? 1 : 0;
+     return 0;
+ }
+ 
+ static int su_compat_feature_set(u64 value)
+ {
+     bool enable = value != 0;
+-    ksu_su_compat_enabled = enable;
++    if (enable)
++        static_branch_enable(&ksu_su_compat_enabled);
++    else
++        static_branch_disable(&ksu_su_compat_enabled);
+     pr_info("su_compat: set to %d\n", enable);
+     return 0;
+ }

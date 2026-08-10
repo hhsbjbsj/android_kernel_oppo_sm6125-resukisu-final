@@ -275,6 +275,17 @@ jobs:
             CLANG_TRIPLE="$CLANG_TRIPLE" -j"$JOBS" \
             2>&1 | tee "$GITHUB_WORKSPACE/build.log"
 
+      - name: Upload SukiSU build diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: PCHM30-SukiSU-DIAGNOSTIC-${{ github.run_number }}
+          path: |
+            build.log
+            source/android/kernel/msm-4.14/out-pchm30-sukisu/.config
+          if-no-files-found: warn
+          retention-days: 7
+
       - name: Verify linked SukiSU kernel
         shell: bash
         run: |

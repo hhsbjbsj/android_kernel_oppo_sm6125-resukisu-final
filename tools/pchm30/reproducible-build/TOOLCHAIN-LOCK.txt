@@ -27,6 +27,7 @@ Compiler mode:
 
 RTIC / MPGen:
   use the archived Python3-compatible patched MPGen working copy
+  working-copy directory name: mpgen-2.1.1-py3
   RTIC_MPGEN="python3 $MPGEN_DIR/mpgen.py"
 
 Host utilities:

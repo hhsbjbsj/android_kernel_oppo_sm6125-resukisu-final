@@ -86,6 +86,9 @@ jobs:
           grep -Fq 'ksu_strncpy_from_user_nofault(arg' KernelSU/kernel/sulog/event.c
           grep -Fq '#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0)' KernelSU/kernel/runtime/ksud.c
           ! grep -q '^[[:space:]]*fallthrough;' KernelSU/kernel/policy/allowlist.c
+          grep -Fq 'DEFINE_STATIC_KEY_TRUE(ksu_su_compat_enabled);' KernelSU/kernel/feature/sucompat.c
+          grep -Fq 'extern struct static_key_true ksu_su_compat_enabled;' KernelSU/kernel/feature/sucompat.h
+          grep -Fq 'static_branch_enable(&ksu_su_compat_enabled);' KernelSU/kernel/feature/sucompat.c
 
           test -L drivers/kernelsu
           test -f drivers/kernelsu/Kconfig
@@ -192,8 +195,32 @@ jobs:
           test -x "$G64/bin/aarch64-linux-android-ld"
           test -x "$G32/bin/arm-linux-androideabi-gcc"
           test -f "$MP/mpgen.py"
+          test -f "$MP/mpgen_kernel.py"
 
           ln -sfn aarch64-linux-android-ld "$G64/bin/aarch64-linux-gnu-ld"
+
+          python3 - "$MP/mpgen_kernel.py" <<'PY'
+          import pathlib
+          import re
+          import sys
+
+          path = pathlib.Path(sys.argv[1])
+          text = path.read_text()
+          fixed, count = re.subn(
+              r"str\(f\.read\(\)\)\.decode\((['\"])latin-?1\1\)",
+              "f.read().decode('latin1')",
+              text,
+              count=1,
+          )
+          if count == 0:
+              if "f.read().decode('latin1')" not in text and 'f.read().decode("latin1")' not in text:
+                  raise SystemExit("MPGen banner decode pattern not found")
+              fixed = text
+          path.write_text(fixed)
+          PY
+
+          grep -Fq "f.read().decode('latin1')" "$MP/mpgen_kernel.py"
+          ! grep -Eq 'str\(f\.read\(\)\)\.decode' "$MP/mpgen_kernel.py"
 
           "$SD/bin/clang" --version | head -n2
           "$G64/bin/aarch64-linux-android-gcc" --version | head -n1
@@ -314,6 +341,7 @@ jobs:
           grep -Fq '#define SUSFS_VERSION "v2.2.0"' "$KERNEL/include/linux/susfs.h"
           ! grep -q 'filter_count' "$KERNEL/include/linux/seccomp.h"
           echo "$STOCK_X509_SHA256  $KERNEL/certs/pchm30-stock-signing-key.x509" | sha256sum -c -
+          ! grep -Fq "An exception of type AttributeError occurred" "$GITHUB_WORKSPACE/build.log"
 
           echo '===== SukiSU / SUSFS linked symbols (informational) ====='
           nm -n "$OUT/vmlinux" | grep -Ei 'sukisu|kernelsu|ksu_|susfs|rtic_mp' | sed -n '1,80p' || true
@@ -325,6 +353,7 @@ jobs:
           cp "$OUT/.config" "$GITHUB_WORKSPACE/artifact/PCHM30.config"
           cp "$GITHUB_WORKSPACE/build.log" "$GITHUB_WORKSPACE/artifact/build.log"
           git -C "$KERNEL/KernelSU" rev-parse HEAD > "$GITHUB_WORKSPACE/artifact/SUKISU_COMMIT.txt"
+          sha256sum "$KERNEL/tools/pchm30/sukisu-builtin-4.14-compat.patch" > "$GITHUB_WORKSPACE/artifact/SUKISU_4.14_COMPAT_PATCH_SHA256.txt"
 
       - name: Prepare pinned x86_64 magiskboot and verified boot template
         env:
@@ -439,6 +468,7 @@ jobs:
             Image \
             PCHM30-SukiSU-SUSFS220-FULL-BOOT.img \
             vmlinux System.map PCHM30.config build.log SUKISU_COMMIT.txt \
+            SUKISU_4.14_COMPAT_PATCH_SHA256.txt \
             > SHA256SUMS.txt
           cat SHA256SUMS.txt
 

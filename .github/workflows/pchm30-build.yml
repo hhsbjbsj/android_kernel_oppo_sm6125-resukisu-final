@@ -20,10 +20,13 @@ concurrency:
 env:
   TOOLCHAIN_RELEASE_TAG: pchm30-build-environment-20260810
   TOOLCHAIN_ROOT: /opt/pchm30-toolchains
+  KERNEL_REL: source/android/kernel/msm-4.14
   OUT_DIR: out-pchm30
   CONFIG_FILE: configs/PCHM30-resukisu-susfs220-full.config
   KSU_EXPECTED: beaaea0eb895dc41e7b9bf5e3f39e57aa9635bab
   STOCK_X509_SHA256: 984030282928748f924a2ffd19b124e1885ef58529d878cacfc1b8c0043fdc33
+  OPPO_VENDOR_REPO: https://github.com/oppo-source/android_kernel_modules_and_devicetree_oppo_sm6125.git
+  OPPO_VENDOR_COMMIT: 5e7bee452c72c948427b9131bec8cd5d92934f83
 
 jobs:
   build:
@@ -32,14 +35,16 @@ jobs:
     timeout-minutes: 120
 
     steps:
-      - name: Checkout kernel + ReSukiSU
+      - name: Checkout PCHM30 kernel + ReSukiSU in official layout
         uses: actions/checkout@v4
         with:
           ref: pchm30-resukisu-susfs220-full
+          path: source/android/kernel/msm-4.14
           fetch-depth: 1
           submodules: recursive
 
-      - name: Verify source pins
+      - name: Verify kernel source pins
+        working-directory: source/android/kernel/msm-4.14
         shell: bash
         run: |
           set -Eeuo pipefail
@@ -57,6 +62,48 @@ jobs:
 
           grep -F 'extern void put_seccomp_filter(struct task_struct *tsk);' include/linux/seccomp.h
           echo "$STOCK_X509_SHA256  certs/pchm30-stock-signing-key.x509" | sha256sum -c -
+
+      - name: Reconstruct pinned OPPO vendor tree
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+
+          rm -rf oppo-vendor-source
+          git clone --filter=blob:none --no-checkout "$OPPO_VENDOR_REPO" oppo-vendor-source
+          git -C oppo-vendor-source sparse-checkout init --cone
+          git -C oppo-vendor-source sparse-checkout set source/android/vendor
+          git -C oppo-vendor-source checkout --detach "$OPPO_VENDOR_COMMIT"
+
+          test "$(git -C oppo-vendor-source rev-parse HEAD)" = "$OPPO_VENDOR_COMMIT"
+          test -d oppo-vendor-source/source/android/vendor/oplus
+
+          rm -rf source/android/vendor
+          cp -a oppo-vendor-source/source/android/vendor source/android/vendor
+
+          echo "vendor commit: $(git -C oppo-vendor-source rev-parse HEAD)"
+          echo "vendor root: $GITHUB_WORKSPACE/source/android/vendor"
+
+          test -f source/android/vendor/oplus/kernel/oplus_performance/oppo_foreground_io_opt/Makefile
+
+      - name: Audit OPPO external symlinks
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+
+          KERNEL="$GITHUB_WORKSPACE/$KERNEL_REL"
+          BROKEN="$GITHUB_WORKSPACE/broken-symlinks.txt"
+
+          find "$KERNEL" -xtype l -print | sort > "$BROKEN" || true
+
+          if [ -s "$BROKEN" ]; then
+            echo 'Broken symlinks remain after reconstructing source/android/vendor:'
+            cat "$BROKEN"
+            exit 1
+          fi
+
+          echo '[PASS] no broken symlinks in kernel tree'
+          readlink "$KERNEL/block/oppo_foreground_io_opt"
+          test -f "$KERNEL/block/oppo_foreground_io_opt/Kconfig"
 
       - name: Install host build dependencies
         shell: bash
@@ -108,7 +155,6 @@ jobs:
           done
 
           sudo chown -R "$USER:$USER" "$TOOLCHAIN_ROOT"
-          find "$TOOLCHAIN_ROOT" -maxdepth 2 -type f \( -name clang -o -name '*-gcc' -o -name mpgen.py \) -print | head -n 30
 
       - name: Resolve toolchain paths
         shell: bash
@@ -146,7 +192,10 @@ jobs:
         run: |
           set -Eeuo pipefail
 
+          KERNEL="$GITHUB_WORKSPACE/$KERNEL_REL"
+
           {
+            echo "KERNEL_DIR=$KERNEL"
             echo "ARCH=arm64"
             echo "TARGET_PRODUCT=trinket"
             echo "KCONFIG_NOTIMESTAMP=true"
@@ -163,7 +212,7 @@ jobs:
             echo "CROSS_COMPILE_ARM32=$GCC32_DIR/bin/arm-linux-androideabi-"
             echo "LD=$GCC64_DIR/bin/aarch64-linux-android-ld"
             echo "RTIC_MPGEN=python3 $MPGEN_DIR/mpgen.py"
-            echo "OPPO_STOCK_SIGNING_X509=$GITHUB_WORKSPACE/certs/pchm30-stock-signing-key.x509"
+            echo "OPPO_STOCK_SIGNING_X509=$KERNEL/certs/pchm30-stock-signing-key.x509"
             echo "PATH=$SDCLANG_DIR/bin:$GCC64_DIR/bin:$GCC32_DIR/bin:$PATH"
             echo "PYTHONPATH=$MPGEN_DIR${PYTHONPATH:+:$PYTHONPATH}"
           } >> "$GITHUB_ENV"
@@ -171,6 +220,7 @@ jobs:
           echo "JOBS=$(nproc)" >> "$GITHUB_ENV"
 
       - name: Prepare final verified config
+        working-directory: source/android/kernel/msm-4.14
         shell: bash
         run: |
           set -Eeuo pipefail
@@ -192,6 +242,7 @@ jobs:
           grep -q '^CONFIG_KSU_SUSFS_SUS_MAP=y$' "$OUT_DIR/.config"
 
       - name: olddefconfig
+        working-directory: source/android/kernel/msm-4.14
         shell: bash
         run: |
           set -Eeuo pipefail
@@ -210,6 +261,7 @@ jobs:
             olddefconfig
 
       - name: Build kernel
+        working-directory: source/android/kernel/msm-4.14
         shell: bash
         run: |
           set -Eeuo pipefail
@@ -227,26 +279,29 @@ jobs:
             CROSS_COMPILE_ARM32="$CROSS_COMPILE_ARM32" \
             CLANG_TRIPLE="$CLANG_TRIPLE" \
             -j"$JOBS" \
-            2>&1 | tee build.log
+            2>&1 | tee "$GITHUB_WORKSPACE/build.log"
 
       - name: Verify linked kernel
         shell: bash
         run: |
           set -Eeuo pipefail
 
-          test -s "$OUT_DIR/vmlinux"
-          test -s "$OUT_DIR/arch/arm64/boot/Image"
-          test -s "$OUT_DIR/System.map"
+          KERNEL="$GITHUB_WORKSPACE/$KERNEL_REL"
+          OUT="$KERNEL/$OUT_DIR"
 
-          nm -n "$OUT_DIR/vmlinux" | grep -E '[[:space:]]susfs_init$'
-          nm -n "$OUT_DIR/vmlinux" | grep -E '[[:space:]]rtic_mp$'
-          strings "$OUT_DIR/vmlinux" | grep -F 'v2.2.0' | head -n1
+          test -s "$OUT/vmlinux"
+          test -s "$OUT/arch/arm64/boot/Image"
+          test -s "$OUT/System.map"
+
+          nm -n "$OUT/vmlinux" | grep -E '[[:space:]]susfs_init$'
+          nm -n "$OUT/vmlinux" | grep -E '[[:space:]]rtic_mp$'
+          strings "$OUT/vmlinux" | grep -F 'v2.2.0' | head -n1
 
           mkdir -p artifact
-          cp "$OUT_DIR/arch/arm64/boot/Image" artifact/Image
-          cp "$OUT_DIR/vmlinux" artifact/vmlinux
-          cp "$OUT_DIR/System.map" artifact/System.map
-          cp "$OUT_DIR/.config" artifact/PCHM30.config
+          cp "$OUT/arch/arm64/boot/Image" artifact/Image
+          cp "$OUT/vmlinux" artifact/vmlinux
+          cp "$OUT/System.map" artifact/System.map
+          cp "$OUT/.config" artifact/PCHM30.config
           cp build.log artifact/build.log
 
           (

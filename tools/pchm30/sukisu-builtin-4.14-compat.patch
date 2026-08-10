@@ -102,7 +102,7 @@ diff --git a/kernel/hook/lsm_hook.c b/kernel/hook/lsm_hook.c
 index 0070283..6666666 100644
 --- a/kernel/hook/lsm_hook.c
 +++ b/kernel/hook/lsm_hook.c
-@@ -28,10 +28,22 @@ static inline void ksu_handle_extra_susfs_work(void)
+@@ -28,10 +28,20 @@ static inline void ksu_handle_extra_susfs_work(void)
  
  int ksu_handle_setresuid(uid_t ruid, uid_t euid, uid_t suid)
  {

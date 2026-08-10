@@ -19,6 +19,7 @@ env:
   OUT_DIR: out-pchm30
   CONFIG_FILE: configs/PCHM30-resukisu-susfs220-full.config
   KSU_EXPECTED: beaaea0eb895dc41e7b9bf5e3f39e57aa9635bab
+  KSU_HISTORY_EXPECTED: '4355'
   STOCK_X509_SHA256: 984030282928748f924a2ffd19b124e1885ef58529d878cacfc1b8c0043fdc33
   OPPO_VENDOR_REPO: https://github.com/oppo-source/android_kernel_modules_and_devicetree_oppo_sm6125.git
   OPPO_VENDOR_COMMIT: 5e7bee452c72c948427b9131bec8cd5d92934f83
@@ -38,14 +39,27 @@ jobs:
           fetch-depth: 1
           submodules: recursive
 
-      - name: Verify kernel source pins
+      - name: Restore full ReSukiSU history and verify source pins
         working-directory: source/android/kernel/msm-4.14
         shell: bash
         run: |
           set -Eeuo pipefail
+
+          if [ "$(git -C KernelSU rev-parse --is-shallow-repository)" = true ]; then
+            git -C KernelSU fetch --unshallow --tags origin
+          else
+            git -C KernelSU fetch --tags origin
+          fi
+          git -C KernelSU checkout --detach "$KSU_EXPECTED"
+
+          KSU_HEAD="$(git -C KernelSU rev-parse HEAD)"
+          KSU_COUNT="$(git -C KernelSU rev-list --count HEAD)"
           echo "kernel=$(git rev-parse HEAD)"
-          echo "KernelSU=$(git -C KernelSU rev-parse HEAD)"
-          test "$(git -C KernelSU rev-parse HEAD)" = "$KSU_EXPECTED"
+          echo "KernelSU=$KSU_HEAD"
+          echo "KernelSU history=$KSU_COUNT"
+
+          test "$KSU_HEAD" = "$KSU_EXPECTED"
+          test "$KSU_COUNT" = "$KSU_HISTORY_EXPECTED"
           grep -F '#define SUSFS_VERSION "v2.2.0"' include/linux/susfs.h
           ! grep -q 'filter_count' include/linux/seccomp.h
           grep -F 'extern void put_seccomp_filter(struct task_struct *tsk);' include/linux/seccomp.h
@@ -84,8 +98,7 @@ jobs:
           fi
 
           if grep -Fxq "$KNOWN" "$ALL"; then
-            echo '[KNOWN UNUSED] OPPO private msm_amss sensor symlink:'
-            echo "  $KNOWN -> $(readlink "$KNOWN")"
+            echo "[KNOWN UNUSED] $KNOWN -> $(readlink "$KNOWN")"
           fi
 
           test -f "$KERNEL/block/oppo_foreground_io_opt/Kconfig"
@@ -143,12 +156,19 @@ jobs:
           test -x "$SD/bin/clang"
           test -x "$G64/bin/aarch64-linux-android-gcc"
           test -x "$G64/bin/aarch64-linux-android-ld"
+          test -x "$G64/bin/aarch64-linux-android-elfedit"
           test -x "$G32/bin/arm-linux-androideabi-gcc"
           test -f "$MP/mpgen.py"
+
+          # Kernel Makefile intentionally keeps CLANG_TRIPLE=aarch64-linux-gnu-.
+          # The archived GCC is Android-prefixed, so provide the executable name
+          # old Snapdragon Clang searches for when linking the arm64 vDSO.
+          ln -sfn aarch64-linux-android-ld "$G64/bin/aarch64-linux-gnu-ld"
 
           "$SD/bin/clang" --version | head -n2
           "$G64/bin/aarch64-linux-android-gcc" --version | head -n1
           "$G64/bin/aarch64-linux-android-ld" --version | head -n1
+          "$G64/bin/aarch64-linux-gnu-ld" --version | head -n1
           "$G32/bin/arm-linux-androideabi-gcc" --version | head -n1
           grep -F "binascii.hexlify(pyaload_bin).decode('ascii')" "$MP/mpgen.py"
           python3 -m compileall -q "$MP"

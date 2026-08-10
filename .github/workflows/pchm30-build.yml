@@ -23,10 +23,15 @@ env:
   STOCK_X509_SHA256: 984030282928748f924a2ffd19b124e1885ef58529d878cacfc1b8c0043fdc33
   OPPO_VENDOR_REPO: https://github.com/oppo-source/android_kernel_modules_and_devicetree_oppo_sm6125.git
   OPPO_VENDOR_COMMIT: 5e7bee452c72c948427b9131bec8cd5d92934f83
+  BOOT_TEMPLATE_RELEASE_TAG: pchm30-verified-kernels-20260809
+  BOOT_TEMPLATE_ASSET: PCHM30-ReSukiSU-SUSFS-v2.2.0-FULL.img
+  BOOT_TEMPLATE_SHA256: 6882f62ac15dbf19ed497824accee74dcb03dfbbcb5fe654088e515adeca5f66
+  MAGISK_VERSION: v30.7
+  MAGISK_APK_SHA256: e0d32d2123532860f97123d927b1bb86c4e08e6fd8a48bfc6b5bee0afae9ebd5
 
 jobs:
   build:
-    name: Build PCHM30 kernel
+    name: Build PCHM30 kernel + boot.img
     runs-on: ubuntu-22.04
     timeout-minutes: 120
 
@@ -258,9 +263,6 @@ jobs:
           test -s "$OUT/.config"
           test -s "$GITHUB_WORKSPACE/build.log"
 
-          # FULL release deliberately hides KSU/SUSFS symbols. Therefore the
-          # presence of a literal susfs_init symbol is NOT a valid pass/fail
-          # condition. Verify the final config and locked source instead.
           for opt in \
             KSU KSU_SUSFS KSU_SUSFS_SUS_PATH KSU_SUSFS_SUS_MOUNT \
             KSU_SUSFS_SUS_KSTAT KSU_SUSFS_SPOOF_UNAME KSU_SUSFS_ENABLE_LOG \
@@ -285,15 +287,151 @@ jobs:
           cp "$OUT/.config" "$GITHUB_WORKSPACE/artifact/PCHM30.config"
           cp "$GITHUB_WORKSPACE/build.log" "$GITHUB_WORKSPACE/artifact/build.log"
 
-          (
-            cd "$GITHUB_WORKSPACE/artifact"
-            sha256sum Image vmlinux System.map PCHM30.config build.log > SHA256SUMS.txt
-          )
+      - name: Prepare pinned x86_64 magiskboot and verified boot template
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -Eeuo pipefail
 
-          echo '===== SHA256 ====='
-          cat "$GITHUB_WORKSPACE/artifact/SHA256SUMS.txt"
+          TOOLS="$GITHUB_WORKSPACE/boot-tools"
+          TEMPLATE_DIR="$GITHUB_WORKSPACE/boot-template"
+          mkdir -p "$TOOLS" "$TEMPLATE_DIR"
 
-      - name: Upload kernel artifacts
+          echo '===== download verified PCHM30 boot template ====='
+          gh release download "$BOOT_TEMPLATE_RELEASE_TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --pattern "$BOOT_TEMPLATE_ASSET" \
+            --dir "$TEMPLATE_DIR"
+
+          TEMPLATE="$TEMPLATE_DIR/$BOOT_TEMPLATE_ASSET"
+          echo "$BOOT_TEMPLATE_SHA256  $TEMPLATE" | sha256sum -c -
+          test "$(stat -c '%s' "$TEMPLATE")" -eq 100663296
+
+          echo '===== download pinned Magisk host tool ====='
+          APK="$TOOLS/Magisk-$MAGISK_VERSION.apk"
+          curl --http1.1 -fL \
+            --retry 4 --retry-delay 2 --retry-all-errors \
+            --progress-bar \
+            "https://github.com/topjohnwu/Magisk/releases/download/$MAGISK_VERSION/Magisk-$MAGISK_VERSION.apk" \
+            -o "$APK"
+
+          echo "$MAGISK_APK_SHA256  $APK" | sha256sum -c -
+
+          unzip -j "$APK" 'lib/x86_64/libmagiskboot.so' -d "$TOOLS"
+          mv "$TOOLS/libmagiskboot.so" "$TOOLS/magiskboot"
+          chmod +x "$TOOLS/magiskboot"
+
+          file "$TOOLS/magiskboot"
+          file "$TOOLS/magiskboot" | grep -qiE 'x86-64|x86_64'
+
+          MB_OUT="$("$TOOLS/magiskboot" 2>&1 || true)"
+          printf '%s\n' "$MB_OUT" | head -n 12
+          printf '%s\n' "$MB_OUT" | grep -qi 'MagiskBoot'
+
+          echo "MAGISKBOOT_HOST=$TOOLS/magiskboot" >> "$GITHUB_ENV"
+          echo "BOOT_TEMPLATE=$TEMPLATE" >> "$GITHUB_ENV"
+
+      - name: Package and verify flashable boot image
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+
+          OUT="$GITHUB_WORKSPACE/$KERNEL_REL/$OUT_DIR"
+          RAW="$OUT/arch/arm64/boot/Image"
+          PACK="$GITHUB_WORKSPACE/boot-pack"
+          VERIFY="$GITHUB_WORKSPACE/boot-verify"
+          FINAL="$GITHUB_WORKSPACE/artifact/PCHM30-ReSukiSU-SUSFS220-FULL-BOOT.img"
+
+          test -s "$RAW"
+          test -s "$BOOT_TEMPLATE"
+          test -x "$MAGISKBOOT_HOST"
+
+          RAW_SHA="$(sha256sum "$RAW" | awk '{print $1}')"
+          echo "Run kernel SHA256=$RAW_SHA"
+
+          rm -rf "$PACK" "$VERIFY"
+          mkdir -p "$PACK" "$VERIFY"
+          cd "$PACK"
+
+          cp -f "$BOOT_TEMPLATE" base.img
+          "$MAGISKBOOT_HOST" cleanup >/dev/null 2>&1 || true
+          "$MAGISKBOOT_HOST" unpack base.img
+
+          test -s kernel
+          test -s ramdisk.cpio
+
+          set +e
+          "$MAGISKBOOT_HOST" cpio ramdisk.cpio test >/dev/null 2>&1
+          RAMDISK_BEFORE=$?
+          set -e
+          echo "ramdisk status before=$RAMDISK_BEFORE"
+
+          case "$RAMDISK_BEFORE" in
+            0) echo '[PASS] template ramdisk already no-Magisk' ;;
+            1)
+              echo '[INFO] restoring Magisk-patched template ramdisk'
+              "$MAGISKBOOT_HOST" cpio ramdisk.cpio restore
+              ;;
+            *)
+              echo "[FATAL] unsupported template ramdisk status=$RAMDISK_BEFORE"
+              exit 1
+              ;;
+          esac
+
+          set +e
+          "$MAGISKBOOT_HOST" cpio ramdisk.cpio test >/dev/null 2>&1
+          RAMDISK_AFTER=$?
+          set -e
+          test "$RAMDISK_AFTER" -eq 0
+          echo '[PASS] packaging ramdisk = no-Magisk'
+
+          cp -f "$RAW" kernel
+          test "$(sha256sum kernel | awk '{print $1}')" = "$RAW_SHA"
+
+          "$MAGISKBOOT_HOST" repack base.img "$FINAL"
+          test -s "$FINAL"
+          test "$(stat -c '%s' "$FINAL")" -eq 100663296
+
+          cd "$VERIFY"
+          "$MAGISKBOOT_HOST" cleanup >/dev/null 2>&1 || true
+          "$MAGISKBOOT_HOST" unpack "$FINAL"
+
+          test -s kernel
+          test -s ramdisk.cpio
+
+          FINAL_KERNEL_SHA="$(sha256sum kernel | awk '{print $1}')"
+          echo "final embedded kernel SHA256=$FINAL_KERNEL_SHA"
+          test "$FINAL_KERNEL_SHA" = "$RAW_SHA"
+
+          set +e
+          "$MAGISKBOOT_HOST" cpio ramdisk.cpio test >/dev/null 2>&1
+          FINAL_RAMDISK=$?
+          set -e
+          echo "final ramdisk status=$FINAL_RAMDISK"
+          test "$FINAL_RAMDISK" -eq 0
+
+          echo '[PASS] flashable boot image contains this run kernel'
+          echo '[PASS] flashable boot image ramdisk = no-Magisk'
+          ls -lh "$FINAL"
+          sha256sum "$FINAL"
+
+      - name: Finalize artifact checksums
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          cd "$GITHUB_WORKSPACE/artifact"
+          sha256sum \
+            Image \
+            PCHM30-ReSukiSU-SUSFS220-FULL-BOOT.img \
+            vmlinux \
+            System.map \
+            PCHM30.config \
+            build.log \
+            > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+
+      - name: Upload kernel and flashable boot artifacts
         uses: actions/upload-artifact@v4
         with:
           name: PCHM30-ReSukiSU-SUSFS220-FULL-${{ github.run_number }}

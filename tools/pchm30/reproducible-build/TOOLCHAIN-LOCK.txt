@@ -1,0 +1,39 @@
+PCHM30 / OPPO A11x reproducible build lock
+
+Target:
+  PCHM30 / SM6125 / Linux 4.14.180-perf+
+
+Proven compiler stack:
+  Snapdragon LLVM ARM Compiler 10.0.7 for Android NDK
+  GCC64 4.9.x 20150123 (prerelease)
+  GNU ld (binutils-2.27-bd24d23f) 2.27.0.20170315
+  GCC32 4.9.x 20150123 (prerelease)
+
+Critical build identity:
+  ARCH=arm64
+  TARGET_PRODUCT=trinket
+  SHIPPING_API_LEVEL=28
+  KCONFIG_NOTIMESTAMP=true
+  KBUILD_BUILD_USER=root
+  KBUILD_BUILD_HOST=ubuntu-8-196
+  KBUILD_BUILD_VERSION=2
+  KBUILD_BUILD_TIMESTAMP=Mon May 16 17:39:41 CST 2022
+  CLANG_TRIPLE=aarch64-linux-gnu-
+  LOCALVERSION=+
+
+Compiler mode:
+  Snapdragon Clang + GNU assembler/binutils
+  LLVM IAS intentionally disabled
+
+RTIC / MPGen:
+  use the archived Python3-compatible patched MPGen working copy
+  working-copy directory name: mpgen-2.1.1-py3
+  RTIC_MPGEN="python3 $MPGEN_DIR/mpgen.py"
+
+Host utilities:
+  nproc -> GNU coreutils
+  nm/readelf/objcopy -> GNU binutils
+
+PCHM30 compatibility rule:
+  keep stock Linux 4.14 struct seccomp ABI
+  do NOT add synthetic atomic_t filter_count

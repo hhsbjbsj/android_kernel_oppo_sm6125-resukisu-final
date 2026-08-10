@@ -98,3 +98,31 @@ index f408365..5555555 100644
      pr_info("su_compat: set to %d\n", enable);
      return 0;
  }
+diff --git a/kernel/hook/lsm_hook.c b/kernel/hook/lsm_hook.c
+index 0070283..6666666 100644
+--- a/kernel/hook/lsm_hook.c
++++ b/kernel/hook/lsm_hook.c
+@@ -28,10 +28,22 @@ static inline void ksu_handle_extra_susfs_work(void)
+ 
+ int ksu_handle_setresuid(uid_t ruid, uid_t euid, uid_t suid)
+ {
++    bool from_zygote;
+ 
+-    // We only interest in process spwaned by zygote
+-    if (!susfs_is_sid_equal(current_cred(), susfs_zygote_sid))
+-        return 0;
++    from_zygote = susfs_is_sid_equal(current_cred(), susfs_zygote_sid);
++
++    // OPPO Android 11 can miss the cached zygote SID even though the caller
++    // is still the root zygote child.  Only relax the SID gate for the
++    // already-crowned SukiSU manager UID; all other apps keep the strict gate.
++    if (!from_zygote) {
++        if (!(likely(ksu_is_manager_appid_valid()) &&
++              unlikely(is_uid_manager(ruid)) && current_uid().val == 0))
++            return 0;
++
++        pr_warn("manager spawn zygote SID mismatch, root fallback for uid %d\n", ruid);
++    }
+ 
+     // Check if spawned process is isolated service first, and force to do umount if so
+     if (is_isolated_process(ruid))

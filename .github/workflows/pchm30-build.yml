@@ -1,0 +1,267 @@
+name: PCHM30 ReSukiSU SUSFS 2.2.0 Build
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - pchm30-resukisu-susfs220-full
+    paths:
+      - '**'
+      - '!.github/**'
+      - '.github/workflows/pchm30-build.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pchm30-kernel-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  TOOLCHAIN_RELEASE_TAG: pchm30-build-environment-20260810
+  TOOLCHAIN_ROOT: /opt/pchm30-toolchains
+  OUT_DIR: out-pchm30
+  CONFIG_FILE: configs/PCHM30-resukisu-susfs220-full.config
+  KSU_EXPECTED: beaaea0eb895dc41e7b9bf5e3f39e57aa9635bab
+  STOCK_X509_SHA256: 984030282928748f924a2ffd19b124e1885ef58529d878cacfc1b8c0043fdc33
+
+jobs:
+  build:
+    name: Build PCHM30 kernel
+    runs-on: ubuntu-22.04
+    timeout-minutes: 120
+
+    steps:
+      - name: Checkout kernel + ReSukiSU
+        uses: actions/checkout@v4
+        with:
+          ref: pchm30-resukisu-susfs220-full
+          fetch-depth: 1
+          submodules: recursive
+
+      - name: Verify source pins
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+
+          echo "kernel commit: $(git rev-parse HEAD)"
+          echo "KernelSU commit: $(git -C KernelSU rev-parse HEAD)"
+
+          test "$(git -C KernelSU rev-parse HEAD)" = "$KSU_EXPECTED"
+          grep -F '#define SUSFS_VERSION "v2.2.0"' include/linux/susfs.h
+
+          if grep -q 'filter_count' include/linux/seccomp.h; then
+            echo 'FATAL: forbidden synthetic seccomp filter_count detected'
+            exit 1
+          fi
+
+          grep -F 'extern void put_seccomp_filter(struct task_struct *tsk);' include/linux/seccomp.h
+
+          echo "$STOCK_X509_SHA256  certs/pchm30-stock-signing-key.x509" | sha256sum -c -
+
+      - name: Install host build dependencies
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential make git curl ca-certificates \
+            python3 python3-jinja2 \
+            bc bison flex libssl-dev libelf-dev libncurses-dev \
+            device-tree-compiler cpio gzip xz-utils zstd rsync unzip zip tar \
+            openssl coreutils binutils file perl
+
+          echo "make=$(make --version | head -n1)"
+          echo "python=$(python3 --version)"
+          echo "nproc=$(nproc)"
+
+      - name: Download archived PCHM30 toolchains
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+
+          mkdir -p toolchain-assets "$TOOLCHAIN_ROOT"
+
+          gh release download "$TOOLCHAIN_RELEASE_TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --dir toolchain-assets \
+            --pattern 'PCHM30-Snapdragon-LLVM-10.0.7.tar.zst' \
+            --pattern 'PCHM30-GCC64-4.9-binutils2.27.tar.zst' \
+            --pattern 'PCHM30-GCC32-4.9.tar.zst' \
+            --pattern 'PCHM30-Qualcomm-MPGen-2.1.1-Python3-PATCHED.tar.zst' \
+            --pattern 'SHA256SUMS.txt'
+
+          echo 'Downloaded:'
+          ls -lh toolchain-assets
+
+          pushd toolchain-assets >/dev/null
+          grep -E 'PCHM30-(Snapdragon-LLVM-10\.0\.7|GCC64-4\.9-binutils2\.27|GCC32-4\.9|Qualcomm-MPGen-2\.1\.1-Python3-PATCHED)\.tar\.zst$' SHA256SUMS.txt > SHA256SUMS.required
+          sha256sum -c SHA256SUMS.required
+          popd >/dev/null
+
+          for a in toolchain-assets/*.tar.zst; do
+            echo "Extracting $a"
+            sudo tar --zstd -xf "$a" -C "$TOOLCHAIN_ROOT"
+          done
+
+          sudo chown -R "$USER:$USER" "$TOOLCHAIN_ROOT"
+          find "$TOOLCHAIN_ROOT" -maxdepth 2 -type f \( -name clang -o -name '*-gcc' -o -name mpgen.py \) -print | head -n 30
+
+      - name: Resolve toolchain paths
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+
+          SD="$TOOLCHAIN_ROOT/Snapdragon-LLVM-ARM-Compiler-10.0.7-for-Android-NDK"
+          G64="$TOOLCHAIN_ROOT/aarch64-linux-android-4.9"
+          G32="$TOOLCHAIN_ROOT/arm-linux-androideabi-4.9"
+          MP="$TOOLCHAIN_ROOT/mpgen-2.1.1-py3"
+
+          test -x "$SD/bin/clang"
+          test -x "$G64/bin/aarch64-linux-android-gcc"
+          test -x "$G64/bin/aarch64-linux-android-ld"
+          test -x "$G32/bin/arm-linux-androideabi-gcc"
+          test -f "$MP/mpgen.py"
+
+          "$SD/bin/clang" --version | head -n2
+          "$G64/bin/aarch64-linux-android-gcc" --version | head -n1
+          "$G64/bin/aarch64-linux-android-ld" --version | head -n1
+          "$G32/bin/arm-linux-androideabi-gcc" --version | head -n1
+
+          grep -F "binascii.hexlify(pyaload_bin).decode('ascii')" "$MP/mpgen.py"
+          python3 -m compileall -q "$MP"
+
+          {
+            echo "SDCLANG_DIR=$SD"
+            echo "GCC64_DIR=$G64"
+            echo "GCC32_DIR=$G32"
+            echo "MPGEN_DIR=$MP"
+          } >> "$GITHUB_ENV"
+
+      - name: Prepare proven PCHM30 build environment
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+
+          {
+            echo "ARCH=arm64"
+            echo "TARGET_PRODUCT=trinket"
+            echo "KCONFIG_NOTIMESTAMP=true"
+            echo "KBUILD_BUILD_USER=root"
+            echo "KBUILD_BUILD_HOST=ubuntu-8-196"
+            echo "KBUILD_BUILD_VERSION=2"
+            echo "KBUILD_BUILD_TIMESTAMP=Mon May 16 17:39:41 CST 2022"
+            echo "SHIPPING_API_LEVEL=28"
+            echo "CLANG_TRIPLE=aarch64-linux-gnu-"
+            echo "LOCALVERSION=+"
+            echo "CC=$SDCLANG_DIR/bin/clang"
+            echo "REAL_CC=$SDCLANG_DIR/bin/clang"
+            echo "CROSS_COMPILE=$GCC64_DIR/bin/aarch64-linux-android-"
+            echo "CROSS_COMPILE_ARM32=$GCC32_DIR/bin/arm-linux-androideabi-"
+            echo "LD=$GCC64_DIR/bin/aarch64-linux-android-ld"
+            echo "RTIC_MPGEN=python3 $MPGEN_DIR/mpgen.py"
+            echo "OPPO_STOCK_SIGNING_X509=$GITHUB_WORKSPACE/certs/pchm30-stock-signing-key.x509"
+            echo "PATH=$SDCLANG_DIR/bin:$GCC64_DIR/bin:$GCC32_DIR/bin:$PATH"
+            echo "PYTHONPATH=$MPGEN_DIR${PYTHONPATH:+:$PYTHONPATH}"
+          } >> "$GITHUB_ENV"
+
+          echo "JOBS=$(nproc)" >> "$GITHUB_ENV"
+
+      - name: Prepare final verified config
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+
+          rm -rf "$OUT_DIR"
+          mkdir -p "$OUT_DIR"
+          cp "$CONFIG_FILE" "$OUT_DIR/.config"
+
+          # Guard the full SUSFS release configuration.
+          grep -q '^CONFIG_KSU=y$' "$OUT_DIR/.config"
+          grep -q '^CONFIG_KSU_SUSFS=y$' "$OUT_DIR/.config"
+          grep -q '^CONFIG_KSU_SUSFS_SUS_PATH=y$' "$OUT_DIR/.config"
+          grep -q '^CONFIG_KSU_SUSFS_SUS_MOUNT=y$' "$OUT_DIR/.config"
+          grep -q '^CONFIG_KSU_SUSFS_SUS_KSTAT=y$' "$OUT_DIR/.config"
+          grep -q '^CONFIG_KSU_SUSFS_SPOOF_UNAME=y$' "$OUT_DIR/.config"
+          grep -q '^CONFIG_KSU_SUSFS_ENABLE_LOG=y$' "$OUT_DIR/.config"
+          grep -q '^CONFIG_KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS=y$' "$OUT_DIR/.config"
+          grep -q '^CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG=y$' "$OUT_DIR/.config"
+          grep -q '^CONFIG_KSU_SUSFS_OPEN_REDIRECT=y$' "$OUT_DIR/.config"
+          grep -q '^CONFIG_KSU_SUSFS_SUS_MAP=y$' "$OUT_DIR/.config"
+
+      - name: olddefconfig
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          unset LLVM LLVM_IAS KBUILD_COMPILER_STRING
+
+          make \
+            O="$OUT_DIR" \
+            ARCH=arm64 \
+            LOCALVERSION=+ \
+            CC="$CC" \
+            REAL_CC="$REAL_CC" \
+            LD="$LD" \
+            CROSS_COMPILE="$CROSS_COMPILE" \
+            CROSS_COMPILE_ARM32="$CROSS_COMPILE_ARM32" \
+            CLANG_TRIPLE="$CLANG_TRIPLE" \
+            olddefconfig
+
+      - name: Build kernel
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          unset LLVM LLVM_IAS KBUILD_COMPILER_STRING
+
+          set -o pipefail
+          make \
+            O="$OUT_DIR" \
+            ARCH=arm64 \
+            LOCALVERSION=+ \
+            CC="$CC" \
+            REAL_CC="$REAL_CC" \
+            LD="$LD" \
+            CROSS_COMPILE="$CROSS_COMPILE" \
+            CROSS_COMPILE_ARM32="$CROSS_COMPILE_ARM32" \
+            CLANG_TRIPLE="$CLANG_TRIPLE" \
+            -j"$JOBS" \
+            2>&1 | tee build.log
+
+      - name: Verify linked kernel
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+
+          test -s "$OUT_DIR/vmlinux"
+          test -s "$OUT_DIR/arch/arm64/boot/Image"
+          test -s "$OUT_DIR/System.map"
+
+          nm -n "$OUT_DIR/vmlinux" | grep -E '[[:space:]]susfs_init$'
+          nm -n "$OUT_DIR/vmlinux" | grep -E '[[:space:]]rtic_mp$'
+
+          strings "$OUT_DIR/vmlinux" | grep -F 'v2.2.0' | head -n1
+
+          mkdir -p artifact
+          cp "$OUT_DIR/arch/arm64/boot/Image" artifact/Image
+          cp "$OUT_DIR/vmlinux" artifact/vmlinux
+          cp "$OUT_DIR/System.map" artifact/System.map
+          cp "$OUT_DIR/.config" artifact/PCHM30.config
+          cp build.log artifact/build.log
+
+          (
+            cd artifact
+            sha256sum Image vmlinux System.map PCHM30.config > SHA256SUMS.txt
+          )
+
+          echo '===== SHA256 ====='
+          cat artifact/SHA256SUMS.txt
+
+      - name: Upload kernel artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: PCHM30-ReSukiSU-SUSFS220-FULL-${{ github.run_number }}
+          path: artifact/
+          if-no-files-found: error
+          retention-days: 30

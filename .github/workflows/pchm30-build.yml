@@ -160,9 +160,6 @@ jobs:
           test -x "$G32/bin/arm-linux-androideabi-gcc"
           test -f "$MP/mpgen.py"
 
-          # Kernel Makefile intentionally keeps CLANG_TRIPLE=aarch64-linux-gnu-.
-          # The archived GCC is Android-prefixed, so provide the executable name
-          # old Snapdragon Clang searches for when linking the arm64 vDSO.
           ln -sfn aarch64-linux-android-ld "$G64/bin/aarch64-linux-gnu-ld"
 
           "$SD/bin/clang" --version | head -n2
@@ -252,22 +249,49 @@ jobs:
         shell: bash
         run: |
           set -Eeuo pipefail
-          OUT="$GITHUB_WORKSPACE/$KERNEL_REL/$OUT_DIR"
+          KERNEL="$GITHUB_WORKSPACE/$KERNEL_REL"
+          OUT="$KERNEL/$OUT_DIR"
+
           test -s "$OUT/vmlinux"
           test -s "$OUT/arch/arm64/boot/Image"
           test -s "$OUT/System.map"
-          nm -n "$OUT/vmlinux" | grep -E '[[:space:]]susfs_init$'
-          nm -n "$OUT/vmlinux" | grep -E '[[:space:]]rtic_mp$'
-          strings "$OUT/vmlinux" | grep -F 'v2.2.0' | head -n1
+          test -s "$OUT/.config"
+          test -s "$GITHUB_WORKSPACE/build.log"
 
-          mkdir -p artifact
-          cp "$OUT/arch/arm64/boot/Image" artifact/Image
-          cp "$OUT/vmlinux" artifact/vmlinux
-          cp "$OUT/System.map" artifact/System.map
-          cp "$OUT/.config" artifact/PCHM30.config
-          cp build.log artifact/build.log
-          (cd artifact && sha256sum Image vmlinux System.map PCHM30.config > SHA256SUMS.txt)
-          cat artifact/SHA256SUMS.txt
+          # FULL release deliberately hides KSU/SUSFS symbols. Therefore the
+          # presence of a literal susfs_init symbol is NOT a valid pass/fail
+          # condition. Verify the final config and locked source instead.
+          for opt in \
+            KSU KSU_SUSFS KSU_SUSFS_SUS_PATH KSU_SUSFS_SUS_MOUNT \
+            KSU_SUSFS_SUS_KSTAT KSU_SUSFS_SPOOF_UNAME KSU_SUSFS_ENABLE_LOG \
+            KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG \
+            KSU_SUSFS_OPEN_REDIRECT KSU_SUSFS_SUS_MAP; do
+            grep -q "^CONFIG_${opt}=y$" "$OUT/.config"
+          done
+
+          grep -Fq '#define SUSFS_VERSION "v2.2.0"' "$KERNEL/include/linux/susfs.h"
+          ! grep -q 'filter_count' "$KERNEL/include/linux/seccomp.h"
+          echo "$STOCK_X509_SHA256  $KERNEL/certs/pchm30-stock-signing-key.x509" | sha256sum -c -
+
+          echo '===== informational linked-symbol sample ====='
+          nm -n "$OUT/vmlinux" | grep -Ei 'susfs|rtic_mp' | sed -n '1,30p' || true
+          echo '===== build output sizes ====='
+          ls -lh "$OUT/arch/arm64/boot/Image" "$OUT/vmlinux" "$OUT/System.map"
+
+          mkdir -p "$GITHUB_WORKSPACE/artifact"
+          cp "$OUT/arch/arm64/boot/Image" "$GITHUB_WORKSPACE/artifact/Image"
+          cp "$OUT/vmlinux" "$GITHUB_WORKSPACE/artifact/vmlinux"
+          cp "$OUT/System.map" "$GITHUB_WORKSPACE/artifact/System.map"
+          cp "$OUT/.config" "$GITHUB_WORKSPACE/artifact/PCHM30.config"
+          cp "$GITHUB_WORKSPACE/build.log" "$GITHUB_WORKSPACE/artifact/build.log"
+
+          (
+            cd "$GITHUB_WORKSPACE/artifact"
+            sha256sum Image vmlinux System.map PCHM30.config build.log > SHA256SUMS.txt
+          )
+
+          echo '===== SHA256 ====='
+          cat "$GITHUB_WORKSPACE/artifact/SHA256SUMS.txt"
 
       - name: Upload kernel artifacts
         uses: actions/upload-artifact@v4

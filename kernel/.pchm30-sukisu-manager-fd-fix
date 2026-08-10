@@ -3,6 +3,8 @@ PCHM30 SukiSU manager FD compatibility build trigger.
 Reason: validate the OPPO Android 11 zygote-SID fallback added to
  tools/pchm30/sukisu-builtin-4.14-compat.patch.
 
+Patch hunk length corrected after Run #10 failed before compilation.
+
 Expected boot log after launching com.sukisu.ultra:
   manager spawn zygote SID mismatch, root fallback for uid <manager uid>
   install fd for manager: <manager uid>

@@ -196,11 +196,14 @@ SYSCALL_DEFINE4(newfstatat, int, dfd, const char __user *, filename,
 replace_once(stat_c, old, new)
 
 # kernel/reboot.c: supercall transport used by manager/driver handshake.
+# PCHM30's 4.14 tree has one extra stock comment line (ctrl-alt-del meaning)
+# versus the generic context, so match the device source exactly.
 reboot_c = ROOT / "kernel/reboot.c"
 old = '''/*
  * Reboot system call: for obvious reasons only root may call it,
  * and even root needs to set up some magic numbers in the registers
  * so that some mistake won't make this reboot the whole machine.
+ * You can also set the meaning of the ctrl-alt-del-key here.
  *
  * reboot doesn't sync: do that yourself before calling this.
  */
@@ -217,6 +220,7 @@ new = '''/*
  * Reboot system call: for obvious reasons only root may call it,
  * and even root needs to set up some magic numbers in the registers
  * so that some mistake won't make this reboot the whole machine.
+ * You can also set the meaning of the ctrl-alt-del-key here.
  *
  * reboot doesn't sync: do that yourself before calling this.
  */

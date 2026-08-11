@@ -14,6 +14,17 @@ def replace_once(rel, old, new):
     print(f"[PATCHED] {rel}")
 
 
+# PCHM30 stock has CONFIG_KPROBES=n. KernelSU-Next v1.1.1 normally hides
+# KSU_KPROBES_HOOK behind `depends on KPROBES`, so olddefconfig may omit the
+# disabled symbol entirely. This branch is manual-hook-only; keep the switch
+# visible while leaving it disabled so the final config records an explicit n.
+replace_once(
+    "KernelSU-Next/kernel/Kconfig",
+    "config KSU_KPROBES_HOOK\n\tbool \"Use kprobes for kernelsu\"\n\tdepends on KSU\n\tdepends on KPROBES\n\tdefault y\n",
+    "config KSU_KPROBES_HOOK\n\tbool \"Use kprobes for kernelsu\"\n\tdepends on KSU\n\tdefault y\n",
+)
+
+
 # KernelSU-Next v1.1.1 min/manual syscall hooks, adapted to OPPO PCHM30 4.14.
 replace_once(
     "fs/exec.c",

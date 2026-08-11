@@ -1,0 +1,486 @@
+name: PCHM30 KSU Next v3.2 Legacy Manual No SUSFS Build
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [pchm30-ksunext-v320-legacy-manual-nosusfs]
+    paths:
+      - '.github/workflows/pchm30-ksunext-v320-legacy-build.yml'
+      - 'tools/pchm30/ksunext-v320-legacy-manual-integrate.py'
+      - 'configs/**'
+      - 'fs/**'
+      - 'kernel/**'
+      - 'drivers/**'
+      - 'include/**'
+      - 'security/**'
+      - 'certs/**'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pchm30-ksunext-v320-legacy-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  TOOLCHAIN_RELEASE_TAG: pchm30-build-environment-20260810
+  TOOLCHAIN_ROOT: /opt/pchm30-toolchains
+  KERNEL_REL: source/android/kernel/msm-4.14
+  OUT_DIR: out-pchm30-ksunext-v320
+  CONFIG_FILE: configs/PCHM30-stock-running.config
+
+  KSUNEXT_REPO: https://github.com/KernelSU-Next/KernelSU-Next.git
+  KSUNEXT_SOURCE_TAG: v3.2.0-legacy
+  KSUNEXT_COMMIT: 9b08e88862000d5c50fb2e43a5b75123cf472e54
+  KSUNEXT_RELEASE_TAG: v3.2.0
+  KSUNEXT_MANAGER_ASSET: KernelSU_Next_v3.2.0_33129-release.apk
+  KSUNEXT_MANAGER_SHA256: 96c2bbbf1b973461fe82dd1ed17f89deb86a6a5a9d7c4cf079bd32091131ef57
+  KSUNEXT_KSUD_ASSET: ksud-aarch64-linux-android
+  KSUNEXT_KSUD_SHA256: bb231b0f77d6ee78a4362ff751b3cc54c934293a4b0acde177afa59c4a64da00
+
+  STOCK_X509_SHA256: 984030282928748f924a2ffd19b124e1885ef58529d878cacfc1b8c0043fdc33
+  OPPO_VENDOR_REPO: https://github.com/oppo-source/android_kernel_modules_and_devicetree_oppo_sm6125.git
+  OPPO_VENDOR_COMMIT: 5e7bee452c72c948427b9131bec8cd5d92934f83
+
+  BOOT_TEMPLATE_RELEASE_TAG: pchm30-verified-kernels-20260809
+  BOOT_TEMPLATE_ASSET: PCHM30-ReSukiSU-ONLY.img
+  BOOT_TEMPLATE_SHA256: f426a976b2c4ee6da5df0c1f6a23df09aaa8c5357dd4bac00065641cd804e6e5
+  MAGISK_VERSION: v30.7
+  MAGISK_APK_SHA256: e0d32d2123532860f97123d927b1bb86c4e08e6fd8a48bfc6b5bee0afae9ebd5
+
+jobs:
+  build:
+    name: Build PCHM30 KSU Next v3.2 legacy manual + boot.img
+    runs-on: ubuntu-22.04
+    timeout-minutes: 120
+
+    steps:
+      - name: Checkout real-device bootable PCHM30 baseline
+        uses: actions/checkout@v4
+        with:
+          ref: pchm30-ksunext-v320-legacy-manual-nosusfs
+          path: source/android/kernel/msm-4.14
+          fetch-depth: 1
+          submodules: false
+
+      - name: Install pinned KernelSU-Next v3.2.0-legacy and official manual hooks
+        working-directory: source/android/kernel/msm-4.14
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+
+          rm -rf KernelSU-Next drivers/kernelsu
+          git clone --filter=blob:none --no-checkout "$KSUNEXT_REPO" KernelSU-Next
+          git -C KernelSU-Next fetch origin "$KSUNEXT_COMMIT" --tags
+          git -C KernelSU-Next checkout --detach "$KSUNEXT_COMMIT"
+          test "$(git -C KernelSU-Next rev-parse HEAD)" = "$KSUNEXT_COMMIT"
+          test -f KernelSU-Next/kernel/Kconfig
+          test -f KernelSU-Next/kernel/Kbuild
+          grep -q '^config KSU_MANUAL_HOOK$' KernelSU-Next/kernel/Kconfig
+
+          ln -sfn ../KernelSU-Next/kernel drivers/kernelsu
+          grep -q 'obj-$(CONFIG_KSU) += kernelsu/' drivers/Makefile || \
+            printf '\nobj-$(CONFIG_KSU) += kernelsu/\n' >> drivers/Makefile
+          grep -q 'source "drivers/kernelsu/Kconfig"' drivers/Kconfig || \
+            printf '\nsource "drivers/kernelsu/Kconfig"\n' >> drivers/Kconfig
+
+          python3 tools/pchm30/ksunext-v320-legacy-manual-integrate.py
+          git diff --check
+
+          grep -Fq 'PCHM30 stock seccomp ABI preserved; filter_count autopatch disabled' KernelSU-Next/kernel/Kbuild
+          ! grep -q 'filter_count' include/linux/seccomp.h
+          grep -Fq 'ksu_handle_execveat' fs/exec.c
+          grep -Fq 'ksu_handle_faccessat' fs/open.c
+          grep -Fq 'ksu_handle_sys_read(fd);' fs/read_write.c
+          grep -Fq 'ksu_handle_stat' fs/stat.c
+          grep -Fq 'ksu_handle_sys_reboot' kernel/reboot.c
+          ! grep -Fq 'ksu_handle_input_handle_event' drivers/input/input.c
+
+          echo "kernel=$(git rev-parse HEAD)"
+          echo "KernelSU-Next=$(git -C KernelSU-Next rev-parse HEAD)"
+          echo "KernelSU-Next source tag=$KSUNEXT_SOURCE_TAG"
+          echo '[PASS] v3.2 legacy official five-point manual hook surface only'
+          echo '[PASS] no SUSFS and no experimental input_event hook'
+          echo '[PASS] PCHM30 seccomp ABI untouched'
+
+      - name: Reconstruct pinned OPPO vendor tree
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          rm -rf oppo-vendor-source source/android/vendor
+          git clone --filter=blob:none --no-checkout "$OPPO_VENDOR_REPO" oppo-vendor-source
+          git -C oppo-vendor-source sparse-checkout init --cone
+          git -C oppo-vendor-source sparse-checkout set source/android/vendor
+          git -C oppo-vendor-source checkout --detach "$OPPO_VENDOR_COMMIT"
+          test "$(git -C oppo-vendor-source rev-parse HEAD)" = "$OPPO_VENDOR_COMMIT"
+          cp -a oppo-vendor-source/source/android/vendor source/android/vendor
+          test -f source/android/vendor/oplus/kernel/oplus_performance/oppo_foreground_io_opt/Makefile
+
+      - name: Audit OPPO external symlinks
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          KERNEL="$GITHUB_WORKSPACE/$KERNEL_REL"
+          ALL="$GITHUB_WORKSPACE/broken-symlinks-all.txt"
+          BAD="$GITHUB_WORKSPACE/broken-symlinks-unexpected.txt"
+          KNOWN="$KERNEL/drivers/soc/oplus/sensor"
+
+          find "$KERNEL" -xtype l -print | sort > "$ALL" || true
+          grep -Fvx "$KNOWN" "$ALL" > "$BAD" || true
+          if [ -s "$BAD" ]; then
+            echo 'Unexpected broken symlinks:'
+            cat "$BAD"
+            exit 1
+          fi
+          if grep -Fxq "$KNOWN" "$ALL"; then
+            echo "[KNOWN UNUSED] $KNOWN -> $(readlink "$KNOWN")"
+          fi
+          test -f "$KERNEL/block/oppo_foreground_io_opt/Kconfig"
+          echo '[PASS] all build-relevant external symlinks resolved'
+
+      - name: Install host build dependencies
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential make git curl ca-certificates \
+            python3 python3-jinja2 bc bison flex \
+            libssl-dev libelf-dev libncurses-dev libtinfo5 libncurses5 \
+            device-tree-compiler cpio gzip xz-utils zstd rsync unzip zip tar \
+            openssl coreutils binutils file perl
+          make --version | sed -n '1p'
+          python3 --version
+          echo "nproc=$(nproc)"
+
+      - name: Download and verify archived PCHM30 toolchains
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          mkdir -p toolchain-assets "$TOOLCHAIN_ROOT"
+          gh release download "$TOOLCHAIN_RELEASE_TAG" \
+            --repo "$GITHUB_REPOSITORY" --dir toolchain-assets \
+            --pattern 'PCHM30-Snapdragon-LLVM-10.0.7.tar.zst' \
+            --pattern 'PCHM30-GCC64-4.9-binutils2.27.tar.zst' \
+            --pattern 'PCHM30-GCC32-4.9.tar.zst' \
+            --pattern 'PCHM30-Qualcomm-MPGen-2.1.1-Python3-PATCHED.tar.zst' \
+            --pattern 'SHA256SUMS.txt'
+
+          pushd toolchain-assets >/dev/null
+          grep -E 'PCHM30-(Snapdragon-LLVM-10\.0\.7|GCC64-4\.9-binutils2\.27|GCC32-4\.9|Qualcomm-MPGen-2\.1\.1-Python3-PATCHED)\.tar\.zst$' SHA256SUMS.txt > required.sums
+          sha256sum -c required.sums
+          popd >/dev/null
+
+          for a in toolchain-assets/*.tar.zst; do
+            sudo tar --zstd -xf "$a" -C "$TOOLCHAIN_ROOT"
+          done
+          sudo chown -R "$USER:$USER" "$TOOLCHAIN_ROOT"
+
+      - name: Resolve and validate toolchains
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          SD="$TOOLCHAIN_ROOT/Snapdragon-LLVM-ARM-Compiler-10.0.7-for-Android-NDK"
+          G64="$TOOLCHAIN_ROOT/aarch64-linux-android-4.9"
+          G32="$TOOLCHAIN_ROOT/arm-linux-androideabi-4.9"
+          MP="$TOOLCHAIN_ROOT/mpgen-2.1.1-py3"
+
+          test -x "$SD/bin/clang"
+          test -x "$G64/bin/aarch64-linux-android-gcc"
+          test -x "$G64/bin/aarch64-linux-android-ld"
+          test -x "$G32/bin/arm-linux-androideabi-gcc"
+          test -f "$MP/mpgen.py"
+          test -f "$MP/mpgen_kernel.py"
+          ln -sfn aarch64-linux-android-ld "$G64/bin/aarch64-linux-gnu-ld"
+
+          python3 - "$MP/mpgen_kernel.py" <<'PY'
+          import pathlib
+          import sys
+          path = pathlib.Path(sys.argv[1])
+          text = path.read_text()
+          fn = "def get_symbol_contents_as_str(self, symbol_name):"
+          nxt = "def get_section_sha256(self, section_name):"
+          fn_pos = text.find(fn)
+          next_pos = text.find(nxt, fn_pos + len(fn))
+          if fn_pos < 0 or next_pos < 0:
+              raise SystemExit("MPGen function boundary not found")
+          line_start = text.rfind("\n", 0, fn_pos) + 1
+          next_line_start = text.rfind("\n", 0, next_pos) + 1
+          indent = text[line_start:fn_pos]
+          body = indent + ("\t" if "\t" in indent else "    ")
+          body2 = body + ("\t" if "\t" in indent else "    ")
+          replacement = (
+              indent + fn + "\n"
+              + body + "MODULE_DD_BIN = self.dd_symbol(symbol_name)\n"
+              + body + "try:\n"
+              + body2 + "with open(MODULE_DD_BIN, 'rb') as f:\n"
+              + body2 + ("\t" if "\t" in indent else "    ") + "return f.read().decode('latin1')\n"
+              + body + "finally:\n"
+              + body2 + "mpgen_shell.rm(MODULE_DD_BIN)\n\n"
+          )
+          path.write_text(text[:line_start] + replacement + text[next_line_start:])
+          PY
+
+          python3 -m py_compile "$MP/mpgen_kernel.py"
+          grep -Fq "return f.read().decode('latin1')" "$MP/mpgen_kernel.py"
+          "$SD/bin/clang" --version | head -n2
+          "$G64/bin/aarch64-linux-android-gcc" --version | head -n1
+          "$G64/bin/aarch64-linux-android-ld" --version | head -n1
+          "$G32/bin/arm-linux-androideabi-gcc" --version | head -n1
+          python3 -m compileall -q "$MP"
+
+          echo "SDCLANG_DIR=$SD" >> "$GITHUB_ENV"
+          echo "GCC64_DIR=$G64" >> "$GITHUB_ENV"
+          echo "GCC32_DIR=$G32" >> "$GITHUB_ENV"
+          echo "MPGEN_DIR=$MP" >> "$GITHUB_ENV"
+
+      - name: Export proven PCHM30 build environment
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          KERNEL="$GITHUB_WORKSPACE/$KERNEL_REL"
+          {
+            echo "KERNEL_DIR=$KERNEL"
+            echo "ARCH=arm64"
+            echo "TARGET_PRODUCT=trinket"
+            echo "KCONFIG_NOTIMESTAMP=true"
+            echo "KBUILD_BUILD_USER=root"
+            echo "KBUILD_BUILD_HOST=ubuntu-8-196"
+            echo "KBUILD_BUILD_VERSION=2"
+            echo "KBUILD_BUILD_TIMESTAMP=Mon May 16 17:39:41 CST 2022"
+            echo "SHIPPING_API_LEVEL=28"
+            echo "CLANG_TRIPLE=aarch64-linux-gnu-"
+            echo "LOCALVERSION=+"
+            echo "CC=$SDCLANG_DIR/bin/clang"
+            echo "REAL_CC=$SDCLANG_DIR/bin/clang"
+            echo "CROSS_COMPILE=$GCC64_DIR/bin/aarch64-linux-android-"
+            echo "CROSS_COMPILE_ARM32=$GCC32_DIR/bin/arm-linux-androideabi-"
+            echo "LD=$GCC64_DIR/bin/aarch64-linux-android-ld"
+            echo "RTIC_MPGEN=python3 $MPGEN_DIR/mpgen.py"
+            echo "OPPO_STOCK_SIGNING_X509=$KERNEL/certs/pchm30-stock-signing-key.x509"
+            echo "PATH=$SDCLANG_DIR/bin:$GCC64_DIR/bin:$GCC32_DIR/bin:$PATH"
+            echo "PYTHONPATH=$MPGEN_DIR${PYTHONPATH:+:$PYTHONPATH}"
+            echo "JOBS=$(nproc)"
+          } >> "$GITHUB_ENV"
+
+      - name: Prepare v3.2 legacy manual-hook no-SUSFS config
+        working-directory: source/android/kernel/msm-4.14
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          rm -rf "$OUT_DIR"
+          mkdir -p "$OUT_DIR"
+          cp "$CONFIG_FILE" "$OUT_DIR/.config"
+
+          scripts/config --file "$OUT_DIR/.config" \
+            -e KSU \
+            -e KSU_MANUAL_HOOK \
+            -d KSU_KPROBES_HOOK \
+            -d KSU_DEBUG \
+            -d KSU_DISABLE_MANAGER \
+            -d KSU_DISABLE_POLICY
+
+          ! grep -q 'filter_count' include/linux/seccomp.h
+
+      - name: olddefconfig and audit final hook mode
+        working-directory: source/android/kernel/msm-4.14
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          unset LLVM LLVM_IAS KBUILD_COMPILER_STRING
+          make O="$OUT_DIR" ARCH=arm64 LOCALVERSION=+ \
+            CC="$CC" REAL_CC="$REAL_CC" LD="$LD" \
+            CROSS_COMPILE="$CROSS_COMPILE" \
+            CROSS_COMPILE_ARM32="$CROSS_COMPILE_ARM32" \
+            CLANG_TRIPLE="$CLANG_TRIPLE" olddefconfig
+
+          echo '===== KSU final config ====='
+          grep -E '^CONFIG_KSU|^# CONFIG_KSU' "$OUT_DIR/.config" || true
+          grep -q '^CONFIG_KSU=y$' "$OUT_DIR/.config"
+          grep -q '^CONFIG_KSU_MANUAL_HOOK=y$' "$OUT_DIR/.config"
+          ! grep -q '^CONFIG_KSU_KPROBES_HOOK=y$' "$OUT_DIR/.config"
+          ! grep -q '^CONFIG_KSU_SUSFS=y$' "$OUT_DIR/.config"
+          ! grep -q 'filter_count' include/linux/seccomp.h
+
+      - name: Build KSU Next v3.2 legacy kernel
+        working-directory: source/android/kernel/msm-4.14
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          unset LLVM LLVM_IAS KBUILD_COMPILER_STRING
+          make O="$OUT_DIR" ARCH=arm64 LOCALVERSION=+ \
+            CC="$CC" REAL_CC="$REAL_CC" LD="$LD" \
+            CROSS_COMPILE="$CROSS_COMPILE" \
+            CROSS_COMPILE_ARM32="$CROSS_COMPILE_ARM32" \
+            CLANG_TRIPLE="$CLANG_TRIPLE" -j"$JOBS" \
+            2>&1 | tee "$GITHUB_WORKSPACE/build.log"
+
+      - name: Upload v3.2 legacy build diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: PCHM30-KSUNEXT-V320-LEGACY-DIAGNOSTIC-${{ github.run_number }}
+          path: |
+            build.log
+            source/android/kernel/msm-4.14/out-pchm30-ksunext-v320/.config
+          include-hidden-files: true
+          if-no-files-found: warn
+          retention-days: 7
+
+      - name: Verify linked v3.2 legacy manual kernel
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          KERNEL="$GITHUB_WORKSPACE/$KERNEL_REL"
+          OUT="$KERNEL/$OUT_DIR"
+
+          test -s "$OUT/vmlinux"
+          test -s "$OUT/arch/arm64/boot/Image"
+          test -s "$OUT/System.map"
+          test -s "$OUT/.config"
+          test -s "$GITHUB_WORKSPACE/build.log"
+
+          grep -q '^CONFIG_KSU=y$' "$OUT/.config"
+          grep -q '^CONFIG_KSU_MANUAL_HOOK=y$' "$OUT/.config"
+          ! grep -q '^CONFIG_KSU_KPROBES_HOOK=y$' "$OUT/.config"
+          ! grep -q '^CONFIG_KSU_SUSFS=y$' "$OUT/.config"
+          ! grep -q 'filter_count' "$KERNEL/include/linux/seccomp.h"
+          git -C "$KERNEL" diff --exit-code -- include/linux/seccomp.h
+          git -C "$KERNEL" diff --exit-code -- drivers/input/input.c
+          echo "$STOCK_X509_SHA256  $KERNEL/certs/pchm30-stock-signing-key.x509" | sha256sum -c -
+          test "$(git -C "$KERNEL/KernelSU-Next" rev-parse HEAD)" = "$KSUNEXT_COMMIT"
+          ! grep -Fq 'An exception of type AttributeError occurred' "$GITHUB_WORKSPACE/build.log"
+
+          for sym in \
+            ksu_handle_execveat \
+            ksu_handle_faccessat \
+            ksu_handle_sys_read \
+            ksu_handle_stat \
+            ksu_handle_sys_reboot; do
+            nm -n "$OUT/vmlinux" | grep -q "[[:space:]]$sym$"
+          done
+
+          echo '===== KernelSU-Next v3.2 legacy linked symbols ====='
+          nm -n "$OUT/vmlinux" | grep -Ei 'kernelsu|ksu_' | sed -n '1,120p' || true
+
+          mkdir -p "$GITHUB_WORKSPACE/artifact"
+          cp "$OUT/arch/arm64/boot/Image" "$GITHUB_WORKSPACE/artifact/Image"
+          cp "$OUT/vmlinux" "$GITHUB_WORKSPACE/artifact/vmlinux"
+          cp "$OUT/System.map" "$GITHUB_WORKSPACE/artifact/System.map"
+          cp "$OUT/.config" "$GITHUB_WORKSPACE/artifact/PCHM30-KSUNEXT-V320-LEGACY.config"
+          cp "$GITHUB_WORKSPACE/build.log" "$GITHUB_WORKSPACE/artifact/build.log"
+          git -C "$KERNEL/KernelSU-Next" rev-parse HEAD > "$GITHUB_WORKSPACE/artifact/KSUNEXT_COMMIT.txt"
+          git -C "$KERNEL" diff -- fs/exec.c fs/open.c fs/read_write.c fs/stat.c kernel/reboot.c > "$GITHUB_WORKSPACE/artifact/PCHM30_MANUAL_HOOKS.patch"
+          sha256sum "$KERNEL/tools/pchm30/ksunext-v320-legacy-manual-integrate.py" > "$GITHUB_WORKSPACE/artifact/MANUAL_INTEGRATOR_SHA256.txt"
+
+      - name: Fetch matching KernelSU Next v3.2 manager and ksud
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          BASE="https://github.com/KernelSU-Next/KernelSU-Next/releases/download/$KSUNEXT_RELEASE_TAG"
+          curl --http1.1 -fL --retry 4 --retry-delay 2 --retry-all-errors \
+            "$BASE/$KSUNEXT_MANAGER_ASSET" -o "$GITHUB_WORKSPACE/artifact/$KSUNEXT_MANAGER_ASSET"
+          curl --http1.1 -fL --retry 4 --retry-delay 2 --retry-all-errors \
+            "$BASE/$KSUNEXT_KSUD_ASSET" -o "$GITHUB_WORKSPACE/artifact/$KSUNEXT_KSUD_ASSET"
+          echo "$KSUNEXT_MANAGER_SHA256  $GITHUB_WORKSPACE/artifact/$KSUNEXT_MANAGER_ASSET" | sha256sum -c -
+          echo "$KSUNEXT_KSUD_SHA256  $GITHUB_WORKSPACE/artifact/$KSUNEXT_KSUD_ASSET" | sha256sum -c -
+          chmod +x "$GITHUB_WORKSPACE/artifact/$KSUNEXT_KSUD_ASSET"
+
+      - name: Prepare pinned x86_64 magiskboot and verified no-SUSFS boot template
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          TOOLS="$GITHUB_WORKSPACE/boot-tools"
+          TEMPLATE_DIR="$GITHUB_WORKSPACE/boot-template"
+          mkdir -p "$TOOLS" "$TEMPLATE_DIR"
+
+          gh release download "$BOOT_TEMPLATE_RELEASE_TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --pattern "$BOOT_TEMPLATE_ASSET" \
+            --dir "$TEMPLATE_DIR"
+          TEMPLATE="$TEMPLATE_DIR/$BOOT_TEMPLATE_ASSET"
+          echo "$BOOT_TEMPLATE_SHA256  $TEMPLATE" | sha256sum -c -
+          test "$(stat -c '%s' "$TEMPLATE")" -eq 100663296
+
+          APK="$TOOLS/Magisk-$MAGISK_VERSION.apk"
+          curl --http1.1 -fL \
+            --retry 4 --retry-delay 2 --retry-all-errors \
+            "https://github.com/topjohnwu/Magisk/releases/download/$MAGISK_VERSION/Magisk-$MAGISK_VERSION.apk" \
+            -o "$APK"
+          echo "$MAGISK_APK_SHA256  $APK" | sha256sum -c -
+          unzip -j "$APK" 'lib/x86_64/libmagiskboot.so' -d "$TOOLS"
+          mv "$TOOLS/libmagiskboot.so" "$TOOLS/magiskboot"
+          chmod +x "$TOOLS/magiskboot"
+          file "$TOOLS/magiskboot" | tee "$TOOLS/magiskboot.file.txt"
+          grep -qiE 'x86-64|x86_64' "$TOOLS/magiskboot.file.txt"
+          ! grep -qi 'ARM aarch64' "$TOOLS/magiskboot.file.txt"
+
+          echo "MAGISKBOOT=$TOOLS/magiskboot" >> "$GITHUB_ENV"
+          echo "BOOT_TEMPLATE=$TEMPLATE" >> "$GITHUB_ENV"
+
+      - name: Package and verify kernel-only v3.2 legacy boot image
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          RAW="$GITHUB_WORKSPACE/artifact/Image"
+          EXPECTED_IMAGE_SHA="$(sha256sum "$RAW" | awk '{print $1}')"
+          PACK="$GITHUB_WORKSPACE/boot-pack"
+          VERIFY="$GITHUB_WORKSPACE/boot-verify"
+          FINAL="$GITHUB_WORKSPACE/artifact/PCHM30-KSUNEXT-V320-LEGACY-MANUAL-NOSUSFS-BOOT.img"
+          RAMDISK_PROOF="$GITHUB_WORKSPACE/artifact/BOOT_TEMPLATE_RAMDISK_SHA256.txt"
+
+          rm -rf "$PACK" "$VERIFY"
+          mkdir -p "$PACK" "$VERIFY"
+          cd "$PACK"
+          cp "$BOOT_TEMPLATE" base.img
+          "$MAGISKBOOT" cleanup >/dev/null 2>&1 || true
+          "$MAGISKBOOT" unpack base.img
+          test -s kernel
+          test -s ramdisk.cpio
+
+          RAMDISK_SHA="$(sha256sum ramdisk.cpio | awk '{print $1}')"
+          printf '%s  ramdisk.cpio\n' "$RAMDISK_SHA" > "$RAMDISK_PROOF"
+          cp "$RAW" kernel
+          echo "$EXPECTED_IMAGE_SHA  kernel" | sha256sum -c -
+          echo "$RAMDISK_SHA  ramdisk.cpio" | sha256sum -c -
+          "$MAGISKBOOT" repack base.img "$FINAL"
+          test -s "$FINAL"
+          test "$(stat -c '%s' "$FINAL")" -eq 100663296
+
+          cd "$VERIFY"
+          "$MAGISKBOOT" cleanup >/dev/null 2>&1 || true
+          "$MAGISKBOOT" unpack "$FINAL"
+          test -s kernel
+          test -s ramdisk.cpio
+          echo "$EXPECTED_IMAGE_SHA  kernel" | sha256sum -c -
+          echo "$RAMDISK_SHA  ramdisk.cpio" | sha256sum -c -
+          echo '[PASS] final boot contains exact v3.2 legacy Actions Image'
+          echo '[PASS] verified no-SUSFS template ramdisk preserved byte-for-byte'
+          sha256sum "$FINAL"
+
+      - name: Finalize artifact checksums
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          cd "$GITHUB_WORKSPACE/artifact"
+          sha256sum \
+            Image \
+            PCHM30-KSUNEXT-V320-LEGACY-MANUAL-NOSUSFS-BOOT.img \
+            vmlinux System.map PCHM30-KSUNEXT-V320-LEGACY.config build.log \
+            KSUNEXT_COMMIT.txt PCHM30_MANUAL_HOOKS.patch MANUAL_INTEGRATOR_SHA256.txt \
+            BOOT_TEMPLATE_RAMDISK_SHA256.txt \
+            "$KSUNEXT_MANAGER_ASSET" "$KSUNEXT_KSUD_ASSET" \
+            > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+
+      - name: Upload v3.2 legacy kernel, matching manager, and flashable boot
+        uses: actions/upload-artifact@v4
+        with:
+          name: PCHM30-KSUNEXT-V320-LEGACY-MANUAL-NOSUSFS-${{ github.run_number }}
+          path: artifact/
+          if-no-files-found: error
+          retention-days: 30

@@ -1,0 +1,68 @@
+name: PCHM30 KSU Next olddefconfig debug
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [pchm30-ksunext-minhook-nosusfs]
+    paths:
+      - '.github/workflows/pchm30-ksunext-olddefconfig-debug.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  debug:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: pchm30-ksunext-minhook-nosusfs
+          fetch-depth: 1
+
+      - name: Install KSU Next v1.1.1 manual-hook tree
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          rm -rf KernelSU-Next drivers/kernelsu
+          git clone --filter=blob:none --no-checkout https://github.com/KernelSU-Next/KernelSU-Next.git KernelSU-Next
+          git -C KernelSU-Next fetch origin 0d6bdc6364cbfc73517dcfdf7ab23b0ba8045553 --tags
+          git -C KernelSU-Next checkout --detach 0d6bdc6364cbfc73517dcfdf7ab23b0ba8045553
+          ln -sfn ../KernelSU-Next/kernel drivers/kernelsu
+          grep -q 'obj-$(CONFIG_KSU) += kernelsu/' drivers/Makefile || printf '\nobj-$(CONFIG_KSU) += kernelsu/\n' >> drivers/Makefile
+          grep -q 'source "drivers/kernelsu/Kconfig"' drivers/Kconfig || printf '\nsource "drivers/kernelsu/Kconfig"\n' >> drivers/Kconfig
+          python3 tools/pchm30/ksunext-minhook-integrate.py
+
+      - name: Prepare config
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          rm -rf out-pchm30-ksunext-debug
+          mkdir -p out-pchm30-ksunext-debug
+          cp configs/PCHM30-stock-running.config out-pchm30-ksunext-debug/.config
+          scripts/config --file out-pchm30-ksunext-debug/.config -e OVERLAY_FS -e KSU -d KSU_KPROBES_HOOK -e KSU_LSM_SECURITY_HOOKS
+          grep -E '^(CONFIG_OVERLAY_FS|CONFIG_KSU|# CONFIG_KSU_KPROBES_HOOK|CONFIG_KSU_LSM_SECURITY_HOOKS)' out-pchm30-ksunext-debug/.config || true
+
+      - name: Run olddefconfig with full diagnostics
+        shell: bash
+        run: |
+          set +e
+          make O=out-pchm30-ksunext-debug ARCH=arm64 olddefconfig V=1 2>&1 | tee olddefconfig.log
+          rc=${PIPESTATUS[0]}
+          echo "make_rc=$rc" | tee -a olddefconfig.log
+          echo '===== resulting KSU config =====' | tee -a olddefconfig.log
+          grep -E '^(CONFIG_OVERLAY_FS|CONFIG_KSU|# CONFIG_KSU_KPROBES_HOOK|CONFIG_KSU_LSM_SECURITY_HOOKS|CONFIG_KPROBES)' out-pchm30-ksunext-debug/.config 2>&1 | tee -a olddefconfig.log || true
+          exit "$rc"
+
+      - name: Upload diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: PCHM30-KSUNEXT-OLDDEFCONFIG-DEBUG-${{ github.run_number }}
+          path: |
+            olddefconfig.log
+            out-pchm30-ksunext-debug/.config
+          include-hidden-files: true
+          if-no-files-found: warn
+          retention-days: 7

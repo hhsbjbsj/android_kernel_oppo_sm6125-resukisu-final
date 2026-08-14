@@ -340,8 +340,11 @@ jobs:
           echo "$STOCK_X509_SHA256  $KERNEL/certs/pchm30-stock-signing-key.x509" | sha256sum -c -
           test "$(git -C "$KERNEL/RapliVx-KernelSU" rev-parse HEAD)" = "$RAPLIVX_COMMIT"
 
-          nm -n "$OUT/vmlinux" | grep -Eq '[[:space:]]ksu_init$|[[:space:]]kernelsu_init$|[[:space:]]ksu_.*init'
-          nm -n "$OUT/vmlinux" | grep -Fq 'ksu_handle'
+          test -s "$OUT/drivers/kernelsu/core/init.o"
+          test -s "$OUT/drivers/kernelsu/hook/syscall_hook_manager.o"
+          test -s "$OUT/drivers/kernelsu/hook/arm64/syscall_hook.o"
+          nm -n "$OUT/vmlinux" | grep -Eq '[[:space:]]kernelsu_init$'
+          nm -n "$OUT/vmlinux" | grep -Eq '[[:space:]]ksu_syscall_hook_manager_init$'
 
           echo '===== RapliVx KernelSU linked symbols ====='
           nm -n "$OUT/vmlinux" | grep -Ei 'kernelsu|ksu_' | sed -n '1,160p' || true

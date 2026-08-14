@@ -29,7 +29,9 @@ env:
   CONFIG_FILE: configs/PCHM30-stock-running.config
 
   RAPLIVX_REPO: https://github.com/RapliVx/KernelSU.git
-  RAPLIVX_COMMIT: 9094e85f0a47b90078dc9c3392358c05d38d98b0
+  # Last RapliVx revision before the July syscall-wrapper ABI upstream.
+  # This revision uses sys_enter tracepoints + kretprobes and matches old ARM64 4.14.
+  RAPLIVX_COMMIT: 4f96f85147799a91c14accb7fd13bd25eed5998e
 
   STOCK_X509_SHA256: 984030282928748f924a2ffd19b124e1885ef58529d878cacfc1b8c0043fdc33
   OPPO_VENDOR_REPO: https://github.com/oppo-source/android_kernel_modules_and_devicetree_oppo_sm6125.git
@@ -56,7 +58,7 @@ jobs:
           fetch-depth: 1
           submodules: false
 
-      - name: Install pinned RapliVx KernelSU runtime-hook source
+      - name: Install pinned RapliVx KernelSU 4.14 tracepoint source
         working-directory: source/android/kernel/msm-4.14
         shell: bash
         run: |
@@ -70,10 +72,34 @@ jobs:
 
           test -f RapliVx-KernelSU/kernel/Kconfig
           test -f RapliVx-KernelSU/kernel/Kbuild
+          test -f RapliVx-KernelSU/kernel/syscall_hook_manager.c
           grep -q '^config KSU$' RapliVx-KernelSU/kernel/Kconfig
-          grep -q 'depends on KPROBES && EXT4_FS' RapliVx-KernelSU/kernel/Kconfig
-          grep -Fq 'hook/syscall_hook_manager.o' RapliVx-KernelSU/kernel/Kbuild
-          grep -Fq 'hook/arm64/syscall_hook.o' RapliVx-KernelSU/kernel/Kbuild
+          grep -q 'depends on KPROBES' RapliVx-KernelSU/kernel/Kconfig
+          grep -Fq 'kernelsu-objs += syscall_hook_manager.o' RapliVx-KernelSU/kernel/Kbuild
+          grep -Fq 'register_trace_sys_enter' RapliVx-KernelSU/kernel/syscall_hook_manager.c
+          grep -Fq 'CONFIG_HAVE_SYSCALL_TRACEPOINTS' RapliVx-KernelSU/kernel/syscall_hook_manager.c
+          grep -Fq 'CONFIG_KRETPROBES' RapliVx-KernelSU/kernel/syscall_hook_manager.c
+
+          # Linux 4.14 predates module namespace imports. They are metadata only;
+          # remove RapliVx's newer MODULE_IMPORT_NS declarations, not hook logic.
+          echo '===== MODULE_IMPORT_NS before 4.14 compatibility cleanup ====='
+          grep -R -n 'MODULE_IMPORT_NS' RapliVx-KernelSU/kernel || true
+          python3 - <<'PY'
+          from pathlib import Path
+          root = Path('RapliVx-KernelSU/kernel')
+          changed = []
+          for p in root.rglob('*'):
+              if not p.is_file() or p.suffix not in {'.c', '.h'}:
+                  continue
+              text = p.read_text(errors='surrogateescape')
+              lines = text.splitlines(True)
+              new = [line for line in lines if 'MODULE_IMPORT_NS(' not in line]
+              if new != lines:
+                  p.write_text(''.join(new), errors='surrogateescape')
+                  changed.append(str(p))
+          print('namespace-cleanup:', *changed, sep='\n  ')
+          PY
+          ! grep -R -n 'MODULE_IMPORT_NS' RapliVx-KernelSU/kernel
 
           ln -sfn ../RapliVx-KernelSU/kernel drivers/kernelsu
           grep -q 'obj-$(CONFIG_KSU) += kernelsu/' drivers/Makefile || \
@@ -88,8 +114,8 @@ jobs:
           git diff --check
           echo "kernel=$(git rev-parse HEAD)"
           echo "RapliVx-KernelSU=$(git -C RapliVx-KernelSU rev-parse HEAD)"
-          echo '[PASS] RapliVx runtime-hook source installed without manual-hook grafts'
-          echo '[PASS] SUSFS absent and PCHM30 stock seccomp header untouched'
+          echo '[PASS] RapliVx pre-wrapper tracepoint source installed for ARM64 4.14'
+          echo '[PASS] no manual-hook graft, SUSFS absent, stock seccomp/input untouched'
 
       - name: Reconstruct pinned OPPO vendor tree
         shell: bash
@@ -112,7 +138,6 @@ jobs:
           ALL="$GITHUB_WORKSPACE/broken-symlinks-all.txt"
           BAD="$GITHUB_WORKSPACE/broken-symlinks-unexpected.txt"
           KNOWN="$KERNEL/drivers/soc/oplus/sensor"
-
           find "$KERNEL" -xtype l -print | sort > "$ALL" || true
           grep -Fvx "$KNOWN" "$ALL" > "$BAD" || true
           if [ -s "$BAD" ]; then
@@ -155,12 +180,10 @@ jobs:
             --pattern 'PCHM30-GCC32-4.9.tar.zst' \
             --pattern 'PCHM30-Qualcomm-MPGen-2.1.1-Python3-PATCHED.tar.zst' \
             --pattern 'SHA256SUMS.txt'
-
           pushd toolchain-assets >/dev/null
           grep -E 'PCHM30-(Snapdragon-LLVM-10\.0\.7|GCC64-4\.9-binutils2\.27|GCC32-4\.9|Qualcomm-MPGen-2\.1\.1-Python3-PATCHED)\.tar\.zst$' SHA256SUMS.txt > required.sums
           sha256sum -c required.sums
           popd >/dev/null
-
           for a in toolchain-assets/*.tar.zst; do
             sudo tar --zstd -xf "$a" -C "$TOOLCHAIN_ROOT"
           done
@@ -174,7 +197,6 @@ jobs:
           G64="$TOOLCHAIN_ROOT/aarch64-linux-android-4.9"
           G32="$TOOLCHAIN_ROOT/arm-linux-androideabi-4.9"
           MP="$TOOLCHAIN_ROOT/mpgen-2.1.1-py3"
-
           test -x "$SD/bin/clang"
           test -x "$G64/bin/aarch64-linux-android-gcc"
           test -x "$G64/bin/aarch64-linux-android-ld"
@@ -210,7 +232,6 @@ jobs:
           )
           path.write_text(text[:line_start] + replacement + text[next_line_start:])
           PY
-
           python3 -m py_compile "$MP/mpgen_kernel.py"
           grep -Fq "return f.read().decode('latin1')" "$MP/mpgen_kernel.py"
           "$SD/bin/clang" --version | head -n2
@@ -218,7 +239,6 @@ jobs:
           "$G64/bin/aarch64-linux-android-ld" --version | head -n1
           "$G32/bin/arm-linux-androideabi-gcc" --version | head -n1
           python3 -m compileall -q "$MP"
-
           echo "SDCLANG_DIR=$SD" >> "$GITHUB_ENV"
           echo "GCC64_DIR=$G64" >> "$GITHUB_ENV"
           echo "GCC32_DIR=$G32" >> "$GITHUB_ENV"
@@ -261,18 +281,14 @@ jobs:
           rm -rf "$OUT_DIR"
           mkdir -p "$OUT_DIR"
           cp "$CONFIG_FILE" "$OUT_DIR/.config"
-
           scripts/config --file "$OUT_DIR/.config" \
             -e KPROBES \
-            -e EXT4_FS \
+            -e KRETPROBES \
             -e KSU \
-            -d KSU_DEBUG \
-            -d KSU_DISABLE_MANAGER \
-            -d KSU_DISABLE_POLICY
-
+            -d KSU_DEBUG
           ! grep -q 'filter_count' include/linux/seccomp.h
 
-      - name: olddefconfig and audit final RapliVx mode
+      - name: olddefconfig and audit final RapliVx tracepoint mode
         working-directory: source/android/kernel/msm-4.14
         shell: bash
         run: |
@@ -283,12 +299,12 @@ jobs:
             CROSS_COMPILE="$CROSS_COMPILE" \
             CROSS_COMPILE_ARM32="$CROSS_COMPILE_ARM32" \
             CLANG_TRIPLE="$CLANG_TRIPLE" olddefconfig
-
           echo '===== RapliVx KSU final config ====='
-          grep -E '^CONFIG_KSU|^# CONFIG_KSU|^CONFIG_KPROBES=|^CONFIG_EXT4_FS=' "$OUT_DIR/.config" || true
+          grep -E '^CONFIG_KSU|^# CONFIG_KSU|^CONFIG_KPROBES=|^CONFIG_KRETPROBES=|^CONFIG_HAVE_SYSCALL_TRACEPOINTS=' "$OUT_DIR/.config" || true
           grep -q '^CONFIG_KSU=y$' "$OUT_DIR/.config"
           grep -q '^CONFIG_KPROBES=y$' "$OUT_DIR/.config"
-          grep -q '^CONFIG_EXT4_FS=y$' "$OUT_DIR/.config"
+          grep -q '^CONFIG_KRETPROBES=y$' "$OUT_DIR/.config"
+          grep -q '^CONFIG_HAVE_SYSCALL_TRACEPOINTS=y$' "$OUT_DIR/.config"
           ! grep -q '^CONFIG_KSU_SUSFS=y$' "$OUT_DIR/.config"
           ! grep -q 'filter_count' include/linux/seccomp.h
 
@@ -323,16 +339,15 @@ jobs:
           set -Eeuo pipefail
           KERNEL="$GITHUB_WORKSPACE/$KERNEL_REL"
           OUT="$KERNEL/$OUT_DIR"
-
           test -s "$OUT/vmlinux"
           test -s "$OUT/arch/arm64/boot/Image"
           test -s "$OUT/System.map"
           test -s "$OUT/.config"
           test -s "$GITHUB_WORKSPACE/build.log"
-
           grep -q '^CONFIG_KSU=y$' "$OUT/.config"
           grep -q '^CONFIG_KPROBES=y$' "$OUT/.config"
-          grep -q '^CONFIG_EXT4_FS=y$' "$OUT/.config"
+          grep -q '^CONFIG_KRETPROBES=y$' "$OUT/.config"
+          grep -q '^CONFIG_HAVE_SYSCALL_TRACEPOINTS=y$' "$OUT/.config"
           ! grep -q '^CONFIG_KSU_SUSFS=y$' "$OUT/.config"
           ! grep -q 'filter_count' "$KERNEL/include/linux/seccomp.h"
           git -C "$KERNEL" diff --exit-code -- include/linux/seccomp.h
@@ -340,15 +355,15 @@ jobs:
           echo "$STOCK_X509_SHA256  $KERNEL/certs/pchm30-stock-signing-key.x509" | sha256sum -c -
           test "$(git -C "$KERNEL/RapliVx-KernelSU" rev-parse HEAD)" = "$RAPLIVX_COMMIT"
 
-          test -s "$OUT/drivers/kernelsu/core/init.o"
-          test -s "$OUT/drivers/kernelsu/hook/syscall_hook_manager.o"
-          test -s "$OUT/drivers/kernelsu/hook/arm64/syscall_hook.o"
+          test -s "$OUT/drivers/kernelsu/ksu.o"
+          test -s "$OUT/drivers/kernelsu/syscall_hook_manager.o"
+          test -s "$OUT/drivers/kernelsu/kernelsu.o"
           nm -n "$OUT/vmlinux" | grep -Eq '[[:space:]]kernelsu_init$'
           nm -n "$OUT/vmlinux" | grep -Eq '[[:space:]]ksu_syscall_hook_manager_init$'
+          nm -n "$OUT/vmlinux" | grep -Eq '[[:space:]]ksu_sys_enter_handler$'
 
           echo '===== RapliVx KernelSU linked symbols ====='
-          nm -n "$OUT/vmlinux" | grep -Ei 'kernelsu|ksu_' | sed -n '1,160p' || true
-
+          nm -n "$OUT/vmlinux" | grep -Ei 'kernelsu|ksu_' | sed -n '1,180p' || true
           mkdir -p "$GITHUB_WORKSPACE/artifact"
           cp "$OUT/arch/arm64/boot/Image" "$GITHUB_WORKSPACE/artifact/Image"
           cp "$OUT/vmlinux" "$GITHUB_WORKSPACE/artifact/vmlinux"
@@ -366,7 +381,6 @@ jobs:
           TOOLS="$GITHUB_WORKSPACE/boot-tools"
           TEMPLATE_DIR="$GITHUB_WORKSPACE/boot-template"
           mkdir -p "$TOOLS" "$TEMPLATE_DIR"
-
           gh release download "$BOOT_TEMPLATE_RELEASE_TAG" \
             --repo "$GITHUB_REPOSITORY" \
             --pattern "$BOOT_TEMPLATE_ASSET" \
@@ -374,10 +388,8 @@ jobs:
           TEMPLATE="$TEMPLATE_DIR/$BOOT_TEMPLATE_ASSET"
           echo "$BOOT_TEMPLATE_SHA256  $TEMPLATE" | sha256sum -c -
           test "$(stat -c '%s' "$TEMPLATE")" -eq 100663296
-
           APK="$TOOLS/Magisk-$MAGISK_VERSION.apk"
-          curl --http1.1 -fL \
-            --retry 4 --retry-delay 2 --retry-all-errors \
+          curl --http1.1 -fL --retry 4 --retry-delay 2 --retry-all-errors \
             "https://github.com/topjohnwu/Magisk/releases/download/$MAGISK_VERSION/Magisk-$MAGISK_VERSION.apk" \
             -o "$APK"
           echo "$MAGISK_APK_SHA256  $APK" | sha256sum -c -
@@ -387,7 +399,6 @@ jobs:
           file "$TOOLS/magiskboot" | tee "$TOOLS/magiskboot.file.txt"
           grep -qiE 'x86-64|x86_64' "$TOOLS/magiskboot.file.txt"
           ! grep -qi 'ARM aarch64' "$TOOLS/magiskboot.file.txt"
-
           echo "MAGISKBOOT=$TOOLS/magiskboot" >> "$GITHUB_ENV"
           echo "BOOT_TEMPLATE=$TEMPLATE" >> "$GITHUB_ENV"
 
@@ -401,7 +412,6 @@ jobs:
           VERIFY="$GITHUB_WORKSPACE/boot-verify"
           FINAL="$GITHUB_WORKSPACE/artifact/PCHM30-RAPLIVX-KERNELSU-BOOT.img"
           RAMDISK_PROOF="$GITHUB_WORKSPACE/artifact/BOOT_TEMPLATE_RAMDISK_SHA256.txt"
-
           rm -rf "$PACK" "$VERIFY"
           mkdir -p "$PACK" "$VERIFY"
           cd "$PACK"
@@ -410,7 +420,6 @@ jobs:
           "$MAGISKBOOT" unpack base.img
           test -s kernel
           test -s ramdisk.cpio
-
           RAMDISK_SHA="$(sha256sum ramdisk.cpio | awk '{print $1}')"
           printf '%s  ramdisk.cpio\n' "$RAMDISK_SHA" > "$RAMDISK_PROOF"
           cp "$RAW" kernel
@@ -419,7 +428,6 @@ jobs:
           "$MAGISKBOOT" repack base.img "$FINAL"
           test -s "$FINAL"
           test "$(stat -c '%s' "$FINAL")" -eq 100663296
-
           cd "$VERIFY"
           "$MAGISKBOOT" cleanup >/dev/null 2>&1 || true
           "$MAGISKBOOT" unpack "$FINAL"

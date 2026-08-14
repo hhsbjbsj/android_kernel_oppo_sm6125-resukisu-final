@@ -4,6 +4,16 @@
 
 #include <linux/list.h>
 #include <linux/sched.h>
+#include <linux/sched/task.h>
+
+/*
+ * Newer kernels pass enum task_work_notify_mode to task_work_add(), while
+ * this 4.14 tree still takes a bool notify argument.  TWA_RESUME means the
+ * caller wants notify-resume semantics, which maps directly to true here.
+ */
+#ifndef TWA_RESUME
+#define TWA_RESUME true
+#endif
 
 typedef void (*task_work_func_t)(struct callback_head *);
 

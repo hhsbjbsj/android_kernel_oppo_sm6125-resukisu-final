@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 from pathlib import Path
 import re
+import subprocess
 
 p = Path('kernel/bpf/verifier.c')
 s = p.read_text()
@@ -68,4 +69,77 @@ for needle in (
         raise SystemExit(f'a2ef resolved function missing required semantic: {needle}')
 
 p.write_text(s)
-print('[PASS] a2ef resolver: removed duplicate dst/src declaration and adopted A16 socket pointer policy while retaining surrounding OPPO/A15 sanitizer state')
+
+# The next donor commit that touches an OPPO-modified networking hotspot is
+# 31005659a (skb extension infrastructure). In our tree its only conflict is
+# inside skb_init(): OPPO initializes skbuff_cb_store_cache while the donor adds
+# skb_extensions_init(). These operations are independent and both are needed.
+# Install a one-shot custom merge driver now, before that cherry-pick occurs.
+gitdir = Path(subprocess.check_output(['git', 'rev-parse', '--git-dir'], text=True).strip()).resolve()
+driver = gitdir / 'resolve-skb310.py'
+driver.write_text(r'''#!/usr/bin/env python3
+from pathlib import Path
+import re
+import subprocess
+import sys
+
+if len(sys.argv) != 4:
+    raise SystemExit('usage: resolve-skb310.py <base> <ours> <theirs>')
+base, ours, theirs = map(Path, sys.argv[1:4])
+proc = subprocess.run(
+    ['git', 'merge-file', '-p', '-L', 'HEAD', '-L', 'BASE', '-L', 'DONOR',
+     str(ours), str(base), str(theirs)],
+    text=True, capture_output=True,
+)
+if proc.returncode not in (0, 1):
+    sys.stderr.write(proc.stderr)
+    raise SystemExit(f'git merge-file failed with {proc.returncode}')
+merged = proc.stdout
+
+if proc.returncode == 1:
+    pat = re.compile(r'<<<<<<< HEAD\n(.*?)=======\n(.*?)>>>>>>> DONOR\n', re.S)
+    blocks = list(pat.finditer(merged))
+    if len(blocks) != 1:
+        raise SystemExit(f'expected exactly one 31005659 skbuff conflict, found {len(blocks)}')
+    b = blocks[0]
+    head, donor = b.group(1), b.group(2)
+    if 'OPLUS_FEATURE_WIFI_LIMMITBGSPEED' not in head or 'skbuff_cb_store_cache' not in head:
+        raise SystemExit('31005659 HEAD side no longer matches expected OPPO skb_init block')
+    if 'skb_extensions_init();' not in donor:
+        raise SystemExit('31005659 donor side missing skb_extensions_init()')
+    replacement = head
+    if replacement and not replacement.endswith('\n'):
+        replacement += '\n'
+    replacement += '\tskb_extensions_init();\n'
+    merged = merged[:b.start()] + replacement + merged[b.end():]
+
+if any(m in merged for m in ('<<<<<<<', '=======', '>>>>>>>')):
+    raise SystemExit('conflict markers remain after 31005659 merge')
+if merged.count('skb_extensions_init();') != 1:
+    raise SystemExit('31005659 merge must leave exactly one skb_extensions_init() call')
+if 'OPLUS_FEATURE_WIFI_LIMMITBGSPEED' not in merged or 'skbuff_cb_store_cache' not in merged:
+    raise SystemExit('31005659 merge lost OPPO skb cb cache initialization')
+
+ours.write_text(merged)
+
+# One-shot: do not silently auto-resolve later skbuff.c conflicts with this rule.
+gitdir = Path(subprocess.check_output(['git', 'rev-parse', '--git-dir'], text=True).strip()).resolve()
+attrs = gitdir / 'info' / 'attributes'
+if attrs.exists():
+    lines = attrs.read_text().splitlines()
+    lines = [line for line in lines if line.strip() != 'net/core/skbuff.c merge=skb310']
+    attrs.write_text(('\n'.join(lines) + '\n') if lines else '')
+print('[PASS] 31005659 merge driver: preserved OPPO skb cache init and added skb_extensions_init()')
+''')
+
+attrs = gitdir / 'info' / 'attributes'
+attrs.parent.mkdir(parents=True, exist_ok=True)
+existing = attrs.read_text().splitlines() if attrs.exists() else []
+rule = 'net/core/skbuff.c merge=skb310'
+existing = [line for line in existing if line.strip() != rule]
+existing.append(rule)
+attrs.write_text('\n'.join(existing) + '\n')
+subprocess.run(['git', 'config', 'merge.skb310.name', 'PCHM30 31005659 semantic merge'], check=True)
+subprocess.run(['git', 'config', 'merge.skb310.driver', f'python3 {driver} %O %A %B'], check=True)
+
+print('[PASS] a2ef resolver: removed duplicate dst/src declaration, kept A16 socket pointer policy, and armed one-shot 31005659 skb merge')

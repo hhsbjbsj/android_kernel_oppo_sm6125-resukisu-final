@@ -7,8 +7,10 @@
 
 #include <linux/dcache.h>
 #include <linux/err.h>
+#include <linux/errno.h>
 #include <linux/fs.h>
 #include <linux/limits.h>
+#include <linux/module.h>
 #include <linux/slab.h>
 #include <linux/syscalls.h>
 #include <linux/uaccess.h>
@@ -21,6 +23,44 @@
 #ifndef ksys_unshare
 #define ksys_unshare sys_unshare
 #endif
+
+/*
+ * copy_{from,to}_user_nofault() were added after this Android 4.14 tree.
+ * Preserve the modern no-fault contract instead of falling back to the
+ * sleeping copy_{from,to}_user() helpers: validate the user range, disable
+ * page faults, use the in-atomic copy primitive, and return 0/-EFAULT.
+ */
+static inline long copy_from_user_nofault(void *dst,
+					  const void __user *src,
+					  size_t size)
+{
+	long ret = -EFAULT;
+
+	if (!access_ok(VERIFY_READ, src, size))
+		return ret;
+
+	pagefault_disable();
+	ret = __copy_from_user_inatomic(dst, src, size);
+	pagefault_enable();
+
+	return ret ? -EFAULT : 0;
+}
+
+static inline long copy_to_user_nofault(void __user *dst,
+					const void *src,
+					size_t size)
+{
+	long ret = -EFAULT;
+
+	if (!access_ok(VERIFY_WRITE, dst, size))
+		return ret;
+
+	pagefault_disable();
+	ret = __copy_to_user_inatomic(dst, src, size);
+	pagefault_enable();
+
+	return ret ? -EFAULT : 0;
+}
 
 /*
  * RapliVx's pre-wrapper source calls the modern arm64 pt_regs syscall entry.

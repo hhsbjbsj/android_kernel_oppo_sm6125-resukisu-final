@@ -1,0 +1,12 @@
+PCHM30 RapliVx Linux 4.14 compatibility validation sentinel.
+
+The build-time compatibility adapter lives at:
+  scripts/ksu_raplivx_414_rules_policydb_compat.py
+
+Run #24 reached final vmlinux link and exposed two post-4.14 API calls in the
+pinned RapliVx transient source: seccomp_filter_release() and path_umount().
+The adapter preserves the pinned source revision and maps only Linux 4.14 to
+stock old-kernel primitives without altering stock seccomp/input code or CI
+verification. This file is intentionally not referenced by any Makefile; its
+location under drivers/** makes the focused compatibility change trigger the
+path-filtered PCHM30 RapliVx workflow.

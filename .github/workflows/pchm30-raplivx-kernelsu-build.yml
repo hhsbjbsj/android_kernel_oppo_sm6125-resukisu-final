@@ -82,8 +82,9 @@ jobs:
 
           # Linux 4.14 compatibility for this pinned RapliVx revision:
           # 1) module namespace import metadata does not exist yet;
-          # 2) struct seccomp.filter_count was introduced after old 4.x kernels
-          #    (present in mainline 5.9, absent in 5.8 and this 4.14 tree).
+          # 2) struct seccomp.filter_count was introduced after old 4.x kernels;
+          # 3) syscall_hook_manager.c needs the backported nofault uaccess API
+          #    explicitly because this pinned revision does not include uaccess.h.
           python3 - <<'PY'
           from pathlib import Path
           root = Path('RapliVx-KernelSU/kernel')
@@ -114,12 +115,24 @@ jobs:
               app.write_text(text)
               changed.append(str(app))
 
+          hook = root / 'syscall_hook_manager.c'
+          text = hook.read_text()
+          include_anchor = '#include <linux/slab.h>\n'
+          uaccess_include = '#include <linux/uaccess.h>\n'
+          if uaccess_include not in text:
+              if include_anchor not in text:
+                  raise SystemExit('RapliVx syscall_hook_manager include anchor not found')
+              text = text.replace(include_anchor, include_anchor + uaccess_include, 1)
+              hook.write_text(text)
+              changed.append(str(hook))
+
           print('4.14-compat:', *changed, sep='\n  ')
           PY
 
           ! grep -R -n 'MODULE_IMPORT_NS' RapliVx-KernelSU/kernel
           grep -Fq '#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 9, 0)' RapliVx-KernelSU/kernel/app_profile.c
           grep -Fq 'atomic_set(&current->seccomp.filter_count, 0);' RapliVx-KernelSU/kernel/app_profile.c
+          grep -Fq '#include <linux/uaccess.h>' RapliVx-KernelSU/kernel/syscall_hook_manager.c
 
           ln -sfn ../RapliVx-KernelSU/kernel drivers/kernelsu
           grep -q 'obj-$(CONFIG_KSU) += kernelsu/' drivers/Makefile || \

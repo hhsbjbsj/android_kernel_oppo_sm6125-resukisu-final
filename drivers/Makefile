@@ -206,7 +206,11 @@ ksu_raplivx_414_file_status := $(shell python3 $(srctree)/scripts/ksu_raplivx_41
 ifneq ($(ksu_raplivx_414_file_status),0)
 $(error RapliVx KernelSU Linux 4.14 file_wrapper compatibility adapter failed)
 endif
-ksu_raplivx_414_selinux_status := $(shell python3 $(srctree)/scripts/ksu_raplivx_414_selinux_compat.py >/dev/null 2>&1; echo $$?)
+ksu_raplivx_414_selinux_adapter := $(srctree)/scripts/ksu_raplivx_414_selinux_compat.py
+ifeq ($(wildcard $(ksu_raplivx_414_selinux_adapter)),)
+$(error RapliVx KernelSU Linux 4.14 SELinux compatibility adapter is missing)
+endif
+ksu_raplivx_414_selinux_status := $(shell python3 $(ksu_raplivx_414_selinux_adapter) >/dev/null 2>&1; echo $$?)
 ifneq ($(ksu_raplivx_414_selinux_status),0)
 $(error RapliVx KernelSU Linux 4.14 SELinux compatibility adapter failed)
 endif

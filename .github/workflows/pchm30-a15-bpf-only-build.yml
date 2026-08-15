@@ -1,0 +1,343 @@
+name: PCHM30 A15 BPF-only Build
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [pchm30-a15-bpf-only]
+    paths:
+      - '.github/workflows/pchm30-a15-bpf-only-build.yml'
+      - 'configs/**'
+      - 'kernel/**'
+      - 'net/**'
+      - 'include/**'
+      - 'security/**'
+      - 'drivers/net/**'
+      - 'scripts/**'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pchm30-a15-bpf-only-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  TOOLCHAIN_RELEASE_TAG: pchm30-build-environment-20260810
+  TOOLCHAIN_ROOT: /opt/pchm30-toolchains
+  KERNEL_REL: source/android/kernel/msm-4.14
+  OUT_DIR: out-pchm30-a15-bpf
+  CONFIG_FILE: configs/PCHM30-stock-running.config
+
+  OPPO_VENDOR_REPO: https://github.com/oppo-source/android_kernel_modules_and_devicetree_oppo_sm6125.git
+  OPPO_VENDOR_COMMIT: 5e7bee452c72c948427b9131bec8cd5d92934f83
+
+  ARESIN_REPO: https://github.com/jsdizkcksv/android_kernel_aresin.git
+  ARESIN_PREREQ: 620d928acca50c8ba013554fc798dcf8b8910918
+  A15_FIRST: a2b662dced04902eb8f1778ec8e30259dc680ff4
+  A15_LAST: bd379f8140acc083fc386cc2600ee205b2a54e31
+
+jobs:
+  build:
+    name: Apply A15 BPF range and build stock PCHM30 kernel
+    runs-on: ubuntu-22.04
+    timeout-minutes: 120
+
+    steps:
+      - name: Checkout clean rootless PCHM30 baseline
+        uses: actions/checkout@v4
+        with:
+          ref: pchm30-a15-bpf-only
+          path: source/android/kernel/msm-4.14
+          fetch-depth: 1
+          submodules: false
+
+      - name: Prove baseline has no root framework
+        working-directory: source/android/kernel/msm-4.14
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          test ! -e KernelSU
+          test ! -e drivers/kernelsu
+          ! grep -R -n -E 'CONFIG_KSU|KernelSU|SukiSU|ReSukiSU|SUSFS' \
+              --exclude-dir=.git --exclude='*.log' .
+          echo '[PASS] clean baseline contains no KSU/SukiSU/ReSukiSU/SUSFS integration'
+
+      - name: Apply article prerequisite and Android 15 BPF patch range
+        working-directory: source/android/kernel/msm-4.14
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          exec > >(tee "$GITHUB_WORKSPACE/bpf-apply.log") 2>&1
+
+          git config user.name 'PCHM30 BPF CI'
+          git config user.email 'actions@users.noreply.github.com'
+          git remote remove aresin 2>/dev/null || true
+          git remote add aresin "$ARESIN_REPO"
+
+          echo '===== Fetch exact prerequisite from article figure 3 ====='
+          git fetch --no-tags --depth=1 aresin "$ARESIN_PREREQ"
+
+          echo '===== Fetch exact A15 range from article figures 4-5 ====='
+          # bd379f8 is 54 commits ahead of a2b662d in the donor tree.
+          # Depth 80 intentionally includes the whole range and a2b662d^.
+          git fetch --no-tags --depth=80 aresin "$A15_LAST"
+          git cat-file -e "$A15_FIRST^{commit}"
+          git cat-file -e "$A15_LAST^{commit}"
+          git cat-file -e "$A15_FIRST^"
+
+          echo '===== Donor range audit ====='
+          COUNT="$(git rev-list --count "$A15_FIRST^..$A15_LAST")"
+          echo "A15 commits including endpoints: $COUNT"
+          test "$COUNT" -eq 55
+          git log --reverse --format='%h %s' "$A15_FIRST^..$A15_LAST" | tee "$GITHUB_WORKSPACE/a15-bpf-commit-list.txt"
+
+          echo '===== Apply 4.14.180 prerequisite ====='
+          git cherry-pick -x "$ARESIN_PREREQ"
+
+          echo '===== Apply Android 15 BPF series ====='
+          if ! git cherry-pick -x "$A15_FIRST^..$A15_LAST"; then
+            echo '===== CHERRY-PICK FAILED ====='
+            git status --short || true
+            git diff --check || true
+            git diff || true
+            if test -f .git/CHERRY_PICK_HEAD; then
+              echo "failed commit: $(git rev-parse CHERRY_PICK_HEAD)"
+              git show --stat --oneline CHERRY_PICK_HEAD || true
+            fi
+            exit 1
+          fi
+
+          echo '===== Post-apply audit ====='
+          git diff HEAD~56..HEAD --check
+          test "$(git rev-list --count HEAD~56..HEAD)" -eq 56
+          grep -Fq '!strcmp(sb->s_type->name, "bpf")' security/selinux/hooks.c
+          test -f kernel/bpf/btf.c
+          test -f include/linux/btf.h
+          test -f include/uapi/linux/btf.h
+          ! grep -R -n -E 'CONFIG_KSU|KernelSU|SukiSU|ReSukiSU|SUSFS' \
+              --exclude-dir=.git --exclude='*.log' .
+          echo '[PASS] prerequisite + 55 A15 BPF commits applied; root frameworks still absent'
+
+      - name: Reconstruct pinned OPPO vendor tree
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          rm -rf oppo-vendor-source source/android/vendor
+          git clone --filter=blob:none --no-checkout "$OPPO_VENDOR_REPO" oppo-vendor-source
+          git -C oppo-vendor-source sparse-checkout init --cone
+          git -C oppo-vendor-source sparse-checkout set source/android/vendor
+          git -C oppo-vendor-source checkout --detach "$OPPO_VENDOR_COMMIT"
+          test "$(git -C oppo-vendor-source rev-parse HEAD)" = "$OPPO_VENDOR_COMMIT"
+          cp -a oppo-vendor-source/source/android/vendor source/android/vendor
+          test -f source/android/vendor/oplus/kernel/oplus_performance/oppo_foreground_io_opt/Makefile
+
+      - name: Audit OPPO external symlinks
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          KERNEL="$GITHUB_WORKSPACE/$KERNEL_REL"
+          ALL="$GITHUB_WORKSPACE/broken-symlinks-all.txt"
+          BAD="$GITHUB_WORKSPACE/broken-symlinks-unexpected.txt"
+          KNOWN="$KERNEL/drivers/soc/oplus/sensor"
+          find "$KERNEL" -xtype l -print | sort > "$ALL" || true
+          grep -Fvx "$KNOWN" "$ALL" > "$BAD" || true
+          if [ -s "$BAD" ]; then
+            echo 'Unexpected broken symlinks:'
+            cat "$BAD"
+            exit 1
+          fi
+          if grep -Fxq "$KNOWN" "$ALL"; then
+            echo "[KNOWN UNUSED] $KNOWN -> $(readlink "$KNOWN")"
+          fi
+          test -f "$KERNEL/block/oppo_foreground_io_opt/Kconfig"
+          echo '[PASS] all build-relevant external symlinks resolved'
+
+      - name: Install host build dependencies
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential make git curl ca-certificates \
+            python3 python3-jinja2 bc bison flex \
+            libssl-dev libelf-dev libncurses-dev libtinfo5 libncurses5 \
+            device-tree-compiler cpio gzip xz-utils zstd rsync unzip zip tar \
+            openssl coreutils binutils file perl
+          make --version | sed -n '1p'
+          python3 --version
+          echo "nproc=$(nproc)"
+
+      - name: Download and verify archived PCHM30 toolchains
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          mkdir -p toolchain-assets "$TOOLCHAIN_ROOT"
+          gh release download "$TOOLCHAIN_RELEASE_TAG" \
+            --repo "$GITHUB_REPOSITORY" --dir toolchain-assets \
+            --pattern 'PCHM30-Snapdragon-LLVM-10.0.7.tar.zst' \
+            --pattern 'PCHM30-GCC64-4.9-binutils2.27.tar.zst' \
+            --pattern 'PCHM30-GCC32-4.9.tar.zst' \
+            --pattern 'PCHM30-Qualcomm-MPGen-2.1.1-Python3-PATCHED.tar.zst' \
+            --pattern 'SHA256SUMS.txt'
+          pushd toolchain-assets >/dev/null
+          grep -E 'PCHM30-(Snapdragon-LLVM-10\.0\.7|GCC64-4\.9-binutils2\.27|GCC32-4\.9|Qualcomm-MPGen-2\.1\.1-Python3-PATCHED)\.tar\.zst$' SHA256SUMS.txt > required.sums
+          sha256sum -c required.sums
+          popd >/dev/null
+          for a in toolchain-assets/*.tar.zst; do
+            sudo tar --zstd -xf "$a" -C "$TOOLCHAIN_ROOT"
+          done
+          sudo chown -R "$USER:$USER" "$TOOLCHAIN_ROOT"
+
+      - name: Resolve and validate toolchains
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          SD="$TOOLCHAIN_ROOT/Snapdragon-LLVM-ARM-Compiler-10.0.7-for-Android-NDK"
+          G64="$TOOLCHAIN_ROOT/aarch64-linux-android-4.9"
+          G32="$TOOLCHAIN_ROOT/arm-linux-androideabi-4.9"
+          MP="$TOOLCHAIN_ROOT/mpgen-2.1.1-py3"
+          test -x "$SD/bin/clang"
+          test -x "$G64/bin/aarch64-linux-android-gcc"
+          test -x "$G64/bin/aarch64-linux-android-ld"
+          test -x "$G32/bin/arm-linux-androideabi-gcc"
+          test -f "$MP/mpgen.py"
+          test -f "$MP/mpgen_kernel.py"
+          ln -sfn aarch64-linux-android-ld "$G64/bin/aarch64-linux-gnu-ld"
+
+          python3 - "$MP/mpgen_kernel.py" <<'PY'
+          import pathlib
+          import sys
+          path = pathlib.Path(sys.argv[1])
+          text = path.read_text()
+          fn = "def get_symbol_contents_as_str(self, symbol_name):"
+          nxt = "def get_section_sha256(self, section_name):"
+          fn_pos = text.find(fn)
+          next_pos = text.find(nxt, fn_pos + len(fn))
+          if fn_pos < 0 or next_pos < 0:
+              raise SystemExit("MPGen function boundary not found")
+          line_start = text.rfind("\n", 0, fn_pos) + 1
+          next_line_start = text.rfind("\n", 0, next_pos) + 1
+          indent = text[line_start:fn_pos]
+          body = indent + ("\t" if "\t" in indent else "    ")
+          body2 = body + ("\t" if "\t" in indent else "    ")
+          replacement = (
+              indent + fn + "\n"
+              + body + "MODULE_DD_BIN = self.dd_symbol(symbol_name)\n"
+              + body + "try:\n"
+              + body2 + "with open(MODULE_DD_BIN, 'rb') as f:\n"
+              + body2 + ("\t" if "\t" in indent else "    ") + "return f.read().decode('latin1')\n"
+              + body + "finally:\n"
+              + body2 + "mpgen_shell.rm(MODULE_DD_BIN)\n\n"
+          )
+          path.write_text(text[:line_start] + replacement + text[next_line_start:])
+          PY
+          python3 -m py_compile "$MP/mpgen_kernel.py"
+          grep -Fq "return f.read().decode('latin1')" "$MP/mpgen_kernel.py"
+          "$SD/bin/clang" --version | head -n2
+          "$G64/bin/aarch64-linux-android-gcc" --version | head -n1
+          "$G64/bin/aarch64-linux-android-ld" --version | head -n1
+          "$G32/bin/arm-linux-androideabi-gcc" --version | head -n1
+          python3 -m compileall -q "$MP"
+          echo "SDCLANG_DIR=$SD" >> "$GITHUB_ENV"
+          echo "GCC64_DIR=$G64" >> "$GITHUB_ENV"
+          echo "GCC32_DIR=$G32" >> "$GITHUB_ENV"
+          echo "MPGEN_DIR=$MP" >> "$GITHUB_ENV"
+
+      - name: Export proven PCHM30 build environment
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          KERNEL="$GITHUB_WORKSPACE/$KERNEL_REL"
+          {
+            echo "KERNEL_DIR=$KERNEL"
+            echo "ARCH=arm64"
+            echo "TARGET_PRODUCT=trinket"
+            echo "KCONFIG_NOTIMESTAMP=true"
+            echo "KBUILD_BUILD_USER=root"
+            echo "KBUILD_BUILD_HOST=ubuntu-8-196"
+            echo "KBUILD_BUILD_VERSION=2"
+            echo "KBUILD_BUILD_TIMESTAMP=Mon May 16 17:39:41 CST 2022"
+            echo "SHIPPING_API_LEVEL=28"
+            echo "CLANG_TRIPLE=aarch64-linux-gnu-"
+            echo "LOCALVERSION=+"
+            echo "CC=$SDCLANG_DIR/bin/clang"
+            echo "REAL_CC=$SDCLANG_DIR/bin/clang"
+            echo "CROSS_COMPILE=$GCC64_DIR/bin/aarch64-linux-android-"
+            echo "CROSS_COMPILE_ARM32=$GCC32_DIR/bin/arm-linux-androideabi-"
+            echo "LD=$GCC64_DIR/bin/aarch64-linux-android-ld"
+            echo "RTIC_MPGEN=python3 $MPGEN_DIR/mpgen.py"
+            echo "OPPO_STOCK_SIGNING_X509=$KERNEL/certs/pchm30-stock-signing-key.x509"
+            echo "PATH=$SDCLANG_DIR/bin:$GCC64_DIR/bin:$GCC32_DIR/bin:$PATH"
+            echo "PYTHONPATH=$MPGEN_DIR${PYTHONPATH:+:$PYTHONPATH}"
+            echo "JOBS=$(nproc)"
+          } >> "$GITHUB_ENV"
+
+      - name: Prepare stock config after BPF backport
+        working-directory: source/android/kernel/msm-4.14
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          rm -rf "$OUT_DIR"
+          mkdir -p "$OUT_DIR"
+          cp "$CONFIG_FILE" "$OUT_DIR/.config"
+          grep -q '^CONFIG_BPF=y$' "$OUT_DIR/.config"
+          grep -q '^CONFIG_BPF_SYSCALL=y$' "$OUT_DIR/.config"
+          grep -q '^CONFIG_BPF_JIT_ALWAYS_ON=y$' "$OUT_DIR/.config"
+          grep -q '^CONFIG_CGROUP_BPF=y$' "$OUT_DIR/.config"
+          ! grep -q '^CONFIG_KSU' "$OUT_DIR/.config"
+
+      - name: olddefconfig and audit BPF config
+        working-directory: source/android/kernel/msm-4.14
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          unset LLVM LLVM_IAS KBUILD_COMPILER_STRING
+          make O="$OUT_DIR" ARCH=arm64 LOCALVERSION=+ \
+            CC="$CC" REAL_CC="$REAL_CC" LD="$LD" \
+            CROSS_COMPILE="$CROSS_COMPILE" \
+            CROSS_COMPILE_ARM32="$CROSS_COMPILE_ARM32" \
+            CLANG_TRIPLE="$CLANG_TRIPLE" olddefconfig
+          echo '===== final BPF config ====='
+          grep -E '^CONFIG_(BPF|BPF_SYSCALL|BPF_JIT|BPF_JIT_ALWAYS_ON|CGROUP_BPF|BPF_EVENTS|BPF_STREAM_PARSER|BPF_LIRC_MODE2|BPFILTER)' "$OUT_DIR/.config" || true
+          ! grep -q '^CONFIG_KSU' "$OUT_DIR/.config"
+
+      - name: Build rootless A15-BPF kernel
+        working-directory: source/android/kernel/msm-4.14
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          unset LLVM LLVM_IAS KBUILD_COMPILER_STRING
+          make O="$OUT_DIR" ARCH=arm64 LOCALVERSION=+ \
+            CC="$CC" REAL_CC="$REAL_CC" LD="$LD" \
+            CROSS_COMPILE="$CROSS_COMPILE" \
+            CROSS_COMPILE_ARM32="$CROSS_COMPILE_ARM32" \
+            CLANG_TRIPLE="$CLANG_TRIPLE" -j"$JOBS" \
+            2>&1 | tee "$GITHUB_WORKSPACE/build.log"
+
+      - name: Verify output
+        if: success()
+        working-directory: source/android/kernel/msm-4.14
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          test -s "$OUT_DIR/arch/arm64/boot/Image"
+          file "$OUT_DIR/arch/arm64/boot/Image"
+          sha256sum "$OUT_DIR/arch/arm64/boot/Image" | tee "$GITHUB_WORKSPACE/Image.sha256"
+          echo '[PASS] A15 BPF-only kernel compiled successfully'
+
+      - name: Upload BPF experiment diagnostics and Image
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: PCHM30-A15-BPF-ONLY-${{ github.run_number }}
+          path: |
+            bpf-apply.log
+            a15-bpf-commit-list.txt
+            build.log
+            Image.sha256
+            source/android/kernel/msm-4.14/out-pchm30-a15-bpf/.config
+            source/android/kernel/msm-4.14/out-pchm30-a15-bpf/arch/arm64/boot/Image
+          include-hidden-files: true
+          if-no-files-found: warn

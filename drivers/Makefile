@@ -198,8 +198,8 @@ obj-$(CONFIG_GNSS)		+= gnss/
 
 # RapliVx KernelSU source is cloned by the CI before the drivers tree is built.
 # Apply the fail-closed Linux 4.14 source adapter before descending into the
-# transient kernelsu symlink.  The adapter is idempotent and exits untouched on
-# non-4.14 kernels.
+# transient kernelsu symlink.  The adapter is idempotent, including the native
+# 4.14 SELinux inode-security access shim, and exits untouched on non-4.14 kernels.
 ifeq ($(CONFIG_KSU),y)
 ksu_raplivx_414_compat_status := $(shell python3 $(srctree)/scripts/ksu_raplivx_414_file_wrapper_compat.py >/dev/null 2>&1; echo $$?)
 ifneq ($(ksu_raplivx_414_compat_status),0)

@@ -75,17 +75,11 @@ jobs:
           git remote add aresin "$ARESIN_REPO"
 
           echo '===== Fetch prerequisite WITH its parent ====='
-          # The previous run used --depth=1 here. That made the donor commit a
-          # shallow root, so cherry-pick compared its full kernel tree to the
-          # empty tree and produced add/add conflicts across unrelated files.
           git fetch --no-tags --depth=2 aresin "$ARESIN_PREREQ"
           git cat-file -e "$ARESIN_PREREQ^{commit}"
           git cat-file -e "$ARESIN_PREREQ^1^{commit}"
 
           echo '===== Fetch exact A15 range WITH the parent of its first commit ====='
-          # A15_LAST is 54 commits ahead of A15_FIRST. Inclusive series = 55;
-          # depth 56 also brings in A15_FIRST^1, which is required to compute
-          # the first commit's real patch instead of treating it as a root.
           git fetch --no-tags --depth=56 aresin "$A15_LAST"
           git cat-file -e "$A15_FIRST^{commit}"
           git cat-file -e "$A15_LAST^{commit}"
@@ -112,17 +106,71 @@ jobs:
           fi
 
           echo '===== Apply Android 15 BPF series in chronological order ====='
-          if ! git cherry-pick -x "${A15_COMMITS[@]}"; then
-            echo '===== A15 CHERRY-PICK FAILED ====='
+          D078='d0780629bf322438134a9e18a4e515148043ea92'
+          for c in "${A15_COMMITS[@]}"; do
+            echo ">>> $(git show -s --format='%h %s' "$c")"
+            if git cherry-pick -x "$c"; then
+              continue
+            fi
+
+            failed="$(git rev-parse CHERRY_PICK_HEAD 2>/dev/null || true)"
+            echo "cherry-pick stopped at: $failed"
+
+            # OPPO's 4.14.180 net/core/dev.c lacks the donor tree's later
+            # __netif_receive_skb_list() block immediately before
+            # generic_xdp_install().  Commit d078 only renames the XDP/BPF
+            # control-path API; that unrelated surrounding function is context,
+            # not part of d078.  Resolve only this exact, audited conflict while
+            # preserving the rest of OPPO dev.c and all clean d078 hunks.
+            if [ "$failed" = "$D078" ]; then
+              mapfile -t unresolved < <(git diff --name-only --diff-filter=U)
+              if [ "${#unresolved[@]}" -eq 1 ] && [ "${unresolved[0]}" = 'net/core/dev.c' ]; then
+                echo '===== Resolve known d078 net/core/dev.c context conflict ====='
+                python3 - <<'PY'
+          from pathlib import Path
+
+          p = Path('net/core/dev.c')
+          s = p.read_text()
+          if s.count('<<<<<<< HEAD\n') != 1 or s.count('=======\n') < 1 or s.count('>>>>>>> ') != 1:
+              raise SystemExit('unexpected d078 conflict-marker shape')
+
+          a = s.index('<<<<<<< HEAD\n')
+          b = s.index('=======\n', a)
+          c = s.index('>>>>>>> ', b)
+          e = s.index('\n', c) + 1
+          ours = s[a + len('<<<<<<< HEAD\n'):b]
+          theirs = s[b + len('=======\n'):c]
+
+          old = 'static int generic_xdp_install(struct net_device *dev, struct netdev_xdp *xdp)\n'
+          new = 'static int generic_xdp_install(struct net_device *dev, struct netdev_bpf *xdp)\n'
+          if ours != old:
+              raise SystemExit('unexpected OPPO side of d078 conflict: ' + repr(ours))
+          if new not in theirs:
+              raise SystemExit('d078 donor side does not contain expected netdev_bpf signature')
+
+          s = s[:a] + new + s[e:]
+          if any(m in s for m in ('<<<<<<<', '=======', '>>>>>>>')):
+              raise SystemExit('conflict markers remain after d078 resolution')
+          p.write_text(s)
+          PY
+                git add net/core/dev.c
+                git diff --cached --check
+                grep -Fq 'static int generic_xdp_install(struct net_device *dev, struct netdev_bpf *xdp)' net/core/dev.c
+                GIT_EDITOR=true git cherry-pick --continue
+                echo '[PASS] resolved d078 semantically: kept OPPO receive path, applied ndo_bpf rename'
+                continue
+              fi
+            fi
+
+            echo '===== UNHANDLED A15 CHERRY-PICK FAILURE ====='
             git status --short || true
             git diff --check || true
             git diff || true
-            if test -f .git/CHERRY_PICK_HEAD; then
-              echo "failed commit: $(git rev-parse CHERRY_PICK_HEAD)"
-              git show --stat --oneline CHERRY_PICK_HEAD || true
+            if test -n "$failed"; then
+              git show --stat --oneline "$failed" || true
             fi
             exit 1
-          fi
+          done
 
           echo '===== Post-apply audit ====='
           git diff HEAD~56..HEAD --check
@@ -131,6 +179,7 @@ jobs:
           test -f kernel/bpf/btf.c
           test -f include/linux/btf.h
           test -f include/uapi/linux/btf.h
+          grep -Fq 'static int generic_xdp_install(struct net_device *dev, struct netdev_bpf *xdp)' net/core/dev.c
           ! grep -R -n -E 'CONFIG_KSU|KernelSU|SukiSU|ReSukiSU|SUSFS' \
               --exclude-dir=.git --exclude='*.log' --exclude='pchm30-a15-bpf-only-build.yml' .
           echo '[PASS] prerequisite + 55 A15 BPF commits applied; root frameworks still absent'

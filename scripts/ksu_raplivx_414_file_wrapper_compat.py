@@ -127,6 +127,22 @@ text = replace_once(
     "alloc_file_pseudo call",
 )
 
+# Linux 4.14's SELinux LSM stores struct inode_security_struct directly in
+# inode->i_security (see security/selinux/hooks.c:inode_alloc_security()).
+# selinux_inode() is a newer helper, so use the native 4.14 security blob
+# without changing the SELinux core or inventing a compatibility accessor.
+text = replace_once(
+    text,
+    "    struct inode_security_struct *wrapper_sec = selinux_inode(wrapper_inode);\n",
+    "#ifdef CONFIG_SECURITY\n"
+    "    struct inode_security_struct *wrapper_sec =\n"
+    "        (struct inode_security_struct *)wrapper_inode->i_security;\n"
+    "#else\n"
+    "    struct inode_security_struct *wrapper_sec = NULL;\n"
+    "#endif\n",
+    "4.14 SELinux inode security access",
+)
+
 # Ignore comments when checking for real member/function uses; comments retain
 # upstream API names intentionally to document why each compatibility edit is
 # necessary.
@@ -138,6 +154,7 @@ for forbidden in (
     "->fadvise", ".fadvise",
     "security_inode_init_security_anon(",
     "alloc_file_pseudo(",
+    "selinux_inode(",
     "REMAP_FILE_DEDUP",
     "static __poll_t ksu_wrapper_poll",
 ):

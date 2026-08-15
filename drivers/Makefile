@@ -33,7 +33,7 @@ obj-y				+= char/ipmi/
 
 obj-$(CONFIG_ACPI)		+= acpi/
 obj-$(CONFIG_SFI)		+= sfi/
-# PnP must come after ACPI since it will eventually need to check if acpi
+# PnP must come after ACPI as it will eventually need to check if acpi
 # was used and do nothing if so
 obj-$(CONFIG_PNP)		+= pnp/
 obj-y				+= amba/
@@ -161,7 +161,7 @@ obj-y				+= platform/
 
 obj-$(CONFIG_MAILBOX)		+= mailbox/
 obj-$(CONFIG_HWSPINLOCK)	+= hwspinlock/
-obj-$(CONFIG_REMOTEPROC)	+= remoteproc/
+obj-$(CONFIG_REMOTEPROC)		+= remoteproc/
 obj-$(CONFIG_RPMSG)		+= rpmsg/
 
 # Virtualization drivers
@@ -195,3 +195,14 @@ obj-$(CONFIG_ESOC)              += esoc/
 # GNSS driver
 obj-$(CONFIG_GNSS_SIRF)		+= gnsssirf/
 obj-$(CONFIG_GNSS)		+= gnss/
+
+# RapliVx KernelSU source is cloned by the CI before the drivers tree is built.
+# Apply the fail-closed Linux 4.14 source adapter before descending into the
+# transient kernelsu symlink.  The adapter is idempotent and exits untouched on
+# non-4.14 kernels.
+ifeq ($(CONFIG_KSU),y)
+ksu_raplivx_414_compat_status := $(shell python3 $(srctree)/scripts/ksu_raplivx_414_file_wrapper_compat.py >/dev/null 2>&1; echo $$?)
+ifneq ($(ksu_raplivx_414_compat_status),0)
+$(error RapliVx KernelSU Linux 4.14 file_wrapper compatibility adapter failed)
+endif
+endif

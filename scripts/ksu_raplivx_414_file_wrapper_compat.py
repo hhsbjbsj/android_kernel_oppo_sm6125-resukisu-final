@@ -127,8 +127,10 @@ text = replace_once(
     "alloc_file_pseudo call",
 )
 
-# Compile-time sanity: none of the unsupported 4.14 fops may remain as member
-# accesses after the transformation.
+# Ignore comments when checking for real member/function uses; comments retain
+# upstream API names intentionally to document why each compatibility edit is
+# necessary.
+code_only = re.sub(r"/\*.*?\*/|//[^\n]*", "", text, flags=re.S)
 for forbidden in (
     "->iopoll", ".iopoll",
     "->mmap_supported_flags", ".mmap_supported_flags",
@@ -139,7 +141,7 @@ for forbidden in (
     "REMAP_FILE_DEDUP",
     "static __poll_t ksu_wrapper_poll",
 ):
-    if forbidden in text:
+    if forbidden in code_only:
         die(f"unsupported 4.14 token remains after patch: {forbidden}")
 
 TARGET.write_text(text, errors="surrogateescape")

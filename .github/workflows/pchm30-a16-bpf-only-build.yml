@@ -176,6 +176,7 @@ jobs:
           C855='855f570c37724a69dffdc8e60969c14185c8970a'
           C793='79362c5a0fadaa1242c5698c1776839d90fc6f74'
           C479='4793e2890f82bd363dae8c71a2597e2ce53847c0'
+          CB4E='b4eac9a699452e192cf47733e2b5d88c869951b0'
           for c in "${A16_COMMITS[@]}"; do
             echo ">>> $(git show -s --format='%h %s' "$c")"
             if git cherry-pick -x "$c"; then
@@ -275,6 +276,28 @@ jobs:
                 grep -Fq 'BPF_JMP | BPF_CALL_ARGS' kernel/bpf/core.c
                 GIT_EDITOR=true git cherry-pick --continue
                 echo '[PASS] resolved 4793 semantically: enabled interpreter pseudo-calls and supplied donor-assumed patch helper pre-state'
+                continue
+              fi
+            fi
+
+            # b4eac9 introduces bpf_spin_lock/unlock. Its donor parent already
+            # had ktime_get_boot_ns in bpf_base_func_proto(), while OPPO's 4.14
+            # baseline does not. Keep OPPO's helper baseline and add only the
+            # root-only spin-lock helper dispatch required by this commit.
+            if [ "$failed" = "$CB4E" ]; then
+              mapfile -t unresolved < <(git diff --name-only --diff-filter=U)
+              if [ "${#unresolved[@]}" -eq 1 ] && [ "${unresolved[0]}" = 'net/core/filter.c' ]; then
+                echo '===== Resolve known b4eac9 bpf_spin_lock base-helper conflict ====='
+                python3 .github/scripts/resolve-a16-b4eac9.py
+                git add net/core/filter.c
+                git diff --cached --check
+                ! grep -nE '<<<<<<<|=======|>>>>>>>' net/core/filter.c
+                grep -Fq 'case BPF_FUNC_spin_lock:' net/core/filter.c
+                grep -Fq 'return &bpf_spin_lock_proto;' net/core/filter.c
+                grep -Fq 'case BPF_FUNC_spin_unlock:' net/core/filter.c
+                grep -Fq 'return &bpf_spin_unlock_proto;' net/core/filter.c
+                GIT_EDITOR=true git cherry-pick --continue
+                echo '[PASS] resolved b4eac9 semantically: preserved OPPO helper set and root-gated spin_lock/unlock without donor-only ktime_get_boot_ns'
                 continue
               fi
             fi

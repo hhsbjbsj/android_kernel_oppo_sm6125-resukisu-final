@@ -45,8 +45,6 @@ for needle in (
 
 # Replace from the end so match offsets stay valid.
 s = s[:b2.start()] + theirs2 + s[b2.end():]
-# Re-find the declaration block after the first replacement; its original
-# offsets are before b2, so the first saved match remains valid.
 s = s[:b1.start()] + '' + s[b1.end():]
 
 if any(m in s for m in ('<<<<<<<', '=======', '>>>>>>>')):
@@ -70,14 +68,13 @@ for needle in (
 
 p.write_text(s)
 
-# The next donor commit that touches an OPPO-modified networking hotspot is
-# 31005659a (skb extension infrastructure). In our tree its only conflict is
-# inside skb_init(): OPPO initializes skbuff_cb_store_cache while the donor adds
-# skb_extensions_init(). These operations are independent and both are needed.
-# Install a one-shot custom merge driver now, before that cherry-pick occurs.
 gitdir = Path(subprocess.check_output(['git', 'rev-parse', '--git-dir'], text=True).strip()).resolve()
-driver = gitdir / 'resolve-skb310.py'
-driver.write_text(r'''#!/usr/bin/env python3
+attrs = gitdir / 'info' / 'attributes'
+attrs.parent.mkdir(parents=True, exist_ok=True)
+
+# 31005659a: preserve OPPO skb cache init and also add skb_extensions_init().
+skb_driver = gitdir / 'resolve-skb310.py'
+skb_driver.write_text(r'''#!/usr/bin/env python3
 from pathlib import Path
 import re
 import subprocess
@@ -122,7 +119,6 @@ if 'OPLUS_FEATURE_WIFI_LIMMITBGSPEED' not in merged or 'skbuff_cb_store_cache' n
 
 ours.write_text(merged)
 
-# One-shot: do not silently auto-resolve later skbuff.c conflicts with this rule.
 gitdir = Path(subprocess.check_output(['git', 'rev-parse', '--git-dir'], text=True).strip()).resolve()
 attrs = gitdir / 'info' / 'attributes'
 if attrs.exists():
@@ -132,14 +128,71 @@ if attrs.exists():
 print('[PASS] 31005659 merge driver: preserved OPPO skb cache init and added skb_extensions_init()')
 ''')
 
-attrs = gitdir / 'info' / 'attributes'
-attrs.parent.mkdir(parents=True, exist_ok=True)
-existing = attrs.read_text().splitlines() if attrs.exists() else []
-rule = 'net/core/skbuff.c merge=skb310'
-existing = [line for line in existing if line.strip() != rule]
-existing.append(rule)
-attrs.write_text('\n'.join(existing) + '\n')
-subprocess.run(['git', 'config', 'merge.skb310.name', 'PCHM30 31005659 semantic merge'], check=True)
-subprocess.run(['git', 'config', 'merge.skb310.driver', f'python3 {driver} %O %A %B'], check=True)
+# eb4410073: donor context carries unrelated sk_security_struct pre-state.
+# The commit itself only needs a forward declaration for bpf_sk_storage here;
+# the sk->sk_bpf_storage field is a separate hunk that applies cleanly.
+sock_driver = gitdir / 'resolve-sock-eb441.py'
+sock_driver.write_text(r'''#!/usr/bin/env python3
+from pathlib import Path
+import re
+import subprocess
+import sys
 
-print('[PASS] a2ef resolver: removed duplicate dst/src declaration, kept A16 socket pointer policy, and armed one-shot 31005659 skb merge')
+if len(sys.argv) != 4:
+    raise SystemExit('usage: resolve-sock-eb441.py <base> <ours> <theirs>')
+base, ours, theirs = map(Path, sys.argv[1:4])
+proc = subprocess.run(
+    ['git', 'merge-file', '-p', '-L', 'HEAD', '-L', 'BASE', '-L', 'DONOR',
+     str(ours), str(base), str(theirs)],
+    text=True, capture_output=True,
+)
+if proc.returncode not in (0, 1):
+    sys.stderr.write(proc.stderr)
+    raise SystemExit(f'git merge-file failed with {proc.returncode}')
+merged = proc.stdout
+
+if proc.returncode == 1:
+    pat = re.compile(r'<<<<<<< HEAD\n(.*?)=======\n(.*?)>>>>>>> DONOR\n', re.S)
+    blocks = list(pat.finditer(merged))
+    if len(blocks) != 1:
+        raise SystemExit(f'expected exactly one eb441 sock.h conflict, found {len(blocks)}')
+    b = blocks[0]
+    head, donor = b.group(1), b.group(2)
+    if head.strip():
+        raise SystemExit('eb441 HEAD conflict side unexpectedly contains code')
+    if 'struct bpf_sk_storage;' not in donor:
+        raise SystemExit('eb441 donor side missing bpf_sk_storage forward declaration')
+    if 'struct sk_security_struct {' not in donor:
+        raise SystemExit('eb441 donor context no longer matches expected sk_security_struct pre-state')
+    merged = merged[:b.start()] + 'struct bpf_sk_storage;\n\n' + merged[b.end():]
+
+if any(m in merged for m in ('<<<<<<<', '=======', '>>>>>>>')):
+    raise SystemExit('conflict markers remain after eb441 merge')
+if merged.count('struct bpf_sk_storage;') != 1:
+    raise SystemExit('eb441 merge must leave exactly one bpf_sk_storage forward declaration')
+if 'struct bpf_sk_storage __rcu\t*sk_bpf_storage;' not in merged and 'struct bpf_sk_storage __rcu *sk_bpf_storage;' not in merged:
+    raise SystemExit('eb441 merge lost sk_bpf_storage field')
+
+ours.write_text(merged)
+
+gitdir = Path(subprocess.check_output(['git', 'rev-parse', '--git-dir'], text=True).strip()).resolve()
+attrs = gitdir / 'info' / 'attributes'
+if attrs.exists():
+    lines = attrs.read_text().splitlines()
+    lines = [line for line in lines if line.strip() != 'include/net/sock.h merge=sockeb441']
+    attrs.write_text(('\n'.join(lines) + '\n') if lines else '')
+print('[PASS] eb441 merge driver: kept OPPO sock.h layout and added only bpf_sk_storage declaration/field')
+''')
+
+existing = attrs.read_text().splitlines() if attrs.exists() else []
+for rule in ('net/core/skbuff.c merge=skb310', 'include/net/sock.h merge=sockeb441'):
+    existing = [line for line in existing if line.strip() != rule]
+    existing.append(rule)
+attrs.write_text('\n'.join(existing) + '\n')
+
+subprocess.run(['git', 'config', 'merge.skb310.name', 'PCHM30 31005659 semantic merge'], check=True)
+subprocess.run(['git', 'config', 'merge.skb310.driver', f'python3 {skb_driver} %O %A %B'], check=True)
+subprocess.run(['git', 'config', 'merge.sockeb441.name', 'PCHM30 eb441 sock storage semantic merge'], check=True)
+subprocess.run(['git', 'config', 'merge.sockeb441.driver', f'python3 {sock_driver} %O %A %B'], check=True)
+
+print('[PASS] a2ef resolver: kept A16 socket pointer policy and armed one-shot 31005659 + eb441 semantic merges')

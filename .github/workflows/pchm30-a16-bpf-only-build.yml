@@ -177,6 +177,7 @@ jobs:
           C793='79362c5a0fadaa1242c5698c1776839d90fc6f74'
           C479='4793e2890f82bd363dae8c71a2597e2ce53847c0'
           CB4E='b4eac9a699452e192cf47733e2b5d88c869951b0'
+          CA2E='a2ef751de395285c07592e810623f24be3ece009'
           for c in "${A16_COMMITS[@]}"; do
             echo ">>> $(git show -s --format='%h %s' "$c")"
             if git cherry-pick -x "$c"; then
@@ -298,6 +299,28 @@ jobs:
                 grep -Fq 'return &bpf_spin_unlock_proto;' net/core/filter.c
                 GIT_EDITOR=true git cherry-pick --continue
                 echo '[PASS] resolved b4eac9 semantically: preserved OPPO helper set and root-gated spin_lock/unlock without donor-only ktime_get_boot_ns'
+                continue
+              fi
+            fi
+
+            # a2ef is a squash that adds bpf_sock/bpf_sk_fullsock support and
+            # simplifies pointer min/max checks. The only OPPO conflict is in
+            # adjust_ptr_min_max_vals(): our earlier verifier merge already has
+            # dst/src, while a2ef also converts the old if-chain into the new
+            # socket-aware switch. Drop the duplicate declaration and keep the
+            # actual A16 pointer-type semantics.
+            if [ "$failed" = "$CA2E" ]; then
+              mapfile -t unresolved < <(git diff --name-only --diff-filter=U)
+              if [ "${#unresolved[@]}" -eq 1 ] && [ "${unresolved[0]}" = 'kernel/bpf/verifier.c' ]; then
+                echo '===== Resolve known a2ef bpf_sock pointer-policy conflict ====='
+                python3 .github/scripts/resolve-a16-a2ef751.py
+                git add kernel/bpf/verifier.c
+                git diff --cached --check
+                ! grep -nE '<<<<<<<|=======|>>>>>>>' kernel/bpf/verifier.c
+                grep -Fq 'case PTR_TO_SOCK_COMMON_OR_NULL:' kernel/bpf/verifier.c
+                grep -Fq 'pointer arithmetic with it prohibited for !root' kernel/bpf/verifier.c
+                GIT_EDITOR=true git cherry-pick --continue
+                echo '[PASS] resolved a2ef semantically: removed duplicate declaration and kept A16 socket pointer restrictions'
                 continue
               fi
             fi

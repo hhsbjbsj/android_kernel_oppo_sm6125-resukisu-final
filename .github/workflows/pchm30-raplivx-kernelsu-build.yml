@@ -83,8 +83,8 @@ jobs:
           # Linux 4.14 compatibility for this pinned RapliVx revision:
           # 1) module namespace import metadata does not exist yet;
           # 2) struct seccomp.filter_count was introduced after old 4.x kernels;
-          # 3) syscall_hook_manager.c needs the backported nofault uaccess API
-          #    explicitly because this pinned revision does not include uaccess.h.
+          # 3) syscall_hook_manager.c needs the backported nofault uaccess API;
+          # 4) pkg_observer.c uses the newer fsnotify inode-mark callback API.
           python3 - <<'PY'
           from pathlib import Path
           root = Path('RapliVx-KernelSU/kernel')
@@ -126,6 +126,66 @@ jobs:
               hook.write_text(text)
               changed.append(str(hook))
 
+          pkg = root / 'pkg_observer.c'
+          text = pkg.read_text()
+          old_handler = '''static int ksu_handle_inode_event(struct fsnotify_mark *mark, u32 mask,
+                                  struct inode *inode, struct inode *dir,
+                                  const struct qstr *file_name, u32 cookie)
+{
+    if (!file_name)
+        return 0;
+    if (mask & FS_ISDIR)
+        return 0;
+    if (file_name->len == 13 && !memcmp(file_name->name, "packages.list", 13)) {
+        pr_info("packages.list detected: %d\\n", mask);
+        track_throne(false);
+    }
+    return 0;
+}
+
+static const struct fsnotify_ops ksu_ops = {
+    .handle_inode_event = ksu_handle_inode_event,
+};
+'''
+          compat_handler = '''static int ksu_handle_event(struct fsnotify_group *group,
+                            struct inode *inode,
+                            struct fsnotify_mark *inode_mark,
+                            struct fsnotify_mark *vfsmount_mark,
+                            u32 mask, const void *data, int data_type,
+                            const unsigned char *file_name, u32 cookie,
+                            struct fsnotify_iter_info *iter_info)
+{
+    if (!file_name)
+        return 0;
+    if (mask & FS_ISDIR)
+        return 0;
+    if (strlen(file_name) == 13 && !memcmp(file_name, "packages.list", 13)) {
+        pr_info("packages.list detected: %d\\n", mask);
+        track_throne(false);
+    }
+    return 0;
+}
+
+static const struct fsnotify_ops ksu_ops = {
+    .handle_event = ksu_handle_event,
+};
+'''
+          if old_handler not in text:
+              raise SystemExit('RapliVx pkg_observer handler anchor not found')
+          text = text.replace(old_handler, compat_handler, 1)
+          old_add = '    if (fsnotify_add_inode_mark(m, inode, 0)) {\n'
+          new_add = '    if (fsnotify_add_mark(m, inode, NULL, 0)) {\n'
+          if old_add not in text:
+              raise SystemExit('RapliVx pkg_observer add-mark anchor not found')
+          text = text.replace(old_add, new_add, 1)
+          if '#include <linux/string.h>\n' not in text:
+              slab_anchor = '#include <linux/slab.h>\n'
+              if slab_anchor not in text:
+                  raise SystemExit('RapliVx pkg_observer include anchor not found')
+              text = text.replace(slab_anchor, slab_anchor + '#include <linux/string.h>\n', 1)
+          pkg.write_text(text)
+          changed.append(str(pkg))
+
           print('4.14-compat:', *changed, sep='\n  ')
           PY
 
@@ -133,6 +193,10 @@ jobs:
           grep -Fq '#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 9, 0)' RapliVx-KernelSU/kernel/app_profile.c
           grep -Fq 'atomic_set(&current->seccomp.filter_count, 0);' RapliVx-KernelSU/kernel/app_profile.c
           grep -Fq '#include <linux/uaccess.h>' RapliVx-KernelSU/kernel/syscall_hook_manager.c
+          grep -Fq '.handle_event = ksu_handle_event' RapliVx-KernelSU/kernel/pkg_observer.c
+          grep -Fq 'fsnotify_add_mark(m, inode, NULL, 0)' RapliVx-KernelSU/kernel/pkg_observer.c
+          ! grep -Fq 'handle_inode_event' RapliVx-KernelSU/kernel/pkg_observer.c
+          ! grep -Fq 'fsnotify_add_inode_mark' RapliVx-KernelSU/kernel/pkg_observer.c
 
           ln -sfn ../RapliVx-KernelSU/kernel drivers/kernelsu
           grep -q 'obj-$(CONFIG_KSU) += kernelsu/' drivers/Makefile || \

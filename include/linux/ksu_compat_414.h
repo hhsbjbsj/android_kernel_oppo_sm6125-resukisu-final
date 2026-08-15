@@ -2,6 +2,7 @@
 #ifndef _LINUX_KSU_COMPAT_414_H
 #define _LINUX_KSU_COMPAT_414_H
 
+/* PCHM30 Linux 4.14 compatibility used only when CONFIG_KSU is enabled. */
 #ifdef CONFIG_KSU
 
 #include <linux/dcache.h>

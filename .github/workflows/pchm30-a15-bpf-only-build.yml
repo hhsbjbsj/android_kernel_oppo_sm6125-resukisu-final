@@ -229,6 +229,75 @@ jobs:
             exit 1
           done
 
+          echo '===== Restore BPF helper-ID ABI assumed by donor baseline ====='
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          p = Path('include/uapi/linux/bpf.h')
+          s = p.read_text()
+
+          # The selected 55-commit A15 range starts after the donor tree had
+          # already advanced the stable BPF helper-ID table beyond Linux 4.14.
+          # OPPO 4.14 stops at sock_map_update (ID 53), while commits inside
+          # this range use bind (ID 64) and skb_load_bytes_relative (ID 68).
+          # Fill every standard ABI slot 54..68 so those IDs do not get
+          # renumbered. Enumerating an unsupported helper is harmless: its
+          # program-type proto lookup still rejects it unless implemented.
+          required = [
+              'xdp_adjust_meta',
+              'perf_event_read_value',
+              'perf_prog_read_value',
+              'getsockopt',
+              'override_return',
+              'sock_ops_cb_flags_set',
+              'msg_redirect_map',
+              'msg_apply_bytes',
+              'msg_cork_bytes',
+              'msg_pull_data',
+              'bind',
+              'xdp_adjust_tail',
+              'skb_get_xfrm_state',
+              'get_stack',
+              'skb_load_bytes_relative',
+          ]
+
+          start = s.index('#define __BPF_FUNC_MAPPER')
+          end = s.index("/* integer value in 'imm'", start)
+          mapper = s[start:end]
+          present = re.findall(r'FN\(([^)]+)\)', mapper)
+
+          if 'bind' not in present and 'skb_load_bytes_relative' not in present:
+              anchor = '\tFN(sock_map_update),\t\t' + '\\' + '\n'
+              if s.count(anchor) != 1:
+                  raise SystemExit('cannot find unique sock_map_update mapper anchor')
+              insertion = ''.join(
+                  '\tFN(' + name + '),\t\t' + '\\' + '\n'
+                  for name in required
+              )
+              s = s.replace(anchor, anchor + insertion, 1)
+          elif not all(name in present for name in required):
+              raise SystemExit('partial helper-ID ABI range detected; refusing ambiguous repair')
+
+          start = s.index('#define __BPF_FUNC_MAPPER')
+          end = s.index("/* integer value in 'imm'", start)
+          present = re.findall(r'FN\(([^)]+)\)', s[start:end])
+          expected = {
+              'sock_map_update': 53,
+              'xdp_adjust_meta': 54,
+              'bind': 64,
+              'skb_load_bytes_relative': 68,
+          }
+          for name, helper_id in expected.items():
+              actual = present.index(name)
+              if actual != helper_id:
+                  raise SystemExit(f'{name} helper ID {actual}, expected {helper_id}')
+
+          p.write_text(s)
+          print('[PASS] helper ABI restored: sock_map_update=53 bind=64 skb_load_bytes_relative=68')
+          PY
+          git diff --check
+
           echo '===== Post-apply audit ====='
           git diff HEAD~56..HEAD --check
           test "$(git rev-list --count HEAD~56..HEAD)" -eq 56
@@ -239,11 +308,13 @@ jobs:
           grep -Fq 'static int generic_xdp_install(struct net_device *dev, struct netdev_bpf *xdp)' net/core/dev.c
           grep -Fq 'void (*map_fd_put_ptr)(struct bpf_map *map, void *ptr, bool need_defer);' include/linux/bpf.h
           ! grep -Fq 'map_fd_put_ptr(ptr)' kernel/bpf/hashtab.c
+          grep -Fq 'FN(bind)' include/uapi/linux/bpf.h
+          grep -Fq 'FN(skb_load_bytes_relative)' include/uapi/linux/bpf.h
           ! grep -r -n -E 'CONFIG_KSU|KernelSU|SukiSU|ReSukiSU|SUSFS' \
               --exclude-dir=.git \
               --include='Kconfig*' --include='Makefile' --include='*.mk' \
               --include='*.c' --include='*.h' --include='*.S' --include='*.config' .
-          echo '[PASS] prerequisite + 55 A15 BPF commits applied; root frameworks still absent'
+          echo '[PASS] prerequisite + 55 A15 BPF commits applied; helper ABI repaired; root frameworks still absent'
 
       - name: Reconstruct pinned OPPO vendor tree
         shell: bash

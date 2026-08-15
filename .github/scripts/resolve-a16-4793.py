@@ -6,12 +6,18 @@ COMMIT = '4793e2890f82bd363dae8c71a2597e2ce53847c0'
 p = Path('kernel/bpf/core.c')
 s = p.read_text()
 
-# This conflict is expected to be exactly the branch-adjustment helper area.
+# The OPPO/A15-derived core produces exactly two conflict blocks here:
+#   1) bpf_adj_branches() declaration/body prelude
+#   2) branch-offset adjustment body
 # Keep every clean-applied hunk from 4793 (interpreter + verifier support),
-# but normalize this one area to the donor's post-4793 form and also bring in
-# the tiny pre-state that 4793 assumes in bpf_patch_insn_single().
-if s.count('<<<<<<< HEAD\n') != 3 or s.count('=======\n') != 3 or s.count('>>>>>>> ') != 3:
-    raise SystemExit('unexpected 4793 conflict-marker shape in kernel/bpf/core.c')
+# normalize only this generic branch-adjustment area to donor post-4793, and
+# supply the tiny probe-pass pre-state that 4793 assumes in
+# bpf_patch_insn_single().
+if s.count('<<<<<<< HEAD\n') != 2 or s.count('=======\n') != 2 or s.count('>>>>>>> ') != 2:
+    raise SystemExit(
+        'unexpected 4793 conflict-marker shape in kernel/bpf/core.c: '
+        f"ours={s.count('<<<<<<< HEAD')} sep={s.count('=======')} theirs={s.count('>>>>>>> ')}"
+    )
 if 'static bool bpf_is_jmp_and_has_target' not in s:
     raise SystemExit('4793 OPPO side no longer has expected old branch helper')
 if 'BPF_PSEUDO_CALL' not in s:
@@ -46,16 +52,19 @@ for needle in (
     if needle not in donor_patch:
         raise SystemExit('unexpected donor 4793 patch helper shape: ' + needle)
 
-# Replace only the conflicted old branch helper block.
+# Both conflict blocks are inside the old branch-helper region. Replace from
+# the first marker through the start of bpf_patch_insn_single() with the exact
+# donor post-4793 helper. This intentionally removes bpf_is_jmp_and_has_target()
+# because 4793 folds pseudo-call handling directly into bpf_adj_branches().
 calc = s.index('int bpf_prog_calc_tag(')
 c_branch_start = s.index('<<<<<<< HEAD\n', calc)
 c_patch_start = s.index('struct bpf_prog *bpf_patch_insn_single', c_branch_start)
 s = s[:c_branch_start] + donor_branch + s[c_patch_start:]
 
 # OPPO's 4.14 baseline predates the probe-pass form that the donor already had
-# before 4793. The cherry-pick therefore cannot update the call sites because
-# those lines are donor pre-state, not part of 4793 itself. Replace just this
-# generic patching helper with the exact donor post-4793 version.
+# before 4793. The cherry-pick therefore cannot update these call sites because
+# they are donor pre-state, not changes introduced by 4793 itself. Replace only
+# this generic patching helper with the exact donor post-4793 version.
 c_patch_start = s.index('struct bpf_prog *bpf_patch_insn_single', calc)
 c_ifdef = s.index('#ifdef CONFIG_BPF_JIT', c_patch_start)
 old_patch = s[c_patch_start:c_ifdef]
@@ -79,4 +88,4 @@ for needle in (
         raise SystemExit('4793 resolved core missing expected semantic: ' + needle)
 
 p.write_text(s)
-print('[PASS] 4793 resolver: added pseudo-call branch adjustment and donor-assumed patch probe pre-state without replacing OPPO core wholesale')
+print('[PASS] 4793 resolver: resolved two OPPO conflict blocks, added pseudo-call branch adjustment and donor-assumed patch probe pre-state')

@@ -39,6 +39,19 @@ struct task_security_struct {
 };
 
 /*
+ * RapliVx uses the modern selinux_cred() accessor.  Linux 4.14 stores the
+ * subjective SELinux task blob directly in cred->security, and this is the
+ * same task_security_struct consumed by current_security()/current_sid().
+ * Keep the compatibility alias KSU-only so the stock SELinux ABI is unchanged.
+ */
+#ifdef CONFIG_KSU
+#ifndef selinux_cred
+#define selinux_cred(cred) \
+	((struct task_security_struct *)((cred)->security))
+#endif
+#endif
+
+/*
  * get the subjective security ID of the current task
  */
 static inline u32 current_sid(void)
@@ -91,20 +104,20 @@ struct msg_security_struct {
 };
 
 struct ipc_security_struct {
-	u16 sclass;	/* security class of this object */
+	u16 sclass;	/* security class */
 	u32 sid;	/* SID of IPC resource */
 };
 
 struct netif_security_struct {
 	struct net *ns;			/* network namespace */
-	int ifindex;			/* device index */
+	int ifindex;
 	u32 sid;			/* SID for this interface */
 };
 
 struct netnode_security_struct {
 	union {
-		__be32 ipv4;		/* IPv4 node address */
-		struct in6_addr ipv6;	/* IPv6 node address */
+		__be32 ipv4;		/* IPv4 node */
+		struct in6_addr ipv6;	/* IPv6 node */
 	} addr;
 	u32 sid;			/* SID for this node */
 	u16 family;			/* address family */

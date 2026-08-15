@@ -184,8 +184,88 @@ if attrs.exists():
 print('[PASS] eb441 merge driver: kept OPPO sock.h layout and added only bpf_sk_storage declaration/field')
 ''')
 
+# 538caa1ea: sockmap refactors skb tail/head helpers and adds sk_skb-specific
+# data-pointer refresh. OPPO already changed the max-length policy to
+# __bpf_skb_max_len(skb). Keep the donor refactor but preserve that OPPO bound.
+filter538_driver = gitdir / 'resolve-filter-538caa.py'
+filter538_driver.write_text(r'''#!/usr/bin/env python3
+from pathlib import Path
+import re
+import subprocess
+import sys
+
+if len(sys.argv) != 4:
+    raise SystemExit('usage: resolve-filter-538caa.py <base> <ours> <theirs>')
+base, ours, theirs = map(Path, sys.argv[1:4])
+proc = subprocess.run(
+    ['git', 'merge-file', '-p', '-L', 'HEAD', '-L', 'BASE', '-L', 'DONOR',
+     str(ours), str(base), str(theirs)],
+    text=True, capture_output=True,
+)
+if proc.returncode not in (0, 1):
+    sys.stderr.write(proc.stderr)
+    raise SystemExit(f'git merge-file failed with {proc.returncode}')
+merged = proc.stdout
+
+# This driver stays transparent for earlier clean net/core/filter.c merges and
+# only consumes itself when the exact 538caa conflict appears.
+consumed = False
+if proc.returncode == 1:
+    pat = re.compile(r'<<<<<<< HEAD\n(.*?)=======\n(.*?)>>>>>>> DONOR\n', re.S)
+    blocks = list(pat.finditer(merged))
+    if len(blocks) != 1:
+        raise SystemExit(f'expected exactly one 538caa filter conflict, found {len(blocks)}')
+    b = blocks[0]
+    head, donor = b.group(1), b.group(2)
+    if 'u32 max_len = __bpf_skb_max_len(skb);' not in head:
+        raise SystemExit('538caa HEAD side missing OPPO __bpf_skb_max_len policy')
+    for needle in (
+        'int ret = __bpf_skb_change_tail(skb, new_len, flags);',
+        'bpf_compute_data_end_sk_skb(skb);',
+        'static inline int __bpf_skb_change_head',
+        'u32 max_len = BPF_SKB_MAX_LEN;',
+    ):
+        if needle not in donor:
+            raise SystemExit(f'538caa donor side missing expected refactor semantic: {needle}')
+    replacement = donor.replace(
+        'u32 max_len = BPF_SKB_MAX_LEN;',
+        'u32 max_len = __bpf_skb_max_len(skb);',
+        1,
+    )
+    merged = merged[:b.start()] + replacement + merged[b.end():]
+    consumed = True
+
+if any(m in merged for m in ('<<<<<<<', '=======', '>>>>>>>')):
+    raise SystemExit('conflict markers remain after 538caa merge')
+
+if consumed:
+    for needle in (
+        'int ret = __bpf_skb_change_tail(skb, new_len, flags);',
+        'bpf_compute_data_end_sk_skb(skb);',
+        'static inline int __bpf_skb_change_head',
+        'u32 max_len = __bpf_skb_max_len(skb);',
+    ):
+        if needle not in merged:
+            raise SystemExit(f'538caa merged file missing required semantic: {needle}')
+
+ours.write_text(merged)
+
+if consumed:
+    gitdir = Path(subprocess.check_output(['git', 'rev-parse', '--git-dir'], text=True).strip()).resolve()
+    attrs = gitdir / 'info' / 'attributes'
+    if attrs.exists():
+        lines = attrs.read_text().splitlines()
+        lines = [line for line in lines if line.strip() != 'net/core/filter.c merge=filter538']
+        attrs.write_text(('\n'.join(lines) + '\n') if lines else '')
+    print('[PASS] 538caa merge driver: kept sockmap sk_skb refactor and preserved OPPO skb max-length policy')
+''')
+
 existing = attrs.read_text().splitlines() if attrs.exists() else []
-for rule in ('net/core/skbuff.c merge=skb310', 'include/net/sock.h merge=sockeb441'):
+for rule in (
+    'net/core/skbuff.c merge=skb310',
+    'include/net/sock.h merge=sockeb441',
+    'net/core/filter.c merge=filter538',
+):
     existing = [line for line in existing if line.strip() != rule]
     existing.append(rule)
 attrs.write_text('\n'.join(existing) + '\n')
@@ -194,5 +274,7 @@ subprocess.run(['git', 'config', 'merge.skb310.name', 'PCHM30 31005659 semantic 
 subprocess.run(['git', 'config', 'merge.skb310.driver', f'python3 {skb_driver} %O %A %B'], check=True)
 subprocess.run(['git', 'config', 'merge.sockeb441.name', 'PCHM30 eb441 sock storage semantic merge'], check=True)
 subprocess.run(['git', 'config', 'merge.sockeb441.driver', f'python3 {sock_driver} %O %A %B'], check=True)
+subprocess.run(['git', 'config', 'merge.filter538.name', 'PCHM30 538caa sockmap semantic merge'], check=True)
+subprocess.run(['git', 'config', 'merge.filter538.driver', f'python3 {filter538_driver} %O %A %B'], check=True)
 
-print('[PASS] a2ef resolver: kept A16 socket pointer policy and armed one-shot 31005659 + eb441 semantic merges')
+print('[PASS] a2ef resolver: kept A16 socket pointer policy and armed one-shot 31005659 + eb441 + 538caa semantic merges')

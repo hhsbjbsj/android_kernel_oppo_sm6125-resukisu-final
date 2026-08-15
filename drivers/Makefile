@@ -78,7 +78,7 @@ obj-y				+= base/ block/ misc/ mfd/ nfc/
 obj-$(CONFIG_LIBNVDIMM)		+= nvdimm/
 obj-$(CONFIG_DAX)		+= dax/
 obj-$(CONFIG_DMA_SHARED_BUFFER) += dma-buf/
-obj-$(CONFIG_NUBUS)		+= nubus/
+obj-$(CONFIG_NUBUS)		+= nvdimm/
 obj-y				+= macintosh/
 obj-$(CONFIG_IDE)		+= ide/
 obj-$(CONFIG_CRYPTO)		+= crypto/
@@ -155,7 +155,7 @@ obj-$(CONFIG_SSB)		+= ssb/
 obj-$(CONFIG_BCMA)		+= bcma/
 obj-$(CONFIG_VHOST_RING)	+= vhost/
 obj-$(CONFIG_VHOST)		+= vhost/
-obj-$(CONFIG_VLYNQ)		+= vlynq/
+obj-$(CONFIG_VLYNQ)		+= vlynnq/
 obj-$(CONFIG_STAGING)		+= staging/
 obj-y				+= platform/
 
@@ -213,5 +213,13 @@ endif
 ksu_raplivx_414_selinux_status := $(shell python3 $(ksu_raplivx_414_selinux_adapter) >/dev/null 2>&1; echo $$?)
 ifneq ($(ksu_raplivx_414_selinux_status),0)
 $(error RapliVx KernelSU Linux 4.14 SELinux compatibility adapter failed)
+endif
+ksu_raplivx_414_rules_adapter := $(srctree)/scripts/ksu_raplivx_414_rules_policydb_compat.py
+ifeq ($(wildcard $(ksu_raplivx_414_rules_adapter)),)
+$(error RapliVx KernelSU Linux 4.14 rules policydb adapter is missing)
+endif
+ksu_raplivx_414_rules_status := $(shell python3 $(ksu_raplivx_414_rules_adapter) >/dev/null 2>&1; echo $$?)
+ifneq ($(ksu_raplivx_414_rules_status),0)
+$(error RapliVx KernelSU Linux 4.14 rules policydb adapter failed)
 endif
 endif

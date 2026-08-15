@@ -172,12 +172,62 @@ jobs:
           done | tee "$GITHUB_WORKSPACE/a16-bpf-commit-list.txt"
 
           echo '===== Apply Android 16 tutorial delta in chronological order ====='
+          C855='855f570c37724a69dffdc8e60969c14185c8970a'
           for c in "${A16_COMMITS[@]}"; do
             echo ">>> $(git show -s --format='%h %s' "$c")"
             if git cherry-pick -x "$c"; then
               continue
             fi
             failed="$(git rev-parse CHERRY_PICK_HEAD 2>/dev/null || true)"
+
+            # Donor 855f expects linux/kmemleak.h to already be present next to
+            # module.h. OPPO's proc_sysctl.c does not carry that donor-only
+            # include. The actual commit only adds bpf-cgroup.h plus the sysctl
+            # hook lower in the file. Keep OPPO's include set and add only the
+            # semantic bpf-cgroup include; all other clean-applied hunks remain.
+            if [ "$failed" = "$C855" ]; then
+              mapfile -t unresolved < <(git diff --name-only --diff-filter=U)
+              if [ "${#unresolved[@]}" -eq 1 ] && [ "${unresolved[0]}" = 'fs/proc/proc_sysctl.c' ]; then
+                echo '===== Resolve known 855f proc_sysctl include-context conflict ====='
+                python3 - <<'PY'
+          from pathlib import Path
+
+          p = Path('fs/proc/proc_sysctl.c')
+          s = p.read_text()
+          if s.count('<<<<<<< HEAD\n') != 1 or s.count('=======\n') != 1 or s.count('>>>>>>> ') != 1:
+              raise SystemExit('unexpected 855f conflict-marker shape')
+
+          a = s.index('<<<<<<< HEAD\n')
+          b = s.index('=======\n', a)
+          c = s.index('>>>>>>> ', b)
+          e = s.index('\n', c) + 1
+          ours = s[a + len('<<<<<<< HEAD\n'):b]
+          theirs = s[b + len('=======\n'):c]
+
+          if ours != '':
+              raise SystemExit('unexpected OPPO side of 855f include conflict: ' + repr(ours))
+          if '#include <linux/bpf-cgroup.h>\n' not in theirs:
+              raise SystemExit('855f donor side missing bpf-cgroup include')
+          if '#include <linux/kmemleak.h>\n' not in theirs:
+              raise SystemExit('855f donor context no longer matches expected kmemleak shape')
+
+          s = s[:a] + '#include <linux/bpf-cgroup.h>\n' + s[e:]
+          if s.count('#include <linux/bpf-cgroup.h>\n') != 1:
+              raise SystemExit('bpf-cgroup include count is not exactly one')
+          if any(m in s for m in ('<<<<<<<', '=======', '>>>>>>>')):
+              raise SystemExit('conflict markers remain after 855f resolution')
+          p.write_text(s)
+          PY
+                git add fs/proc/proc_sysctl.c
+                git diff --cached --check
+                grep -Fq '#include <linux/bpf-cgroup.h>' fs/proc/proc_sysctl.c
+                grep -Fq 'BPF_CGROUP_RUN_PROG_SYSCTL(head, table, write)' fs/proc/proc_sysctl.c
+                GIT_EDITOR=true git cherry-pick --continue
+                echo '[PASS] resolved 855f semantically: added BPF sysctl hook without donor-only kmemleak context'
+                continue
+              fi
+            fi
+
             echo '===== UNHANDLED A16 CHERRY-PICK FAILURE ====='
             echo "failed commit: $failed"
             git status --short || true

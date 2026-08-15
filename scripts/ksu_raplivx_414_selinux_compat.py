@@ -22,7 +22,11 @@ def replace_once(text: str, old: str, new: str, desc: str) -> str:
 
 
 def regex_once(text: str, pattern: str, replacement: str, desc: str) -> str:
-    out, count = re.subn(pattern, replacement, text, count=1, flags=re.S)
+    # A replacement string passed directly to re.sub() interprets backslash
+    # escapes a second time.  Use a callable so C literals such as "\\n"
+    # remain two source characters instead of becoming a physical newline.
+    out, count = re.subn(pattern, lambda _m: replacement, text,
+                         count=1, flags=re.S)
     if count != 1:
         die(f"expected exactly one {desc} block, found {count}")
     return out
@@ -40,10 +44,9 @@ for target in (KSUD, SEPOLICY):
     if not target.exists():
         die(f"missing transient RapliVx source: {target}")
 
-# SukiSU's old-kernel path disables its optional SELinux-hide callbacks while
-# retaining apply_kernelsu_rules()/cache_sid()/setup_ksu_cred().  RapliVx's
-# equivalent optional feature is the AVC spoof/hide late-init hook.  Disable
-# only that feature on 4.14; do not remove the core KernelSU SELinux setup.
+# Match the neighboring SukiSU old-kernel policy: optional SELinux hiding is
+# not worth pulling modern AVC internals into 4.14.  Keep the core KernelSU
+# rules/credential setup, but do not run RapliVx's AVC spoof/hide late init.
 ksud = KSUD.read_text(errors="surrogateescape")
 if MARKER not in ksud:
     ksud = replace_once(
@@ -62,6 +65,16 @@ text = SEPOLICY.read_text(errors="surrogateescape")
 if MARKER in text:
     sys.exit(0)
 
+# RapliVx already carries the correct <5.9 symtab compatibility macros.  They
+# MUST survive this adapter; Run #21 accidentally deleted them because the old
+# filename-transition regexp started at the forward declaration.
+symtab_compat = (
+    "#define symtab_search(s, name) hashtab_search((s)->table, name)\n"
+    "#define symtab_insert(s, name, datum) hashtab_insert((s)->table, name, datum)\n"
+)
+if symtab_compat not in text:
+    die("pinned RapliVx <5.9 symtab compatibility block missing before patch")
+
 # policydb on this OPPO 4.14 tree uses struct filename_trans (including stype),
 # a pointer hashtab, and flex_array-backed type maps.  Do not fabricate newer
 # filename_trans_key/type_val_to_struct layouts in public kernel headers.
@@ -73,7 +86,14 @@ if "#include <linux/flex_array.h>\n" not in text:
         "flex_array include",
     )
 
-old_filename_trans = r"static bool add_filename_trans\(struct policydb \*db, const char \*s,.*?\n}\n\n(?=static bool add_genfscon)"
+# Require the IMPLEMENTATION signature including its opening brace.  The
+# forward declaration ends in ';' and therefore cannot be consumed.
+old_filename_trans = (
+    r"static bool add_filename_trans\(struct policydb \*db, const char \*s,\n"
+    r"\s*const char \*t, const char \*c, const char \*d,\n"
+    r"\s*const char \*o\)\n"
+    r"\{.*?\n\}\n\n(?=static bool add_genfscon)"
+)
 new_filename_trans = f'''static bool add_filename_trans(struct policydb *db, const char *s,
                                const char *t, const char *c, const char *d,
                                const char *o)
@@ -148,9 +168,9 @@ new_filename_trans = f'''static bool add_filename_trans(struct policydb *db, con
 
 '''
 text = regex_once(text, old_filename_trans, new_filename_trans,
-                  "4.14 add_filename_trans")
+                  "4.14 add_filename_trans implementation")
 
-old_add_type = r"static bool add_type\(struct policydb \*db, const char \*type_name, bool attr\)\n\{.*?\n}\n\n(?=static bool set_type_state)"
+old_add_type = r"static bool add_type\(struct policydb \*db, const char \*type_name, bool attr\)\n\{.*?\n\}\n\n(?=static bool set_type_state)"
 new_add_type = f'''static bool add_type(struct policydb *db, const char *type_name, bool attr)
 {{
     struct type_datum *type = symtab_search(&db->p_types, type_name);
@@ -261,7 +281,7 @@ new_add_type = f'''static bool add_type(struct policydb *db, const char *type_na
 '''
 text = regex_once(text, old_add_type, new_add_type, "4.14 add_type")
 
-old_add_attr = r"static void add_typeattribute_raw\(struct policydb \*db, struct type_datum \*type,\n\s*struct type_datum \*attr\)\n\{.*?\n}\n\n(?=static bool add_typeattribute)"
+old_add_attr = r"static void add_typeattribute_raw\(struct policydb \*db, struct type_datum \*type,\n\s*struct type_datum \*attr\)\n\{.*?\n\}\n\n(?=static bool add_typeattribute)"
 new_add_attr = f'''static void add_typeattribute_raw(struct policydb *db, struct type_datum *type,
                                   struct type_datum *attr)
 {{
@@ -296,8 +316,11 @@ new_add_attr = f'''static void add_typeattribute_raw(struct policydb *db, struct
 text = regex_once(text, old_add_attr, new_add_attr,
                   "4.14 add_typeattribute_raw")
 
-# Fail closed if any of the exact modern policydb members responsible for the
-# Run #20 failure still occur in the patched 4.14 implementation body.
+# Fail closed if the adapter ever removes RapliVx's own old-kernel symbol
+# compatibility again, or if any exact modern policydb members from Run #20
+# survive inside the generated 4.14 source.
+if symtab_compat not in text:
+    die("adapter removed pinned RapliVx <5.9 symtab compatibility block")
 for forbidden in (
     "policydb_filenametr_search(db, &key)",
     "trans->stypes",
@@ -309,6 +332,11 @@ for forbidden in (
 ):
     if forbidden in text:
         die(f"unsupported modern policydb token remains: {forbidden}")
+
+# A literal backslash-n must remain in the C source.  This directly guards the
+# Run #21 regression where re.sub converted it to a physical newline.
+if 'pr_warn("source type %s does not exist\\n", s);' not in text:
+    die("C newline escape was corrupted while patching sepolicy.c")
 
 text = text.replace(
     "#define KSU_SUPPORT_ADD_TYPE\n",

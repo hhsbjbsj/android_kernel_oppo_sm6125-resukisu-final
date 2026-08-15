@@ -59,7 +59,7 @@ jobs:
           test ! -e KernelSU
           test ! -e drivers/kernelsu
           ! grep -R -n -E 'CONFIG_KSU|KernelSU|SukiSU|ReSukiSU|SUSFS' \
-              --exclude-dir=.git --exclude='*.log' .
+              --exclude-dir=.git --exclude='*.log' --exclude='pchm30-a15-bpf-only-build.yml' .
           echo '[PASS] clean baseline contains no KSU/SukiSU/ReSukiSU/SUSFS integration'
 
       - name: Apply article prerequisite and Android 15 BPF patch range
@@ -74,29 +74,46 @@ jobs:
           git remote remove aresin 2>/dev/null || true
           git remote add aresin "$ARESIN_REPO"
 
-          echo '===== Fetch exact prerequisite from article figure 3 ====='
-          git fetch --no-tags --depth=1 aresin "$ARESIN_PREREQ"
+          echo '===== Fetch prerequisite WITH its parent ====='
+          # The previous run used --depth=1 here. That made the donor commit a
+          # shallow root, so cherry-pick compared its full kernel tree to the
+          # empty tree and produced add/add conflicts across unrelated files.
+          git fetch --no-tags --depth=2 aresin "$ARESIN_PREREQ"
+          git cat-file -e "$ARESIN_PREREQ^{commit}"
+          git cat-file -e "$ARESIN_PREREQ^1^{commit}"
 
-          echo '===== Fetch exact A15 range from article figures 4-5 ====='
-          # bd379f8 is 54 commits ahead of a2b662d in the donor tree.
-          # Depth 80 intentionally includes the whole range and a2b662d^.
-          git fetch --no-tags --depth=80 aresin "$A15_LAST"
+          echo '===== Fetch exact A15 range WITH the parent of its first commit ====='
+          # A15_LAST is 54 commits ahead of A15_FIRST. Inclusive series = 55;
+          # depth 56 also brings in A15_FIRST^1, which is required to compute
+          # the first commit's real patch instead of treating it as a root.
+          git fetch --no-tags --depth=56 aresin "$A15_LAST"
           git cat-file -e "$A15_FIRST^{commit}"
           git cat-file -e "$A15_LAST^{commit}"
-          git cat-file -e "$A15_FIRST^"
+          git cat-file -e "$A15_FIRST^1^{commit}"
 
           echo '===== Donor range audit ====='
-          COUNT="$(git rev-list --count "$A15_FIRST^..$A15_LAST")"
+          mapfile -t A15_COMMITS < <(git rev-list --reverse "$A15_FIRST^1..$A15_LAST")
+          COUNT="${#A15_COMMITS[@]}"
           echo "A15 commits including endpoints: $COUNT"
           test "$COUNT" -eq 55
-          git log --reverse --format='%h %s' "$A15_FIRST^..$A15_LAST" | tee "$GITHUB_WORKSPACE/a15-bpf-commit-list.txt"
+          for c in "${A15_COMMITS[@]}"; do
+            git show -s --format='%h %s' "$c"
+          done | tee "$GITHUB_WORKSPACE/a15-bpf-commit-list.txt"
+          test "${A15_COMMITS[0]}" = "$A15_FIRST"
+          test "${A15_COMMITS[54]}" = "$A15_LAST"
 
           echo '===== Apply 4.14.180 prerequisite ====='
-          git cherry-pick -x "$ARESIN_PREREQ"
+          if ! git cherry-pick -x "$ARESIN_PREREQ"; then
+            echo '===== PREREQUISITE CHERRY-PICK FAILED ====='
+            git status --short || true
+            git diff --check || true
+            git diff || true
+            exit 1
+          fi
 
-          echo '===== Apply Android 15 BPF series ====='
-          if ! git cherry-pick -x "$A15_FIRST^..$A15_LAST"; then
-            echo '===== CHERRY-PICK FAILED ====='
+          echo '===== Apply Android 15 BPF series in chronological order ====='
+          if ! git cherry-pick -x "${A15_COMMITS[@]}"; then
+            echo '===== A15 CHERRY-PICK FAILED ====='
             git status --short || true
             git diff --check || true
             git diff || true
@@ -115,7 +132,7 @@ jobs:
           test -f include/linux/btf.h
           test -f include/uapi/linux/btf.h
           ! grep -R -n -E 'CONFIG_KSU|KernelSU|SukiSU|ReSukiSU|SUSFS' \
-              --exclude-dir=.git --exclude='*.log' .
+              --exclude-dir=.git --exclude='*.log' --exclude='pchm30-a15-bpf-only-build.yml' .
           echo '[PASS] prerequisite + 55 A15 BPF commits applied; root frameworks still absent'
 
       - name: Reconstruct pinned OPPO vendor tree

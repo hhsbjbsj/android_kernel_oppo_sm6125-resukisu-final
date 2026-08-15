@@ -197,12 +197,17 @@ obj-$(CONFIG_GNSS_SIRF)		+= gnsssirf/
 obj-$(CONFIG_GNSS)		+= gnss/
 
 # RapliVx KernelSU source is cloned by the CI before the drivers tree is built.
-# Apply the fail-closed Linux 4.14 source adapter before descending into the
-# transient kernelsu symlink.  The adapter is idempotent, including the native
-# 4.14 SELinux inode-security access shim, and exits untouched on non-4.14 kernels.
+# Apply fail-closed Linux 4.14 source adapters before descending into the
+# transient kernelsu symlink.  Optional AVC spoof/hide is disabled on 4.14,
+# while core KernelSU SELinux rules stay enabled through the native old
+# policydb/flex_array implementation.
 ifeq ($(CONFIG_KSU),y)
-ksu_raplivx_414_compat_status := $(shell python3 $(srctree)/scripts/ksu_raplivx_414_file_wrapper_compat.py >/dev/null 2>&1; echo $$?)
-ifneq ($(ksu_raplivx_414_compat_status),0)
+ksu_raplivx_414_file_status := $(shell python3 $(srctree)/scripts/ksu_raplivx_414_file_wrapper_compat.py >/dev/null 2>&1; echo $$?)
+ifneq ($(ksu_raplivx_414_file_status),0)
 $(error RapliVx KernelSU Linux 4.14 file_wrapper compatibility adapter failed)
+endif
+ksu_raplivx_414_selinux_status := $(shell python3 $(srctree)/scripts/ksu_raplivx_414_selinux_compat.py >/dev/null 2>&1; echo $$?)
+ifneq ($(ksu_raplivx_414_selinux_status),0)
+$(error RapliVx KernelSU Linux 4.14 SELinux compatibility adapter failed)
 endif
 endif

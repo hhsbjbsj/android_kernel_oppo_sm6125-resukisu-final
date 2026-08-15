@@ -68,7 +68,8 @@ jobs:
               raise SystemExit('usage: run-a15-step.py <step name>')
 
           name = sys.argv[1]
-          repo = Path(os.environ['GITHUB_WORKSPACE']) / os.environ['KERNEL_REL']
+          workspace = Path(os.environ['GITHUB_WORKSPACE'])
+          repo = workspace / os.environ['KERNEL_REL']
           workflow = repo / '.github/workflows/pchm30-a15-bpf-only-build.yml'
           lines = workflow.read_text().splitlines(True)
           marker = f'      - name: {name}\n'
@@ -104,7 +105,7 @@ jobs:
               else:
                   raise SystemExit(f'unexpected indentation while extracting {name}: {line!r}')
           script = ''.join(script_lines)
-          cwd = repo / workdir if workdir else Path(os.environ['GITHUB_WORKSPACE'])
+          cwd = workspace / workdir if workdir else workspace
           print(f'===== REUSE PROVEN A15 STEP: {name} =====')
           print(f'cwd={cwd}')
           subprocess.run(['bash', '-c', 'set -Eeuo pipefail\n' + script], cwd=cwd, check=True, env=os.environ.copy())
@@ -127,10 +128,6 @@ jobs:
           exec > >(tee -a "$GITHUB_WORKSPACE/bpf-apply.log") 2>&1
 
           echo '===== Normalize A15 helper-ID ABI to the exact donor A15 endpoint ====='
-          # The proven A15 build only had to synthesize helper IDs through 68.
-          # A16 commits were authored against the complete helper-ID table that
-          # already existed at donor A15_LAST. Copy only that stable enum mapper;
-          # this does not enable unsupported helpers by itself.
           git fetch --no-tags --depth=161 aresin "$A16_LAST"
           git cat-file -e "$A15_LAST^{commit}"
           git cat-file -e "$A16_FIRST^{commit}"
@@ -163,10 +160,10 @@ jobs:
             git commit -m 'A15 prep: align stable BPF helper-ID ABI with donor endpoint'
           fi
 
-          echo '===== Audit exact A16 range ====='
+          echo '===== Audit exact tutorial A16 range ====='
           mapfile -t A16_COMMITS < <(git rev-list --reverse "$A15_LAST..$A16_LAST")
           COUNT="${#A16_COMMITS[@]}"
-          echo "A16 delta commits: $COUNT"
+          echo "A16 tutorial delta commits: $COUNT"
           test "$COUNT" -eq 160
           test "${A16_COMMITS[0]}" = "$A16_FIRST"
           test "${A16_COMMITS[159]}" = "$A16_LAST"
@@ -174,7 +171,7 @@ jobs:
             git show -s --format='%h %s' "$c"
           done | tee "$GITHUB_WORKSPACE/a16-bpf-commit-list.txt"
 
-          echo '===== Apply Android 16 delta in chronological order ====='
+          echo '===== Apply Android 16 tutorial delta in chronological order ====='
           for c in "${A16_COMMITS[@]}"; do
             echo ">>> $(git show -s --format='%h %s' "$c")"
             if git cherry-pick -x "$c"; then
@@ -204,7 +201,7 @@ jobs:
               --exclude-dir=.git \
               --include='Kconfig*' --include='Makefile' --include='*.mk' \
               --include='*.c' --include='*.h' --include='*.S' --include='*.config' .
-          echo '[PASS] proven A15 baseline + exact 160-commit A16 donor delta applied; root frameworks absent'
+          echo '[PASS] proven A15 baseline + exact tutorial A16 delta applied; root frameworks absent'
 
       - name: Reconstruct pinned OPPO vendor tree
         shell: bash

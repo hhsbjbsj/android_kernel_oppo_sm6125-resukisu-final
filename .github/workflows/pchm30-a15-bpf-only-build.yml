@@ -58,8 +58,10 @@ jobs:
           set -Eeuo pipefail
           test ! -e KernelSU
           test ! -e drivers/kernelsu
-          ! grep -R -n -E 'CONFIG_KSU|KernelSU|SukiSU|ReSukiSU|SUSFS' \
-              --exclude-dir=.git --exclude='*.log' --exclude='pchm30-a15-bpf-only-build.yml' .
+          ! grep -r -n -E 'CONFIG_KSU|KernelSU|SukiSU|ReSukiSU|SUSFS' \
+              --exclude-dir=.git \
+              --include='Kconfig*' --include='Makefile' --include='*.mk' \
+              --include='*.c' --include='*.h' --include='*.S' --include='*.config' .
           echo '[PASS] clean baseline contains no KSU/SukiSU/ReSukiSU/SUSFS integration'
 
       - name: Apply article prerequisite and Android 15 BPF patch range
@@ -107,6 +109,7 @@ jobs:
 
           echo '===== Apply Android 15 BPF series in chronological order ====='
           D078='d0780629bf322438134a9e18a4e515148043ea92'
+          C7EC='7ec2cf6ebe1b71eee226ab694c0d067faaaaab4d'
           for c in "${A15_COMMITS[@]}"; do
             echo ">>> $(git show -s --format='%h %s' "$c")"
             if git cherry-pick -x "$c"; then
@@ -118,10 +121,9 @@ jobs:
 
             # OPPO's 4.14.180 net/core/dev.c lacks the donor tree's later
             # __netif_receive_skb_list() block immediately before
-            # generic_xdp_install().  Commit d078 only renames the XDP/BPF
-            # control-path API; that unrelated surrounding function is context,
-            # not part of d078.  Resolve only this exact, audited conflict while
-            # preserving the rest of OPPO dev.c and all clean d078 hunks.
+            # generic_xdp_install(). Commit d078 only renames the XDP/BPF
+            # control-path API. Preserve the OPPO receive path and apply only
+            # the semantic ndo_xdp -> ndo_bpf change from d078.
             if [ "$failed" = "$D078" ]; then
               mapfile -t unresolved < <(git diff --name-only --diff-filter=U)
               if [ "${#unresolved[@]}" -eq 1 ] && [ "${unresolved[0]}" = 'net/core/dev.c' ]; then
@@ -162,6 +164,61 @@ jobs:
               fi
             fi
 
+            # Donor baseline already has htab_put_fd_value(), while OPPO 4.14.180
+            # keeps the same map_fd_put_ptr() call inline in free_htab_elem().
+            # Commit 7ec changes the callback ABI to (map, ptr, need_defer).
+            # Preserve OPPO's extra bpf_prog_active/preempt safety and translate
+            # the donor's helper-based hunk into the equivalent inline call.
+            if [ "$failed" = "$C7EC" ]; then
+              mapfile -t unresolved < <(git diff --name-only --diff-filter=U)
+              if [ "${#unresolved[@]}" -eq 1 ] && [ "${unresolved[0]}" = 'kernel/bpf/hashtab.c' ]; then
+                echo '===== Resolve known 7ec kernel/bpf/hashtab.c baseline-shape conflict ====='
+                python3 - <<'PY'
+          from pathlib import Path
+
+          p = Path('kernel/bpf/hashtab.c')
+          s = p.read_text()
+          if s.count('<<<<<<< HEAD\n') != 1 or s.count('>>>>>>> ') != 1:
+              raise SystemExit('unexpected 7ec conflict-marker shape')
+
+          a = s.index('<<<<<<< HEAD\n')
+          b = s.index('=======\n', a)
+          c = s.index('>>>>>>> ', b)
+          e = s.index('\n', c) + 1
+          ours = s[a + len('<<<<<<< HEAD\n'):b]
+          theirs = s[b + len('=======\n'):c]
+
+          if '__this_cpu_dec(bpf_prog_active);\n\tpreempt_enable();\n' not in ours:
+              raise SystemExit('OPPO bpf_prog_active/preempt safety block missing from 7ec conflict')
+          if 'static void htab_put_fd_value(struct bpf_htab *htab, struct htab_elem *l)' not in theirs:
+              raise SystemExit('donor helper shape missing from 7ec conflict')
+          if 'map->ops->map_fd_put_ptr(map, ptr, true);' not in theirs:
+              raise SystemExit('donor 7ec need_defer=true semantic call missing')
+
+          # Keep OPPO's end of htab_elem_free_rcu(); do not graft the donor-only
+          # helper. The common closing brace after the conflict remains intact.
+          s = s[:a] + ours + s[e:]
+
+          old = '\t\tmap->ops->map_fd_put_ptr(ptr);\n'
+          new = '\t\tmap->ops->map_fd_put_ptr(map, ptr, true);\n'
+          if s.count(old) != 1:
+              raise SystemExit('expected exactly one inline OPPO map_fd_put_ptr(ptr) call after 7ec merge')
+          s = s.replace(old, new, 1)
+
+          if any(m in s for m in ('<<<<<<<', '=======', '>>>>>>>')):
+              raise SystemExit('conflict markers remain after 7ec resolution')
+          p.write_text(s)
+          PY
+                git add kernel/bpf/hashtab.c
+                git diff --cached --check
+                grep -Fq 'map->ops->map_fd_put_ptr(map, ptr, true);' kernel/bpf/hashtab.c
+                grep -Fq 'void (*map_fd_put_ptr)(struct bpf_map *map, void *ptr, bool need_defer);' include/linux/bpf.h
+                GIT_EDITOR=true git cherry-pick --continue
+                echo '[PASS] resolved 7ec semantically: preserved OPPO RCU safety and applied map/need_defer ABI'
+                continue
+              fi
+            fi
+
             echo '===== UNHANDLED A15 CHERRY-PICK FAILURE ====='
             git status --short || true
             git diff --check || true
@@ -180,8 +237,12 @@ jobs:
           test -f include/linux/btf.h
           test -f include/uapi/linux/btf.h
           grep -Fq 'static int generic_xdp_install(struct net_device *dev, struct netdev_bpf *xdp)' net/core/dev.c
-          ! grep -R -n -E 'CONFIG_KSU|KernelSU|SukiSU|ReSukiSU|SUSFS' \
-              --exclude-dir=.git --exclude='*.log' --exclude='pchm30-a15-bpf-only-build.yml' .
+          grep -Fq 'void (*map_fd_put_ptr)(struct bpf_map *map, void *ptr, bool need_defer);' include/linux/bpf.h
+          ! grep -Fq 'map_fd_put_ptr(ptr)' kernel/bpf/hashtab.c
+          ! grep -r -n -E 'CONFIG_KSU|KernelSU|SukiSU|ReSukiSU|SUSFS' \
+              --exclude-dir=.git \
+              --include='Kconfig*' --include='Makefile' --include='*.mk' \
+              --include='*.c' --include='*.h' --include='*.S' --include='*.config' .
           echo '[PASS] prerequisite + 55 A15 BPF commits applied; root frameworks still absent'
 
       - name: Reconstruct pinned OPPO vendor tree

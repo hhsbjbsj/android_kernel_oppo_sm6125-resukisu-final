@@ -15,6 +15,18 @@
 #define TWA_RESUME true
 #endif
 
+/*
+ * ksys_close() was introduced after this 4.14 baseline.  RapliVx KernelSU's
+ * pre-wrapper supercall path uses it for the old-kernel close fallback; on
+ * this tree sys_close() provides the equivalent in-kernel close operation.
+ * Keep the compatibility alias local to CONFIG_KSU builds.
+ */
+#ifdef CONFIG_KSU
+#ifndef ksys_close
+#define ksys_close sys_close
+#endif
+#endif
+
 typedef void (*task_work_func_t)(struct callback_head *);
 
 static inline void
@@ -32,4 +44,4 @@ static inline void exit_task_work(struct task_struct *task)
 	task_work_run();
 }
 
-#endif	/* _LINUX_TASK_WORK_H */
+#endif	/* _LINUX_TASK_WORK_H__ */

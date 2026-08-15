@@ -256,6 +256,35 @@ extern long notrace __probe_kernel_write(void *dst, const void *src, size_t size
 
 extern long strncpy_from_unsafe(char *dst, const void *unsafe_addr, long count);
 
+/*
+ * Compatibility backport for old Android 4.14 trees.  Newer kernels provide
+ * strncpy_from_user_nofault() in the generic uaccess/maccess API.  Keep the
+ * same no-fault and return-value semantics so runtime syscall hooks do not
+ * accidentally turn a probe into a sleeping user access.
+ */
+static inline long strncpy_from_user_nofault(char *dst,
+				      const void __user *unsafe_addr,
+				      long count)
+{
+	long ret;
+
+	if (unlikely(count <= 0))
+		return 0;
+
+	pagefault_disable();
+	ret = strncpy_from_user(dst, unsafe_addr, count);
+	pagefault_enable();
+
+	if (ret >= count) {
+		ret = count;
+		dst[ret - 1] = '\0';
+	} else if (ret >= 0) {
+		ret++;
+	}
+
+	return ret;
+}
+
 /**
  * probe_kernel_address(): safely attempt to read from a location
  * @addr: address to read from

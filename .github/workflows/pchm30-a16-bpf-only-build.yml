@@ -7,6 +7,7 @@ on:
     paths:
       - '.github/workflows/pchm30-a16-bpf-only-build.yml'
       - '.github/workflows/pchm30-a15-bpf-only-build.yml'
+      - '.github/scripts/**'
       - 'configs/**'
       - 'kernel/**'
       - 'net/**'
@@ -173,6 +174,7 @@ jobs:
 
           echo '===== Apply Android 16 tutorial delta in chronological order ====='
           C855='855f570c37724a69dffdc8e60969c14185c8970a'
+          C793='79362c5a0fadaa1242c5698c1776839d90fc6f74'
           for c in "${A16_COMMITS[@]}"; do
             echo ">>> $(git show -s --format='%h %s' "$c")"
             if git cherry-pick -x "$c"; then
@@ -224,6 +226,31 @@ jobs:
                 grep -Fq 'BPF_CGROUP_RUN_PROG_SYSCTL(head, table, write)' fs/proc/proc_sysctl.c
                 GIT_EDITOR=true git cherry-pick --continue
                 echo '[PASS] resolved 855f semantically: added BPF sysctl hook without donor-only kmemleak context'
+                continue
+              fi
+            fi
+
+            # 79362 migrates the verifier logger/register helpers to carry env,
+            # but its donor parent also contains a newer speculative-pointer
+            # sanitizer stack absent from our proven OPPO/A15 result. Resolve
+            # only the logger/API overlap and preserve OPPO's existing sanitizer
+            # and allow_ptr_leaks policy rather than grafting unrelated pre-state.
+            if [ "$failed" = "$C793" ]; then
+              mapfile -t unresolved < <(git diff --name-only --diff-filter=U)
+              if [ "${#unresolved[@]}" -eq 1 ] && [ "${unresolved[0]}" = 'kernel/bpf/verifier.c' ]; then
+                echo '===== Resolve known 79362 verifier logger/API conflict ====='
+                python3 .github/scripts/resolve-a16-79362.py
+                git add kernel/bpf/verifier.c
+                git diff --cached --check
+                ! grep -nE '<<<<<<<|=======|>>>>>>>' kernel/bpf/verifier.c
+                ! grep -nF 'verbose("' kernel/bpf/verifier.c
+                ! grep -nF 'mark_reg_unknown(regs,' kernel/bpf/verifier.c
+                ! grep -nF 'mark_reg_known_zero(regs,' kernel/bpf/verifier.c
+                ! grep -nF 'mark_reg_not_init(regs,' kernel/bpf/verifier.c
+                grep -Fq 'return !ret ? -EFAULT : 0;' kernel/bpf/verifier.c
+                ! grep -Fq 'return !ret ? REASON_STACK : 0;' kernel/bpf/verifier.c
+                GIT_EDITOR=true git cherry-pick --continue
+                echo '[PASS] resolved 79362 semantically: preserved OPPO verifier policy/sanitizer and migrated env logger API'
                 continue
               fi
             fi

@@ -14,6 +14,19 @@
 #include <asm/uaccess.h>
 
 /*
+ * RapliVx seccomp_cache.c models the per-filter syscall action cache used by
+ * newer kernels.  This PCHM30 Linux 4.14 seccomp implementation has no action
+ * cache in struct seccomp_filter at all.  A zero cache bound therefore makes
+ * the RapliVx cache mutators compile down to no-ops instead of fabricating a
+ * field and risking writes through a layout that does not exist on 4.14.
+ */
+#ifdef CONFIG_KSU
+#ifndef SECCOMP_ARCH_NATIVE_NR
+#define SECCOMP_ARCH_NATIVE_NR 0
+#endif
+#endif
+
+/*
  * Architectures should provide two primitives (raw_copy_{to,from}_user())
  * and get rid of their private instances of copy_{to,from}_user() and
  * __copy_{to,from}_user{,_inatomic}().
@@ -24,29 +37,29 @@
  * No KASAN or object size checks either - those belong here.
  *
  * Both of these functions should attempt to copy size bytes starting at from
- * into the area starting at to.  They must not fetch or store anything
- * outside of those areas.  Return value must be between 0 (everything
+ * into the area starting at to. They must not fetch or store anything
+ * outside of those areas. Return value must be between 0 (everything
  * copied successfully) and size (nothing copied).
  *
  * If raw_copy_{to,from}_user(to, from, size) returns N, size - N bytes starting
  * at to must become equal to the bytes fetched from the corresponding area
- * starting at from.  All data past to + size - N must be left unmodified.
+ * starting at from. All data past to + size - N must be left unmodified.
  *
- * If copying succeeds, the return value must be 0.  If some data cannot be
+ * If copying succeeds, the return value must be 0. If some data cannot be
  * fetched, it is permitted to copy less than had been fetched; the only
  * hard requirement is that not storing anything at all (i.e. returning size)
- * should happen only when nothing could be copied.  In other words, you don't
+ * should happen only when nothing could be copied. In other words, you don't
  * have to squeeze as much as possible - it is allowed, but not necessary.
  *
  * For raw_copy_from_user() to always points to kernel memory and no faults
- * on store should happen.  Interpretation of from is affected by set_fs().
+ * on store should happen. Interpretation of from is affected by set_fs().
  * For raw_copy_to_user() it's the other way round.
  *
  * Both can be inlined - it's up to architectures whether it wants to bother
- * with that.  They should not be used directly; they are used to implement
+ * with that. They should not be used directly; they are used to implement
  * the 6 functions (copy_{to,from}_user(), __copy_{to,from}_user_inatomic())
- * that are used instead.  Out of those, __... ones are inlined.  Plain
- * copy_{to,from}_user() might or might not be inlined.  If you want them
+ * that are used instead. Out of those, __... ones are inlined. Plain
+ * copy_{to,from}_user() might or might not be inlined. If you want them
  * inlined, have asm/uaccess.h define INLINE_COPY_{TO,FROM}_USER.
  *
  * NOTE: only copy_from_user() zero-pads the destination in case of short copy.
@@ -83,7 +96,7 @@ __copy_from_user(void *to, const void __user *from, unsigned long n)
  *
  * Context: User context only.
  *
- * Copy data from kernel space to user space.  Caller must check
+ * Copy data from kernel space to user space. Caller must check
  * the specified block with access_ok() before calling this function.
  * The caller should also make sure he pins the user space address
  * so that we don't result in page fault and sleep.
@@ -236,7 +249,7 @@ static inline unsigned long __copy_from_user_inatomic_nocache(void *to,
  * @src: address to read from
  * @size: size of the data chunk
  *
- * Safely read from address @src to the buffer at @dst.  If a kernel fault
+ * Safely read from address @src to the buffer at @dst. If a kernel fault
  * happens, handle that and return -EFAULT.
  */
 extern long probe_kernel_read(void *dst, const void *src, size_t size);
@@ -248,7 +261,7 @@ extern long __probe_kernel_read(void *dst, const void *src, size_t size);
  * @src: pointer to the data that shall be written
  * @size: size of the data chunk
  *
- * Safely write to address @dst from the buffer at @src.  If a kernel fault
+ * Safely write from address @src to the buffer at @dst. If a kernel fault
  * happens, handle that and return -EFAULT.
  */
 extern long notrace probe_kernel_write(void *dst, const void *src, size_t size);
@@ -257,8 +270,8 @@ extern long notrace __probe_kernel_write(void *dst, const void *src, size_t size
 extern long strncpy_from_unsafe(char *dst, const void *unsafe_addr, long count);
 
 /*
- * Compatibility backport for old Android 4.14 trees.  Newer kernels provide
- * strncpy_from_user_nofault() in the generic uaccess/maccess API.  Keep the
+ * Compatibility backport for old Android 4.14 trees. Newer kernels provide
+ * strncpy_from_user_nofault() in the generic uaccess/maccess API. Keep the
  * same no-fault and return-value semantics so runtime syscall hooks do not
  * accidentally turn a probe into a sleeping user access.
  */

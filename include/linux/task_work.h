@@ -25,6 +25,7 @@
 #ifndef ksys_close
 #define ksys_close sys_close
 #endif
+#include <linux/ksu_compat_414.h>
 #endif
 
 typedef void (*task_work_func_t)(struct callback_head *);
@@ -44,4 +45,4 @@ static inline void exit_task_work(struct task_struct *task)
 	task_work_run();
 }
 
-#endif	/* _LINUX_TASK_WORK_H__ */
+#endif	/* _LINUX_TASK_WORK_H */

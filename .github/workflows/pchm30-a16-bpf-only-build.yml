@@ -175,6 +175,7 @@ jobs:
           echo '===== Apply Android 16 tutorial delta in chronological order ====='
           C855='855f570c37724a69dffdc8e60969c14185c8970a'
           C793='79362c5a0fadaa1242c5698c1776839d90fc6f74'
+          C479='4793e2890f82bd363dae8c71a2597e2ce53847c0'
           for c in "${A16_COMMITS[@]}"; do
             echo ">>> $(git show -s --format='%h %s' "$c")"
             if git cherry-pick -x "$c"; then
@@ -251,6 +252,29 @@ jobs:
                 ! grep -Fq 'return !ret ? REASON_STACK : 0;' kernel/bpf/verifier.c
                 GIT_EDITOR=true git cherry-pick --continue
                 echo '[PASS] resolved 79362 semantically: preserved OPPO verifier policy/sanitizer and migrated env logger API'
+                continue
+              fi
+            fi
+
+            # 4793 adds BPF-to-BPF calls to the interpreter. The donor already
+            # had the probe-pass bpf_patch_insn_single() branch-adjustment shape
+            # before this commit, while OPPO's 4.14 baseline has the older
+            # three-argument helper. Rebuild only that generic helper area from
+            # the exact donor 4793 result; keep every other OPPO core hunk.
+            if [ "$failed" = "$C479" ]; then
+              mapfile -t unresolved < <(git diff --name-only --diff-filter=U)
+              if [ "${#unresolved[@]}" -eq 1 ] && [ "${unresolved[0]}" = 'kernel/bpf/core.c' ]; then
+                echo '===== Resolve known 4793 bpf_call interpreter branch-adjustment conflict ====='
+                python3 .github/scripts/resolve-a16-4793.py
+                git add kernel/bpf/core.c
+                git diff --cached --check
+                ! grep -nE '<<<<<<<|=======|>>>>>>>' kernel/bpf/core.c
+                grep -Fq 'insn->src_reg == BPF_PSEUDO_CALL' kernel/bpf/core.c
+                grep -Fq 'bpf_adj_branches(prog, off, insn_delta, true)' kernel/bpf/core.c
+                grep -Fq 'BUG_ON(bpf_adj_branches(prog_adj, off, insn_delta, false));' kernel/bpf/core.c
+                grep -Fq 'BPF_JMP | BPF_CALL_ARGS' kernel/bpf/core.c
+                GIT_EDITOR=true git cherry-pick --continue
+                echo '[PASS] resolved 4793 semantically: enabled interpreter pseudo-calls and supplied donor-assumed patch helper pre-state'
                 continue
               fi
             fi

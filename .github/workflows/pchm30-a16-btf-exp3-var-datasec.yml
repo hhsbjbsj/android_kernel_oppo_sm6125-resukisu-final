@@ -6,6 +6,8 @@ on:
     branches: [pchm30-a16-btf-exp3-var-datasec]
     paths:
       - '.github/workflows/pchm30-a16-btf-exp3-var-datasec.yml'
+      - '.github/scripts/exp3-orchestrate.sh'
+      - '.github/scripts/exp3-btf-backport.sh'
 
 permissions:
   contents: read
@@ -79,5 +81,3 @@ jobs:
             Module.symvers.a16-btf-exp3
             source/android/kernel/msm-4.14/out-pchm30-a16-bpf/.config
             source/android/kernel/msm-4.14/out-pchm30-a16-bpf/arch/arm64/boot/Image
-          include-hidden-files: true
-          if-no-files-found: warn

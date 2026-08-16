@@ -8,6 +8,7 @@ on:
       - '.github/workflows/pchm30-a16-btf-exp3-var-datasec.yml'
       - '.github/scripts/exp3-orchestrate.sh'
       - '.github/scripts/exp3-btf-backport.sh'
+      - '.github/scripts/exp3-audio-dlkm.sh'
 
 permissions:
   contents: read
@@ -42,9 +43,10 @@ env:
 
 jobs:
   build:
-    name: A16 BTF EXP3 - VAR DATASEC plus matching WLAN/audio
+    name: A16 BTF EXP3 - matching WLAN plus full TRINKET audio
     runs-on: ubuntu-22.04
-    timeout-minutes: 210
+    timeout-minutes: 240
+
     steps:
       - name: Checkout exact successful A16 rootless baseline
         uses: actions/checkout@v4
@@ -54,7 +56,7 @@ jobs:
           fetch-depth: 1
           submodules: false
 
-      - name: Load and run EXP3 orchestrator from triggering commit
+      - name: Build EXP3 kernel and matching WLAN
         working-directory: source/android/kernel/msm-4.14
         shell: bash
         run: |
@@ -64,152 +66,41 @@ jobs:
           chmod +x "$GITHUB_WORKSPACE/exp3-orchestrate.sh"
           "$GITHUB_WORKSPACE/exp3-orchestrate.sh"
 
-      - name: Rebuild matching OPPO audio DLKMs
+      - name: Rebuild full matching OPPO TRINKET audio graph
         working-directory: source/android/kernel/msm-4.14
         shell: bash
         run: |
           set -Eeuo pipefail
-          exec > >(tee "$GITHUB_WORKSPACE/audio-dlkm-build.log") 2>&1
+          git fetch --no-tags --depth=1 origin "$GITHUB_SHA"
+          git show "$GITHUB_SHA:.github/scripts/exp3-audio-dlkm.sh" > "$GITHUB_WORKSPACE/exp3-audio-dlkm.sh"
+          chmod +x "$GITHUB_WORKSPACE/exp3-audio-dlkm.sh"
+          "$GITHUB_WORKSPACE/exp3-audio-dlkm.sh"
 
-          KERNEL="$GITHUB_WORKSPACE/$KERNEL_REL"
-          KOUT="$KERNEL/$OUT_DIR"
-          AUDIO="$GITHUB_WORKSPACE/source/android/vendor/qcom/opensource/audio-kernel"
-          AOUT="$GITHUB_WORKSPACE/audio-product"
-          EXPORT="$GITHUB_WORKSPACE/audio-exp3"
-          MODROOT="$GITHUB_WORKSPACE/audio-ksu-module"
-
-          test -f "$AUDIO/config/trinketauto.conf"
-          test -f "$AUDIO/ipc/Kbuild"
-          test -f "$AUDIO/dsp/Kbuild"
-          test -f "$AUDIO/soc/Kbuild"
-          test -f "$AUDIO/asoc/codecs/Kbuild"
-          test -s "$KOUT/Module.symvers"
-          grep -q '^CONFIG_MODVERSIONS=y$' "$KOUT/.config"
-
-          rm -rf "$AOUT" "$EXPORT" "$MODROOT"
-          mkdir -p "$EXPORT/raw" "$MODROOT/system/vendor/lib/modules"
-
-          for d in ipc dsp soc asoc/codecs asoc/codecs/wcd937x asoc/codecs/bolero asoc/codecs/sdm660_cdc asoc/codecs/msm_sdw; do
-            mkdir -p "$AOUT/obj/vendor/qcom/opensource/audio-kernel/$d"
-            : > "$AOUT/obj/vendor/qcom/opensource/audio-kernel/$d/Module.symvers"
-          done
-
-          build_dir() {
-            local rel="$1" modname="$2" warn="$3"
-            local dir="$AUDIO/$rel"
-            echo "===== AUDIO BUILD rel=$rel MODNAME=$modname warn=$warn ====="
-            rm -f "$dir/Module.symvers" "$dir/modules.order"
-            rm -rf "$dir/.tmp_versions"
-            make -C "$KERNEL" O="$KOUT" M="$dir" \
-              ARCH=arm64 LOCALVERSION=+ \
-              CC="$CC" REAL_CC="$REAL_CC" LD="$LD" \
-              CROSS_COMPILE="$CROSS_COMPILE" \
-              CROSS_COMPILE_ARM32="$CROSS_COMPILE_ARM32" \
-              CLANG_TRIPLE="$CLANG_TRIPLE" \
-              OUT="$AOUT" AUDIO_ROOT="$AUDIO" MODNAME="$modname" \
-              BOARD_PLATFORM=trinket CONFIG_SND_SOC_SM6150=m \
-              KBUILD_MODPOST_WARN="$warn" modules -j"$(nproc)"
-            test -f "$dir/Module.symvers"
-            mkdir -p "$AOUT/obj/vendor/qcom/opensource/audio-kernel/$rel"
-            cp -f "$dir/Module.symvers" "$AOUT/obj/vendor/qcom/opensource/audio-kernel/$rel/Module.symvers"
-          }
-
-          # IPC <-> DSP have cross-module symbols. Seed once with warning mode,
-          # then rebuild both strictly after each side has a real Module.symvers.
-          build_dir ipc apr_dlkm 1
-          build_dir dsp q6_dlkm 1
-          build_dir ipc apr_dlkm 0
-          build_dir dsp q6_dlkm 0
-          build_dir soc soc_dlkm 0
-          build_dir asoc/codecs wcd_core_dlkm 0
-
-          required=(
-            wglink_dlkm.ko q6_pdr_dlkm.ko pinctrl_wcd_dlkm.ko swr_dlkm.ko
-            snd_event_dlkm.ko wcd_core_dlkm.ko wcd_spi_dlkm.ko
-            stub_dlkm.ko hdmi_dlkm.ko
-          )
-          for ko in "${required[@]}"; do
-            src="$(find "$AUDIO/ipc" "$AUDIO/dsp" "$AUDIO/soc" "$AUDIO/asoc/codecs" -maxdepth 2 -type f -name "$ko" -print -quit)"
-            test -n "$src" || { echo "[FATAL] required audio module missing: $ko"; exit 61; }
-            test -s "$src"
-          done
-
-          # Export every module produced by the four core TRINKET audio groups.
-          find "$AUDIO/ipc" "$AUDIO/dsp" "$AUDIO/soc" "$AUDIO/asoc/codecs" \
-            -maxdepth 2 -type f -name '*.ko' -print0 | while IFS= read -r -d '' ko; do
-              cp -f "$ko" "$EXPORT/raw/$(basename "$ko")"
-            done
-
-          map_name() {
-            case "$1" in
-              apr_dlkm.ko) echo audio_apr.ko ;;
-              wglink_dlkm.ko) echo audio_wglink.ko ;;
-              q6_dlkm.ko) echo audio_q6.ko ;;
-              usf_dlkm.ko) echo audio_usf.ko ;;
-              adsp_loader_dlkm.ko) echo audio_adsp_loader.ko ;;
-              q6_notifier_dlkm.ko) echo audio_q6_notifier.ko ;;
-              q6_pdr_dlkm.ko) echo audio_q6_pdr.ko ;;
-              pinctrl_wcd_dlkm.ko) echo audio_pinctrl_wcd.ko ;;
-              pinctrl_lpi_dlkm.ko) echo audio_pinctrl_lpi.ko ;;
-              swr_dlkm.ko) echo audio_swr.ko ;;
-              swr_ctrl_dlkm.ko) echo audio_swr_ctrl.ko ;;
-              snd_event_dlkm.ko) echo audio_snd_event.ko ;;
-              wcd_core_dlkm.ko) echo audio_wcd_core.ko ;;
-              wcd9xxx_dlkm.ko) echo audio_wcd9xxx.ko ;;
-              wcd_cpe_dlkm.ko) echo audio_wcd_cpe.ko ;;
-              wcd_spi_dlkm.ko) echo audio_wcd_spi.ko ;;
-              wcd9335_dlkm.ko) echo audio_wcd9335.ko ;;
-              wsa881x_dlkm.ko) echo audio_wsa881x.ko ;;
-              stub_dlkm.ko) echo audio_stub.ko ;;
-              mbhc_dlkm.ko) echo audio_mbhc.ko ;;
-              hdmi_dlkm.ko) echo audio_hdmi.ko ;;
-              *) echo "$1" ;;
-            esac
-          }
-
-          : > "$EXPORT/module-layout.txt"
-          KCRC="$(awk '$2 == "module_layout" {print $1; exit}' "$KOUT/Module.symvers")"
-          echo "kernel module_layout CRC=$KCRC" | tee -a "$EXPORT/module-layout.txt"
-          for ko in "$EXPORT"/raw/*.ko; do
-            base="$(basename "$ko")"
-            android_name="$(map_name "$base")"
-            cp -f "$ko" "$MODROOT/system/vendor/lib/modules/$android_name"
-            cp -f "$ko" "$MODROOT/system/vendor/lib/modules/$base"
-            echo "===== $base -> $android_name =====" | tee -a "$EXPORT/module-layout.txt"
-            readelf -p .modinfo "$ko" | grep -E 'vermagic|name=' | tee -a "$EXPORT/module-layout.txt" || true
-            if command -v modprobe >/dev/null 2>&1; then
-              modprobe --dump-modversions "$ko" 2>/dev/null | grep module_layout | tee -a "$EXPORT/module-layout.txt" || true
-            fi
-          done
-
-          cat > "$MODROOT/module.prop" <<'EOF'
-          id=pchm30_exp3_audio_dlkm
-          name=PCHM30 EXP3 Matching Audio DLKM
-          version=Run6
-          versionCode=6
-          author=hhsbjbsj
-          description=Matching OPPO TRINKET audio DLKMs rebuilt against the EXP3 Android 16 kernel ABI.
-          EOF
-
-          cat > "$MODROOT/post-fs-data.sh" <<'EOF'
-          #!/system/bin/sh
-          MODDIR=${0%/*}
-          for src in "$MODDIR"/system/vendor/lib/modules/*.ko; do
-            [ -f "$src" ] || continue
-            name=$(basename "$src")
-            for root in /vendor/lib/modules /vendor_dlkm/lib/modules; do
-              dst="$root/$name"
-              [ -f "$dst" ] || continue
-              mount -o bind "$src" "$dst" 2>/dev/null || true
-            done
-          done
-          EOF
-          chmod 0755 "$MODROOT/post-fs-data.sh"
-
-          (cd "$MODROOT" && zip -qr "$GITHUB_WORKSPACE/PCHM30-EXP3-AUDIO-DLKM-KSU.zip" .)
-          sha256sum "$GITHUB_WORKSPACE/PCHM30-EXP3-AUDIO-DLKM-KSU.zip" | tee "$EXPORT/audio-ksu.sha256"
-          find "$EXPORT/raw" -type f -name '*.ko' -exec sha256sum {} \; | sort > "$EXPORT/audio-modules.sha256"
-          echo '[PASS] matching TRINKET audio DLKM set rebuilt and packaged'
+      - name: Verify EXP3 deliverables
+        working-directory: source/android/kernel/msm-4.14
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          IMAGE="$OUT_DIR/arch/arm64/boot/Image"
+          test -s "$IMAGE"
+          test -s "$GITHUB_WORKSPACE/wlan-a16-exp1.ko"
+          test -s "$GITHUB_WORKSPACE/PCHM30-EXP3-AUDIO-DLKM-KSU.zip"
+          test -s "$GITHUB_WORKSPACE/audio-exp3/module-layout.txt"
+          test -s "$GITHUB_WORKSPACE/audio-exp3/audio-modules.txt"
+          grep -q '^CONFIG_MODVERSIONS=y$' "$OUT_DIR/.config"
+          grep -q '^CONFIG_KSU=y$' "$OUT_DIR/.config"
+          grep -q '^CONFIG_KSU_SUSFS=y$' "$OUT_DIR/.config"
+          grep -q '^CONFIG_BPF_STREAM_PARSER=y$' "$OUT_DIR/.config"
+          grep -q 'snd_event_dlkm.ko' "$GITHUB_WORKSPACE/audio-exp3/audio-modules.txt"
+          grep -q 'q6_pdr_dlkm.ko' "$GITHUB_WORKSPACE/audio-exp3/audio-modules.txt"
+          grep -q 'wglink_dlkm.ko' "$GITHUB_WORKSPACE/audio-exp3/audio-modules.txt"
+          grep -q 'wcd_core_dlkm.ko' "$GITHUB_WORKSPACE/audio-exp3/audio-modules.txt"
+          grep -q 'machine_dlkm.ko' "$GITHUB_WORKSPACE/audio-exp3/audio-modules.txt"
+          grep -q 'platform_dlkm.ko' "$GITHUB_WORKSPACE/audio-exp3/audio-modules.txt"
+          grep -q 'bolero_cdc_dlkm.ko' "$GITHUB_WORKSPACE/audio-exp3/audio-modules.txt"
+          grep -q 'wsa_macro_dlkm.ko' "$GITHUB_WORKSPACE/audio-exp3/audio-modules.txt"
+          grep -q 'rx_macro_dlkm.ko' "$GITHUB_WORKSPACE/audio-exp3/audio-modules.txt"
+          echo '[PASS] EXP3 Image + matching WLAN + full TRINKET audio package ready'
 
       - name: Upload BTF EXP3 artifact
         if: always()
@@ -232,3 +123,4 @@ jobs:
             source/android/kernel/msm-4.14/out-pchm30-a16-bpf/.config
             source/android/kernel/msm-4.14/out-pchm30-a16-bpf/arch/arm64/boot/Image
           include-hidden-files: true
+          if-no-files-found: warn

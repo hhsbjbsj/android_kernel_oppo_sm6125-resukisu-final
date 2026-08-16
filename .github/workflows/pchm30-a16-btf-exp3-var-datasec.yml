@@ -8,7 +8,9 @@ on:
       - '.github/workflows/pchm30-a16-btf-exp3-var-datasec.yml'
       - '.github/scripts/exp3-orchestrate.sh'
       - '.github/scripts/exp3-btf-backport.sh'
+      - '.github/scripts/exp3-a16-runtime-compat.sh'
       - '.github/scripts/exp3-audio-dlkm.sh'
+      - '.github/scripts/exp3-vendor-dlkm-package.sh'
 
 permissions:
   contents: read
@@ -43,7 +45,7 @@ env:
 
 jobs:
   build:
-    name: A16 BTF EXP3 - matching WLAN plus full TRINKET audio
+    name: A16 EXP3 - BTF plus full matching vendor ABI sweep
     runs-on: ubuntu-22.04
     timeout-minutes: 240
 
@@ -56,7 +58,7 @@ jobs:
           fetch-depth: 1
           submodules: false
 
-      - name: Build EXP3 kernel and matching WLAN
+      - name: Build EXP3 kernel plus matching WLAN and 11ad
         working-directory: source/android/kernel/msm-4.14
         shell: bash
         run: |
@@ -76,7 +78,17 @@ jobs:
           chmod +x "$GITHUB_WORKSPACE/exp3-audio-dlkm.sh"
           "$GITHUB_WORKSPACE/exp3-audio-dlkm.sh"
 
-      - name: Verify EXP3 deliverables
+      - name: Package unified matching vendor DLKM set
+        working-directory: source/android/kernel/msm-4.14
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          git fetch --no-tags --depth=1 origin "$GITHUB_SHA"
+          git show "$GITHUB_SHA:.github/scripts/exp3-vendor-dlkm-package.sh" > "$GITHUB_WORKSPACE/exp3-vendor-dlkm-package.sh"
+          chmod +x "$GITHUB_WORKSPACE/exp3-vendor-dlkm-package.sh"
+          "$GITHUB_WORKSPACE/exp3-vendor-dlkm-package.sh"
+
+      - name: Verify EXP3 real-device bug-sweep deliverables
         working-directory: source/android/kernel/msm-4.14
         shell: bash
         run: |
@@ -84,13 +96,21 @@ jobs:
           IMAGE="$OUT_DIR/arch/arm64/boot/Image"
           test -s "$IMAGE"
           test -s "$GITHUB_WORKSPACE/wlan-a16-exp1.ko"
+          test -s "$GITHUB_WORKSPACE/msm_11ad_proxy-exp3.ko"
           test -s "$GITHUB_WORKSPACE/PCHM30-EXP3-AUDIO-DLKM-KSU.zip"
+          test -s "$GITHUB_WORKSPACE/PCHM30-EXP3-MATCHING-VENDOR-DLKM-KSU.zip"
           test -s "$GITHUB_WORKSPACE/audio-exp3/module-layout.txt"
           test -s "$GITHUB_WORKSPACE/audio-exp3/audio-modules.txt"
+          test -s "$GITHUB_WORKSPACE/vendor-dlkm-exp3/real-device-bugs.txt"
+          test -s "$GITHUB_WORKSPACE/vendor-dlkm-exp3/vendor-overlay.sha256"
           grep -q '^CONFIG_MODVERSIONS=y$' "$OUT_DIR/.config"
           grep -q '^CONFIG_KSU=y$' "$OUT_DIR/.config"
           grep -q '^CONFIG_KSU_SUSFS=y$' "$OUT_DIR/.config"
           grep -q '^CONFIG_BPF_STREAM_PARSER=y$' "$OUT_DIR/.config"
+          grep -q '^CONFIG_MSM_11AD=m$' "$OUT_DIR/.config"
+          grep -q 'static int a16_unprivileged_bpf_handler' kernel/sysctl.c
+          grep -A10 'procname.*unprivileged_bpf_disabled' kernel/sysctl.c | grep -q 'extra1.*&zero'
+          grep -A10 'procname.*unprivileged_bpf_disabled' kernel/sysctl.c | grep -q 'extra2.*&two'
           grep -q 'snd_event_dlkm.ko' "$GITHUB_WORKSPACE/audio-exp3/audio-modules.txt"
           grep -q 'q6_pdr_dlkm.ko' "$GITHUB_WORKSPACE/audio-exp3/audio-modules.txt"
           grep -q 'wglink_dlkm.ko' "$GITHUB_WORKSPACE/audio-exp3/audio-modules.txt"
@@ -100,7 +120,9 @@ jobs:
           grep -q 'bolero_cdc_dlkm.ko' "$GITHUB_WORKSPACE/audio-exp3/audio-modules.txt"
           grep -q 'wsa_macro_dlkm.ko' "$GITHUB_WORKSPACE/audio-exp3/audio-modules.txt"
           grep -q 'rx_macro_dlkm.ko' "$GITHUB_WORKSPACE/audio-exp3/audio-modules.txt"
-          echo '[PASS] EXP3 Image + matching WLAN + full TRINKET audio package ready'
+          unzip -l "$GITHUB_WORKSPACE/PCHM30-EXP3-MATCHING-VENDOR-DLKM-KSU.zip" | grep -q 'system/vendor/lib/modules/wlan.ko'
+          unzip -l "$GITHUB_WORKSPACE/PCHM30-EXP3-MATCHING-VENDOR-DLKM-KSU.zip" | grep -q 'system/vendor/lib/modules/msm_11ad_proxy.ko'
+          echo '[PASS] EXP3 Image + BTF diagnostics + A16 sysctl fix + matching WLAN/11ad/full audio vendor replacement set ready'
 
       - name: Upload BTF EXP3 artifact
         if: always()
@@ -115,9 +137,16 @@ jobs:
             wlan-a16-exp1.sha256
             wlan-a16-exp1.modinfo.txt
             wlan-a16-exp1.undefined.txt
+            msm_11ad_proxy-exp3.ko
+            msm_11ad_proxy-exp3.sha256
+            msm_11ad_proxy-exp3.modinfo.txt
+            msm_11ad_proxy-exp3.undefined.txt
             audio-dlkm-build.log
             audio-exp3/**
             PCHM30-EXP3-AUDIO-DLKM-KSU.zip
+            vendor-dlkm-package.log
+            vendor-dlkm-exp3/**
+            PCHM30-EXP3-MATCHING-VENDOR-DLKM-KSU.zip
             Image-btf-exp3.sha256
             Module.symvers.a16-btf-exp3
             source/android/kernel/msm-4.14/out-pchm30-a16-bpf/.config

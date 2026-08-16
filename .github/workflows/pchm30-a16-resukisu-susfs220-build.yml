@@ -94,7 +94,7 @@ jobs:
                   run_index = i + 1
                   break
           if run_index is None:
-              raise SystemExit(f'A16 step is not a shell run step: {name}')
+              raise SystemExit(f'A16 step is not a multiline shell run step: {name}')
 
           script_lines = []
           for line in block[run_index:]:
@@ -124,8 +124,8 @@ jobs:
           set -Eeuo pipefail
           R="$GITHUB_WORKSPACE/run-a16-step.py"
           python3 "$R" 'Prepare runner for proven A15 shell steps'
-          python3 "$R" 'Prove baseline has no root framework'
-          python3 "$R" 'Rebuild the already-proven Android 15 BPF baseline'
+          python3 "$GITHUB_WORKSPACE/run-a15-step.py" 'Prove baseline has no root framework'
+          python3 "$GITHUB_WORKSPACE/run-a15-step.py" 'Apply article prerequisite and Android 15 BPF patch range'
           python3 "$R" 'Apply exact Android 16 donor delta on top of proven A15'
           python3 "$R" 'Reconstruct pinned OPPO vendor tree'
           python3 "$R" 'Audit OPPO external symlinks'
@@ -168,8 +168,6 @@ jobs:
             esac
           done < "$GITHUB_WORKSPACE/root-grep.txt"
 
-          # These build glue paths are part of the verified snapshot and are
-          # intentionally forced into the overlay even if grep wording changes.
           printf '%s\n' \
             drivers/Kconfig \
             drivers/Makefile \

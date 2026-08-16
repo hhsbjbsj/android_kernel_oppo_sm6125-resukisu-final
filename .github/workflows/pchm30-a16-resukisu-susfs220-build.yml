@@ -141,6 +141,16 @@ jobs:
           python3 "$R" 'Install host build dependencies'
           python3 "$R" 'Download and verify archived PCHM30 toolchains'
           python3 "$R" 'Resolve and validate toolchains'
+
+          # Nested shell runners do not receive values appended to GITHUB_ENV
+          # until this native Actions step exits. Import only the four simple
+          # toolchain paths needed by the next reused shell step.
+          for key in SDCLANG_DIR GCC64_DIR GCC32_DIR MPGEN_DIR; do
+            value="$(grep -E "^${key}=" "$GITHUB_ENV" | tail -n1 | cut -d= -f2-)"
+            test -n "$value"
+            export "$key=$value"
+            echo "[ENV] $key=$value"
+          done
           python3 "$R" 'Export proven PCHM30 build environment'
 
       - name: Layer verified ReSukiSU and SUSFS 2.2.0 hooks onto A16

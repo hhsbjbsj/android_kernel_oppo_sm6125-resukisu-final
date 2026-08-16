@@ -218,6 +218,9 @@ jobs:
             test "${UNMERGED[0]}" = kernel/sys.c
 
             echo '===== Resolve known A16/SUSFS kernel/sys.c uname overlap ====='
+            # Start from the exact A16 side, then add only the verified SUSFS
+            # semantic delta. This preserves the Android-16 bpfloader/netd
+            # release override instead of replacing it with the old snapshot.
             git show :2:kernel/sys.c > kernel/sys.c
             python3 - <<'PY'
           from pathlib import Path
@@ -263,14 +266,30 @@ jobs:
               insert_once(anchor, replacement, 'uname declarations')
 
           if 'susfs_spoof_uname(&tmp);' not in s:
+              sig = 'SYSCALL_DEFINE1(newuname, struct new_utsname __user *, name)\n'
+              start = s.find(sig)
+              if start < 0:
+                  raise SystemExit('newuname syscall signature not found')
+              end = s.find('\tup_read(&uts_sem);\n', start)
+              if end < 0:
+                  raise SystemExit('newuname uts_sem end not found')
+              region = s[start:end]
+              if 'strcpy(tmp.release, \"5.4.186\");' not in region:
+                  raise SystemExit('A16 bpfloader uname override not found in newuname')
               anchor = '\tmemcpy(&tmp, utsname(), sizeof(tmp));\n'
+              count = region.count(anchor)
+              if count != 1:
+                  raise SystemExit(
+                      f'uname spoof hook: expected one newuname memcpy anchor, found {count}'
+                  )
               replacement = anchor + (
                   '#ifdef CONFIG_KSU_SUSFS_SPOOF_UNAME\n'
                   '\tif (static_branch_likely(&susfs_is_uname_spoof_buffer_set))\n'
                   '\t\tsusfs_spoof_uname(&tmp);\n'
                   '#endif\n'
               )
-              insert_once(anchor, replacement, 'uname spoof hook')
+              region = region.replace(anchor, replacement, 1)
+              s = s[:start] + region + s[end:]
 
           required = [
               'ksu_handle_setresuid',
@@ -286,7 +305,7 @@ jobs:
           p.write_text(s)
           PY
             git add kernel/sys.c
-            echo '[PASS] merged SUSFS setresuid/uname hooks with A16 5.4.186 override'
+            echo '[PASS] merged SUSFS uname spoof with A16 5.4.186 bpfloader/netd override'
           fi
 
           git diff --cached --check
@@ -310,9 +329,8 @@ jobs:
           grep -Fq 'source "drivers/kernelsu/Kconfig"' drivers/Kconfig
           grep -Fq 'obj-$(CONFIG_KSU) += kernelsu/' drivers/Makefile
           grep -Fq 'obj-$(CONFIG_KSU_SUSFS) += susfs.o' fs/Makefile
-          grep -Fq 'ksu_handle_setresuid' kernel/sys.c
-          grep -Fq 'susfs_spoof_uname(&tmp);' kernel/sys.c
-          grep -Fq 'strcpy(tmp.release, "5.4.186");' kernel/sys.c
+          git grep -nE 'ksu_|susfs' -- fs kernel security include drivers \
+            | head -n 120 || true
 
           echo '===== Preserve A16 BPF endpoint after root overlay ====='
           test -f kernel/bpf/btf.c
@@ -320,6 +338,8 @@ jobs:
           test -f include/uapi/linux/btf.h
           grep -Fq 'BPF_FUNC_spin_lock' include/uapi/linux/bpf.h
           grep -Fq 'PTR_TO_SOCK_COMMON_OR_NULL' kernel/bpf/verifier.c
+          grep -Fq 'strcpy(tmp.release, "5.4.186");' kernel/sys.c
+          grep -Fq 'susfs_spoof_uname(&tmp);' kernel/sys.c
           echo '[PASS] verified ReSukiSU + SUSFS 2.2.0 overlay applied on the reproduced A16 source state'
 
       - name: Prepare A16 BPF + ReSukiSU + SUSFS config

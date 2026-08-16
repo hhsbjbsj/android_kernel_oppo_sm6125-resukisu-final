@@ -1,0 +1,242 @@
+name: PCHM30 A16 BTF EXP2 Diagnose
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [pchm30-a16-btf-exp2-diagnose]
+    paths:
+      - '.github/workflows/pchm30-a16-btf-exp2-diagnose.yml'
+
+permissions:
+  contents: read
+
+env:
+  TOOLCHAIN_RELEASE_TAG: pchm30-build-environment-20260810
+  TOOLCHAIN_ROOT: /opt/pchm30-toolchains
+  KERNEL_REL: source/android/kernel/msm-4.14
+  OUT_DIR: out-pchm30-a16-bpf
+  CONFIG_FILE: configs/PCHM30-stock-running.config
+  OPPO_VENDOR_REPO: https://github.com/oppo-source/android_kernel_modules_and_devicetree_oppo_sm6125.git
+  OPPO_VENDOR_COMMIT: 5e7bee452c72c948427b9131bec8cd5d92934f83
+  ARESIN_REPO: https://github.com/jsdizkcksv/android_kernel_aresin.git
+  ARESIN_PREREQ: 620d928acca50c8ba013554fc798dcf8b8910918
+  A15_FIRST: a2b662dced04902eb8f1778ec8e30259dc680ff4
+  A15_LAST: bd379f8140acc083fc386cc2600ee205b2a54e31
+  A16_FIRST: c2c621b5448adc69e105b1519b93dd637a581da5
+  A16_LAST: c74436291044381d4365d91afa0c8f4a574b22b4
+  ROOT_SNAPSHOT: b667ba359bf7da11b43c5d6403788d21c19facd7
+  RESUKISU_COMMIT: beaaea0eb895dc41e7b9bf5e3f39e57aa9635bab
+  ROOT_SUCCESS_BRANCH: pchm30-a16-resukisu-susfs220
+  ROOT_SUCCESS_WORKFLOW: .github/workflows/pchm30-a16-resukisu-susfs220-build.yml
+  EXP1_BRANCH: pchm30-a16-btf-sockmap-exp1
+  EXP1_WORKFLOW: .github/workflows/pchm30-a16-btf-sockmap-exp1-v2.yml
+  WIFI_SUCCESS_BRANCH: pchm30-a16-wifi-abi-exp1
+  WIFI_SUCCESS_WORKFLOW: .github/workflows/pchm30-a16-wifi-abi-exp1-build.yml
+  GH_TOKEN: ${{ github.token }}
+
+jobs:
+  build:
+    name: A16 BTF EXP2 - diagnostic kernel plus matching WLAN
+    runs-on: ubuntu-22.04
+    timeout-minutes: 180
+    steps:
+      - name: Checkout exact successful A16 rootless baseline
+        uses: actions/checkout@v4
+        with:
+          ref: pchm30-a16-bpf-only
+          path: source/android/kernel/msm-4.14
+          fetch-depth: 1
+          submodules: false
+
+      - name: Prepare successful WiFi step runner
+        working-directory: source/android/kernel/msm-4.14
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          git fetch --no-tags --depth=1 origin "$WIFI_SUCCESS_BRANCH"
+          git show "FETCH_HEAD:$WIFI_SUCCESS_WORKFLOW" > "$GITHUB_WORKSPACE/wifi-success.yml"
+          grep -Fq 'PCHM30 A16 WiFi ABI EXP1' "$GITHUB_WORKSPACE/wifi-success.yml"
+          cat > "$GITHUB_WORKSPACE/run-wifi-step.py" <<'PY'
+          import os, subprocess, sys
+          from pathlib import Path
+          if len(sys.argv) != 2:
+              raise SystemExit('usage: run-wifi-step.py <step name>')
+          name = sys.argv[1]
+          workspace = Path(os.environ['GITHUB_WORKSPACE'])
+          lines = (workspace / 'wifi-success.yml').read_text().splitlines(True)
+          marker = f'      - name: {name}\n'
+          try:
+              start = lines.index(marker)
+          except ValueError:
+              raise SystemExit(f'WiFi step not found: {name}')
+          end = len(lines)
+          for i in range(start + 1, len(lines)):
+              if lines[i].startswith('      - name: '):
+                  end = i
+                  break
+          block = lines[start:end]
+          workdir = None
+          run_index = None
+          inline_script = None
+          for i, line in enumerate(block):
+              if line.startswith('        working-directory: '):
+                  workdir = line.split(': ', 1)[1].strip()
+              if line.startswith('        run: '):
+                  value = line.split(': ', 1)[1].rstrip('\n')
+                  if value in ('|', '|-', '|+', '>', '>-', '>+'):
+                      run_index = i + 1
+                  else:
+                      inline_script = value
+                  break
+          if inline_script is None and run_index is None:
+              raise SystemExit(f'WiFi step is not a shell run step: {name}')
+          if inline_script is not None:
+              script = inline_script + '\n'
+          else:
+              script_lines = []
+              for line in block[run_index:]:
+                  if line.startswith('          '):
+                      script_lines.append(line[10:])
+                  elif line.strip() == '':
+                      script_lines.append('\n')
+                  else:
+                      raise SystemExit(f'unexpected indentation: {line!r}')
+              script = ''.join(script_lines)
+          cwd = workspace / workdir if workdir else workspace
+          print(f'===== REUSE WIFI STEP: {name} =====')
+          subprocess.run(['bash', '-c', 'set -Eeuo pipefail\n' + script], cwd=cwd,
+                         check=True, env=os.environ.copy())
+          PY
+          python3 -m py_compile "$GITHUB_WORKSPACE/run-wifi-step.py"
+
+      - name: Prepare successful EXP1 step runner
+        shell: bash
+        run: python3 "$GITHUB_WORKSPACE/run-wifi-step.py" 'Prepare successful EXP1 step runner'
+      - name: Prepare proven root step runner
+        shell: bash
+        run: python3 "$GITHUB_WORKSPACE/run-wifi-step.py" 'Prepare proven root step runner'
+      - name: Pin rootless baseline and prepare A16 step runner
+        shell: bash
+        run: python3 "$GITHUB_WORKSPACE/run-wifi-step.py" 'Pin rootless baseline and prepare A16 step runner'
+      - name: Reproduce exact successful A16 source state
+        shell: bash
+        run: python3 "$GITHUB_WORKSPACE/run-wifi-step.py" 'Reproduce exact successful A16 source state'
+      - name: Layer verified ReSukiSU SUSFS hooks
+        shell: bash
+        run: python3 "$GITHUB_WORKSPACE/run-wifi-step.py" 'Layer verified ReSukiSU SUSFS hooks'
+      - name: Patch netbpfload uname compatibility
+        shell: bash
+        run: python3 "$GITHUB_WORKSPACE/run-wifi-step.py" 'Patch netbpfload uname compatibility'
+      - name: Prepare proven A16 root config
+        shell: bash
+        run: python3 "$GITHUB_WORKSPACE/run-wifi-step.py" 'Prepare proven A16 root config'
+      - name: Enable BPF stream parser for sockmap sockhash
+        shell: bash
+        run: python3 "$GITHUB_WORKSPACE/run-wifi-step.py" 'Enable BPF stream parser for sockmap sockhash'
+      - name: Relax module signature enforcement for WiFi experiment only
+        shell: bash
+        run: python3 "$GITHUB_WORKSPACE/run-wifi-step.py" 'Relax module signature enforcement for WiFi experiment only'
+
+      - name: Instrument exact BTF rejection path
+        working-directory: source/android/kernel/msm-4.14
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('kernel/bpf/btf.c')
+          s = p.read_text()
+          old = '''\
+          \tif (BTF_INFO_KIND(t->info) > BTF_KIND_MAX ||
+          \t    BTF_INFO_KIND(t->info) == BTF_KIND_UNKN) {
+          \t\tbtf_verifier_log(env, "[%u] Invalid kind:%u",
+          \t\t\t\t env->log_type_id, BTF_INFO_KIND(t->info));
+          \t\treturn -EINVAL;
+          \t}
+          '''
+          old = ''.join(line[10:] if line.startswith('          ') else line for line in old.splitlines(True))
+          new = '''\
+          \tif (BTF_INFO_KIND(t->info) > BTF_KIND_MAX ||
+          \t    BTF_INFO_KIND(t->info) == BTF_KIND_UNKN) {
+          \t\tpr_err_ratelimited("A16-BTF-DIAG reject-meta type_id=%u kind=%u info=0x%x name_off=%u meta_left=%u max_kind=%u\\n",
+          \t\t\t\t   env->log_type_id, BTF_INFO_KIND(t->info),
+          \t\t\t\t   t->info, t->name_off, meta_left, BTF_KIND_MAX);
+          \t\tbtf_verifier_log(env, "[%u] Invalid kind:%u",
+          \t\t\t\t env->log_type_id, BTF_INFO_KIND(t->info));
+          \t\treturn -EINVAL;
+          \t}
+          '''
+          new = ''.join(line[10:] if line.startswith('          ') else line for line in new.splitlines(True))
+          if s.count(old) != 1:
+              raise SystemExit(f'expected one invalid-kind block, got {s.count(old)}')
+          s = s.replace(old, new, 1)
+          replacements = [
+              ("\terr = btf_parse_hdr(env);\n\tif (err)\n\t\tgoto errout;\n",
+               "\terr = btf_parse_hdr(env);\n\tif (err) {\n\t\tpr_err_ratelimited(\"A16-BTF-DIAG stage=header err=%d size=%u\\\\n\",\n\t\t\t\t   err, btf_data_size);\n\t\tgoto errout;\n\t}\n"),
+              ("\terr = btf_parse_str_sec(env);\n\tif (err)\n\t\tgoto errout;\n",
+               "\terr = btf_parse_str_sec(env);\n\tif (err) {\n\t\tpr_err_ratelimited(\"A16-BTF-DIAG stage=strings err=%d type_len=%u str_len=%u\\\\n\",\n\t\t\t\t   err, btf->hdr.type_len, btf->hdr.str_len);\n\t\tgoto errout;\n\t}\n"),
+              ("\terr = btf_parse_type_sec(env);\n\tif (err)\n\t\tgoto errout;\n",
+               "\terr = btf_parse_type_sec(env);\n\tif (err) {\n\t\tpr_err_ratelimited(\"A16-BTF-DIAG stage=types err=%d last_type_id=%u type_len=%u str_len=%u\\\\n\",\n\t\t\t\t   err, env->log_type_id, btf->hdr.type_len,\n\t\t\t\t   btf->hdr.str_len);\n\t\tgoto errout;\n\t}\n")
+          ]
+          for old2, new2 in replacements:
+              if s.count(old2) != 1:
+                  raise SystemExit(f'missing unique BTF parse stage block, count={s.count(old2)}')
+              s = s.replace(old2, new2, 1)
+          p.write_text(s)
+          PY
+          grep -n 'A16-BTF-DIAG' kernel/bpf/btf.c | tee "$GITHUB_WORKSPACE/btf-exp2-source.txt"
+          git diff --check
+          test "$(grep -c 'A16-BTF-DIAG' kernel/bpf/btf.c)" -eq 4
+
+      - name: Build BTF EXP2 kernel
+        shell: bash
+        run: python3 "$GITHUB_WORKSPACE/run-wifi-step.py" 'Build WiFi EXP1 kernel'
+      - name: Build matching OPPO qcacld wlan module
+        shell: bash
+        run: python3 "$GITHUB_WORKSPACE/run-wifi-step.py" 'Build matching OPPO qcacld wlan module'
+
+      - name: Verify BTF EXP2 outputs
+        working-directory: source/android/kernel/msm-4.14
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          IMAGE="$OUT_DIR/arch/arm64/boot/Image"
+          VMLINUX="$OUT_DIR/vmlinux"
+          test -s "$IMAGE"
+          test -s "$VMLINUX"
+          test -s "$GITHUB_WORKSPACE/wlan-a16-exp1.ko"
+          grep -q '^CONFIG_BPF_STREAM_PARSER=y$' "$OUT_DIR/.config"
+          grep -q '^CONFIG_STREAM_PARSER=y$' "$OUT_DIR/.config"
+          grep -q '^CONFIG_NET_SOCK_MSG=y$' "$OUT_DIR/.config"
+          grep -q '^CONFIG_KSU=y$' "$OUT_DIR/.config"
+          grep -q '^CONFIG_KSU_SUSFS=y$' "$OUT_DIR/.config"
+          grep -q '^# CONFIG_MODULE_SIG_FORCE is not set$' "$OUT_DIR/.config"
+          grep -q '^CONFIG_MODVERSIONS=y$' "$OUT_DIR/.config"
+          nm "$VMLINUX" | grep -q ' sock_map_ops$'
+          nm "$VMLINUX" | grep -q ' sock_hash_ops$'
+          strings -a "$IMAGE" | grep -Fq 'A16-BPF compat uname:'
+          strings -a "$IMAGE" | grep -F 'A16-BTF-DIAG' | tee "$GITHUB_WORKSPACE/btf-exp2-image-strings.txt"
+          test "$(wc -l < "$GITHUB_WORKSPACE/btf-exp2-image-strings.txt")" -ge 4
+          sha256sum "$IMAGE" | tee "$GITHUB_WORKSPACE/Image-btf-exp2.sha256"
+          cp -a "$OUT_DIR/Module.symvers" "$GITHUB_WORKSPACE/Module.symvers.a16-btf-exp2"
+          echo '[PASS] EXP2 keeps WiFi/sockmap/root fixes and embeds BTF rejection diagnostics'
+
+      - name: Upload BTF EXP2 artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: PCHM30-A16-BTF-EXP2-DIAG-${{ github.run_number }}
+          path: |
+            btf-exp2-source.txt
+            btf-exp2-image-strings.txt
+            wifi-module-build.log
+            wlan-a16-exp1.ko
+            wlan-a16-exp1.sha256
+            wlan-a16-exp1.modinfo.txt
+            wlan-a16-exp1.undefined.txt
+            Image-btf-exp2.sha256
+            Module.symvers.a16-btf-exp2
+            source/android/kernel/msm-4.14/out-pchm30-a16-bpf/.config
+            source/android/kernel/msm-4.14/out-pchm30-a16-bpf/arch/arm64/boot/Image
+          include-hidden-files: true
+          if-no-files-found: warn

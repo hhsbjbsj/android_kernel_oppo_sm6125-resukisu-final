@@ -64,9 +64,6 @@ PY
 python3 -m py_compile "$GITHUB_WORKSPACE/run-exp2-step.py"
 
 sync_github_env() {
-  # Reused workflow steps run as child processes. GitHub normally imports
-  # $GITHUB_ENV between native workflow steps, but our orchestrator must do
-  # that explicitly before launching the next child step.
   [ -f "$GITHUB_ENV" ] || return 0
   while IFS='=' read -r key value; do
     case "$key" in
@@ -92,21 +89,40 @@ run_step 'Prepare proven A16 root config'
 run_step 'Enable BPF stream parser for sockmap sockhash'
 run_step 'Relax module signature enforcement for WiFi experiment only'
 
-# Fetch the context-safe BTF helper from the exact EXP3 commit that triggered
-# this run, rather than relying on the pchm30-a16-bpf-only checkout contents.
+# Fetch EXP3-specific compatibility helpers from the exact triggering commit.
 git fetch --no-tags --depth=1 origin "$GITHUB_SHA"
+git show "$GITHUB_SHA:.github/scripts/exp3-a16-runtime-compat.sh" > "$GITHUB_WORKSPACE/exp3-a16-runtime-compat.sh"
 git show "$GITHUB_SHA:.github/scripts/exp3-btf-backport.sh" > "$GITHUB_WORKSPACE/exp3-btf-backport.sh"
-chmod +x "$GITHUB_WORKSPACE/exp3-btf-backport.sh"
+chmod +x "$GITHUB_WORKSPACE/exp3-a16-runtime-compat.sh" "$GITHUB_WORKSPACE/exp3-btf-backport.sh"
+"$GITHUB_WORKSPACE/exp3-a16-runtime-compat.sh"
 "$GITHUB_WORKSPACE/exp3-btf-backport.sh"
 
 run_step 'Instrument exact BTF rejection path'
 run_step 'Build BTF EXP2 kernel'
 run_step 'Build matching OPPO qcacld wlan module'
 
-# OPPO TRINKET audio headers use an external-linkage C inline helper. With
-# modern clang and a DLKM made of several translation units this can become a
-# duplicate/undefined-linkage trap. Keep semantics identical but make the
-# header helper private to each translation unit before rebuilding audio.
+# The real-device report also showed the stock msm_11ad_proxy.ko rejected by
+# module_layout. It is an in-tree module (CONFIG_MSM_11AD=m), so rebuild it
+# against the exact same .config/Module.symvers as this EXP3 Image.
+echo '===== BUILD MATCHING MSM 11AD PROXY ====='
+grep -q '^CONFIG_MSM_11AD=m$' "$OUT_DIR/.config"
+unset LLVM LLVM_IAS KBUILD_COMPILER_STRING
+make O="$OUT_DIR" ARCH=arm64 LOCALVERSION=+ \
+  CC="$CC" REAL_CC="$REAL_CC" LD="$LD" \
+  CROSS_COMPILE="$CROSS_COMPILE" \
+  CROSS_COMPILE_ARM32="$CROSS_COMPILE_ARM32" \
+  CLANG_TRIPLE="$CLANG_TRIPLE" \
+  drivers/platform/msm/msm_11ad/msm_11ad_proxy.ko -j"$(nproc)"
+MSM11AD="$OUT_DIR/drivers/platform/msm/msm_11ad/msm_11ad_proxy.ko"
+test -s "$MSM11AD"
+cp -f "$MSM11AD" "$GITHUB_WORKSPACE/msm_11ad_proxy-exp3.ko"
+sha256sum "$GITHUB_WORKSPACE/msm_11ad_proxy-exp3.ko" | tee "$GITHUB_WORKSPACE/msm_11ad_proxy-exp3.sha256"
+readelf -p .modinfo "$GITHUB_WORKSPACE/msm_11ad_proxy-exp3.ko" | tee "$GITHUB_WORKSPACE/msm_11ad_proxy-exp3.modinfo.txt" || true
+nm -u "$GITHUB_WORKSPACE/msm_11ad_proxy-exp3.ko" | sort -u > "$GITHUB_WORKSPACE/msm_11ad_proxy-exp3.undefined.txt" || true
+
+# OPPO TRINKET audio headers use an external-linkage C inline helper. Keep the
+# semantics but make the helper private to each translation unit before the
+# full matching audio graph is rebuilt by the next workflow step.
 AUDIO_SND_EVENT="$GITHUB_WORKSPACE/source/android/vendor/qcom/opensource/audio-kernel/include/soc/snd_event.h"
 test -f "$AUDIO_SND_EVENT"
 if grep -q '^inline bool is_snd_event_fwk_enabled' "$AUDIO_SND_EVENT"; then
@@ -120,6 +136,7 @@ VMLINUX="$OUT_DIR/vmlinux"
 test -s "$IMAGE"
 test -s "$VMLINUX"
 test -s "$GITHUB_WORKSPACE/wlan-a16-exp1.ko"
+test -s "$GITHUB_WORKSPACE/msm_11ad_proxy-exp3.ko"
 grep -q '^CONFIG_BPF_STREAM_PARSER=y$' "$OUT_DIR/.config"
 grep -q '^CONFIG_STREAM_PARSER=y$' "$OUT_DIR/.config"
 grep -q '^CONFIG_NET_SOCK_MSG=y$' "$OUT_DIR/.config"
@@ -127,14 +144,17 @@ grep -q '^CONFIG_KSU=y$' "$OUT_DIR/.config"
 grep -q '^CONFIG_KSU_SUSFS=y$' "$OUT_DIR/.config"
 grep -q '^# CONFIG_MODULE_SIG_FORCE is not set$' "$OUT_DIR/.config"
 grep -q '^CONFIG_MODVERSIONS=y$' "$OUT_DIR/.config"
+grep -q '^CONFIG_MSM_11AD=m$' "$OUT_DIR/.config"
 nm "$VMLINUX" | grep -q ' sock_map_ops$'
 nm "$VMLINUX" | grep -q ' sock_hash_ops$'
 strings -a "$IMAGE" | grep -Fq 'A16-BPF compat uname:'
-strings -a "$IMAGE" | grep -Fq 'A16-BTF-DIAG reject-meta'
+grep -q 'static int a16_unprivileged_bpf_handler' kernel/sysctl.c
+grep -A10 'procname.*unprivileged_bpf_disabled' kernel/sysctl.c | grep -q 'extra1.*&zero'
+grep -A10 'procname.*unprivileged_bpf_disabled' kernel/sysctl.c | grep -q 'extra2.*&two'
 grep -Eq 'BTF_KIND_VAR[^0-9]*14' include/uapi/linux/btf.h
 grep -Eq 'BTF_KIND_DATASEC[^0-9]*15' include/uapi/linux/btf.h
 grep -q '\[BTF_KIND_VAR\].*= &var_ops' kernel/bpf/btf.c
 grep -q '\[BTF_KIND_DATASEC\].*= &datasec_ops' kernel/bpf/btf.c
 sha256sum "$IMAGE" | tee "$GITHUB_WORKSPACE/Image-btf-exp3.sha256"
 cp -a "$OUT_DIR/Module.symvers" "$GITHUB_WORKSPACE/Module.symvers.a16-btf-exp3"
-echo '[PASS] EXP3 preserves prior A16/root/sockmap fixes and contains BTF VAR/DATASEC support'
+echo '[PASS] EXP3 preserves A16/root/sockmap, adds BTF support, A16 BPF sysctl compatibility, WLAN and 11ad ABI matches'

@@ -1,0 +1,310 @@
+name: PCHM30 A16 + ReSukiSU + SUSFS 2.2 Build
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [pchm30-a16-resukisu-susfs220]
+    paths:
+      - '.github/workflows/pchm30-a16-resukisu-susfs220-build.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pchm30-a16-resukisu-susfs220-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  TOOLCHAIN_RELEASE_TAG: pchm30-build-environment-20260810
+  TOOLCHAIN_ROOT: /opt/pchm30-toolchains
+  KERNEL_REL: source/android/kernel/msm-4.14
+  OUT_DIR: out-pchm30-a16-bpf
+  CONFIG_FILE: configs/PCHM30-stock-running.config
+
+  OPPO_VENDOR_REPO: https://github.com/oppo-source/android_kernel_modules_and_devicetree_oppo_sm6125.git
+  OPPO_VENDOR_COMMIT: 5e7bee452c72c948427b9131bec8cd5d92934f83
+
+  ARESIN_REPO: https://github.com/jsdizkcksv/android_kernel_aresin.git
+  ARESIN_PREREQ: 620d928acca50c8ba013554fc798dcf8b8910918
+  A15_FIRST: a2b662dced04902eb8f1778ec8e30259dc680ff4
+  A15_LAST: bd379f8140acc083fc386cc2600ee205b2a54e31
+  A16_FIRST: c2c621b5448adc69e105b1519b93dd637a581da5
+  A16_LAST: c74436291044381d4365d91afa0c8f4a574b22b4
+
+  ROOT_SNAPSHOT: b667ba359bf7da11b43c5d6403788d21c19facd7
+  RESUKISU_COMMIT: beaaea0eb895dc41e7b9bf5e3f39e57aa9635bab
+  GH_TOKEN: ${{ github.token }}
+
+jobs:
+  build:
+    name: Proven A16 BPF + verified ReSukiSU/SUSFS 2.2
+    runs-on: ubuntu-22.04
+    timeout-minutes: 180
+
+    steps:
+      - name: Checkout exact successful A16 rootless baseline
+        uses: actions/checkout@v4
+        with:
+          ref: pchm30-a16-bpf-only
+          path: source/android/kernel/msm-4.14
+          fetch-depth: 1
+          submodules: false
+
+      - name: Pin rootless baseline and prepare A16 step runner
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          REPO="$GITHUB_WORKSPACE/$KERNEL_REL"
+          echo "ROOTLESS_BASE_SHA=$(git -C "$REPO" rev-parse HEAD)" >> "$GITHUB_ENV"
+          git -C "$REPO" log -1 --oneline
+
+          cat > "$GITHUB_WORKSPACE/run-a16-step.py" <<'PY'
+          import os
+          import subprocess
+          import sys
+          from pathlib import Path
+
+          if len(sys.argv) != 2:
+              raise SystemExit('usage: run-a16-step.py <step name>')
+
+          name = sys.argv[1]
+          workspace = Path(os.environ['GITHUB_WORKSPACE'])
+          repo = workspace / os.environ['KERNEL_REL']
+          workflow = repo / '.github/workflows/pchm30-a16-bpf-only-build.yml'
+          lines = workflow.read_text().splitlines(True)
+          marker = f'      - name: {name}\n'
+          try:
+              start = lines.index(marker)
+          except ValueError:
+              raise SystemExit(f'A16 workflow step not found: {name}')
+
+          end = len(lines)
+          for i in range(start + 1, len(lines)):
+              if lines[i].startswith('      - name: '):
+                  end = i
+                  break
+          block = lines[start:end]
+
+          workdir = None
+          run_index = None
+          for i, line in enumerate(block):
+              if line.startswith('        working-directory: '):
+                  workdir = line.split(': ', 1)[1].strip()
+              if line == '        run: |\n':
+                  run_index = i + 1
+                  break
+          if run_index is None:
+              raise SystemExit(f'A16 step is not a shell run step: {name}')
+
+          script_lines = []
+          for line in block[run_index:]:
+              if line.startswith('          '):
+                  script_lines.append(line[10:])
+              elif line.strip() == '':
+                  script_lines.append('\n')
+              else:
+                  raise SystemExit(f'unexpected indentation while extracting {name}: {line!r}')
+
+          cwd = workspace / workdir if workdir else workspace
+          script = ''.join(script_lines)
+          print(f'===== REUSE PROVEN A16 STEP: {name} =====')
+          print(f'cwd={cwd}')
+          subprocess.run(
+              ['bash', '-c', 'set -Eeuo pipefail\n' + script],
+              cwd=cwd,
+              check=True,
+              env=os.environ.copy(),
+          )
+          PY
+          python3 -m py_compile "$GITHUB_WORKSPACE/run-a16-step.py"
+
+      - name: Reproduce the exact successful A16 BPF source state
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          R="$GITHUB_WORKSPACE/run-a16-step.py"
+          python3 "$R" 'Prepare runner for proven A15 shell steps'
+          python3 "$R" 'Prove baseline has no root framework'
+          python3 "$R" 'Rebuild the already-proven Android 15 BPF baseline'
+          python3 "$R" 'Apply exact Android 16 donor delta on top of proven A15'
+          python3 "$R" 'Reconstruct pinned OPPO vendor tree'
+          python3 "$R" 'Audit OPPO external symlinks'
+          python3 "$R" 'Install host build dependencies'
+          python3 "$R" 'Download and verify archived PCHM30 toolchains'
+          python3 "$R" 'Resolve and validate toolchains'
+          python3 "$R" 'Export proven PCHM30 build environment'
+
+      - name: Layer verified ReSukiSU and SUSFS 2.2.0 hooks onto A16
+        working-directory: source/android/kernel/msm-4.14
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          exec > >(tee -a "$GITHUB_WORKSPACE/root-apply.log") 2>&1
+
+          echo '===== Pin previously real-device-verified root snapshot ====='
+          echo "rootless base: $ROOTLESS_BASE_SHA"
+          echo "root snapshot: $ROOT_SNAPSHOT"
+          echo "ReSukiSU pin:  $RESUKISU_COMMIT"
+          git fetch --no-tags origin "$ROOT_SNAPSHOT"
+          git cat-file -e "$ROOTLESS_BASE_SHA^{commit}"
+          git cat-file -e "$ROOT_SNAPSHOT^{commit}"
+
+          echo '===== Discover only KSU/SUSFS-bearing kernel hook files ====='
+          : > "$GITHUB_WORKSPACE/root-hook-files.raw"
+          git grep -Il -E 'KernelSU|ReSukiSU|SUSFS|susfs|ksu_|CONFIG_KSU|kernelsu' "$ROOT_SNAPSHOT" -- . \
+            > "$GITHUB_WORKSPACE/root-grep.txt" || true
+
+          while IFS= read -r entry; do
+            path="${entry#*:}"
+            case "$path" in
+              KernelSU/*|configs/*|.github/*|Documentation/*|*.md|README*|.gitmodules)
+                continue
+                ;;
+            esac
+            case "$path" in
+              *.c|*.h|Kconfig|*/Kconfig|*/Kconfig.*|Makefile|*/Makefile|drivers/kernelsu)
+                printf '%s\n' "$path" >> "$GITHUB_WORKSPACE/root-hook-files.raw"
+                ;;
+            esac
+          done < "$GITHUB_WORKSPACE/root-grep.txt"
+
+          # These build glue paths are part of the verified snapshot and are
+          # intentionally forced into the overlay even if grep wording changes.
+          printf '%s\n' \
+            drivers/Kconfig \
+            drivers/Makefile \
+            drivers/kernelsu \
+            fs/Makefile \
+            >> "$GITHUB_WORKSPACE/root-hook-files.raw"
+
+          sort -u "$GITHUB_WORKSPACE/root-hook-files.raw" > "$GITHUB_WORKSPACE/root-hook-files.txt"
+          echo '===== Root overlay paths ====='
+          cat "$GITHUB_WORKSPACE/root-hook-files.txt"
+          COUNT="$(wc -l < "$GITHUB_WORKSPACE/root-hook-files.txt")"
+          echo "root overlay path count: $COUNT"
+          test "$COUNT" -ge 8
+          test "$COUNT" -le 80
+
+          mapfile -t ROOT_FILES < "$GITHUB_WORKSPACE/root-hook-files.txt"
+          git diff --full-index --binary "$ROOTLESS_BASE_SHA" "$ROOT_SNAPSHOT" -- "${ROOT_FILES[@]}" \
+            > "$GITHUB_WORKSPACE/resukisu-susfs220.patch"
+          grep '^diff --git ' "$GITHUB_WORKSPACE/resukisu-susfs220.patch"
+          git apply --3way --index "$GITHUB_WORKSPACE/resukisu-susfs220.patch"
+          git diff --cached --check
+          ! git diff --name-only --diff-filter=U | grep .
+
+          echo '===== Restore the exact ReSukiSU revision used by the verified snapshot ====='
+          rm -rf KernelSU
+          git clone -q https://github.com/ReSukiSU/ReSukiSU.git KernelSU
+          git -C KernelSU checkout -q --detach "$RESUKISU_COMMIT"
+          test "$(git -C KernelSU rev-parse HEAD)" = "$RESUKISU_COMMIT"
+          rm -rf KernelSU/.git
+
+          echo '===== Root/SUSFS structural audit ====='
+          test -L drivers/kernelsu
+          test "$(readlink drivers/kernelsu)" = '../KernelSU/kernel'
+          test -f KernelSU/kernel/Kconfig
+          test -f KernelSU/kernel/Makefile
+          test -f fs/susfs.c
+          test -f include/linux/susfs.h
+          grep -Fq '#define SUSFS_VERSION "v2.2.0"' include/linux/susfs.h
+          grep -Fq 'source "drivers/kernelsu/Kconfig"' drivers/Kconfig
+          grep -Fq 'obj-$(CONFIG_KSU) += kernelsu/' drivers/Makefile
+          grep -Fq 'obj-$(CONFIG_KSU_SUSFS) += susfs.o' fs/Makefile
+          git grep -nE 'ksu_|susfs' -- fs kernel security include drivers \
+            | head -n 120 || true
+
+          echo '===== Preserve A16 BPF endpoint after root overlay ====='
+          test -f kernel/bpf/btf.c
+          test -f include/linux/btf.h
+          test -f include/uapi/linux/btf.h
+          grep -Fq 'BPF_FUNC_spin_lock' include/uapi/linux/bpf.h
+          grep -Fq 'PTR_TO_SOCK_COMMON_OR_NULL' kernel/bpf/verifier.c
+          echo '[PASS] verified ReSukiSU + SUSFS 2.2.0 overlay applied on the reproduced A16 source state'
+
+      - name: Prepare A16 BPF + ReSukiSU + SUSFS config
+        working-directory: source/android/kernel/msm-4.14
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          rm -rf "$OUT_DIR"
+          mkdir -p "$OUT_DIR"
+          cp "$CONFIG_FILE" "$OUT_DIR/.config"
+
+          cat >> "$OUT_DIR/.config" <<'EOF'
+          CONFIG_KSU=y
+          # CONFIG_KSU_MANUAL_HOOK is not set
+          # CONFIG_KSU_TRACEPOINT_HOOK is not set
+          CONFIG_KSU_SUSFS=y
+          CONFIG_KSU_MULTI_MANAGER_SUPPORT=y
+          # CONFIG_KSU_MANUAL_HOOK_AUTO_SETUID_HOOK is not set
+          # CONFIG_KSU_MANUAL_HOOK_AUTO_INITRC_HOOK is not set
+          # CONFIG_KSU_MANUAL_HOOK_AUTO_INPUT_HOOK is not set
+          CONFIG_KSU_SUSFS_SUS_PATH=y
+          CONFIG_KSU_SUSFS_SUS_MOUNT=y
+          CONFIG_KSU_SUSFS_SUS_KSTAT=y
+          CONFIG_KSU_SUSFS_SPOOF_UNAME=y
+          CONFIG_KSU_SUSFS_ENABLE_LOG=y
+          CONFIG_KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS=y
+          CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG=y
+          CONFIG_KSU_SUSFS_OPEN_REDIRECT=y
+          CONFIG_KSU_SUSFS_SUS_MAP=y
+          EOF
+
+          unset LLVM LLVM_IAS KBUILD_COMPILER_STRING
+          make O="$OUT_DIR" ARCH=arm64 LOCALVERSION=+ \
+            CC="$CC" REAL_CC="$REAL_CC" LD="$LD" \
+            CROSS_COMPILE="$CROSS_COMPILE" \
+            CROSS_COMPILE_ARM32="$CROSS_COMPILE_ARM32" \
+            CLANG_TRIPLE="$CLANG_TRIPLE" olddefconfig
+
+          echo '===== final A16 + root config ====='
+          grep -E '^CONFIG_(BPF|BPF_SYSCALL|BPF_JIT|BPF_JIT_ALWAYS_ON|CGROUP_BPF|BPF_EVENTS|KSU)' "$OUT_DIR/.config" || true
+          grep -q '^CONFIG_BPF=y$' "$OUT_DIR/.config"
+          grep -q '^CONFIG_BPF_SYSCALL=y$' "$OUT_DIR/.config"
+          grep -q '^CONFIG_BPF_JIT_ALWAYS_ON=y$' "$OUT_DIR/.config"
+          grep -q '^CONFIG_CGROUP_BPF=y$' "$OUT_DIR/.config"
+          grep -q '^CONFIG_KSU=y$' "$OUT_DIR/.config"
+          grep -q '^CONFIG_KSU_SUSFS=y$' "$OUT_DIR/.config"
+          grep -q '^CONFIG_KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS=y$' "$OUT_DIR/.config"
+          grep -q '^CONFIG_KSU_SUSFS_SUS_MAP=y$' "$OUT_DIR/.config"
+
+      - name: Build A16 BPF + ReSukiSU + SUSFS kernel
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python3 "$GITHUB_WORKSPACE/run-a15-step.py" 'Build rootless A15-BPF kernel'
+
+      - name: Verify A16 root kernel output
+        if: success()
+        working-directory: source/android/kernel/msm-4.14
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          test -s "$OUT_DIR/arch/arm64/boot/Image"
+          file "$OUT_DIR/arch/arm64/boot/Image"
+          sha256sum "$OUT_DIR/arch/arm64/boot/Image" | tee "$GITHUB_WORKSPACE/Image.sha256"
+          grep -q '^CONFIG_KSU=y$' "$OUT_DIR/.config"
+          grep -q '^CONFIG_KSU_SUSFS=y$' "$OUT_DIR/.config"
+          grep -Fq '#define SUSFS_VERSION "v2.2.0"' include/linux/susfs.h
+          echo '[PASS] A16 BPF + ReSukiSU + SUSFS 2.2.0 kernel compiled successfully'
+
+      - name: Upload A16 ReSukiSU SUSFS diagnostics and Image
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: PCHM30-A16-ReSukiSU-SUSFS220-${{ github.run_number }}
+          path: |
+            bpf-apply.log
+            a15-bpf-commit-list.txt
+            a16-bpf-commit-list.txt
+            root-apply.log
+            root-grep.txt
+            root-hook-files.txt
+            resukisu-susfs220.patch
+            build.log
+            Image.sha256
+            source/android/kernel/msm-4.14/out-pchm30-a16-bpf/.config
+            source/android/kernel/msm-4.14/out-pchm30-a16-bpf/arch/arm64/boot/Image
+          include-hidden-files: true
+          if-no-files-found: warn

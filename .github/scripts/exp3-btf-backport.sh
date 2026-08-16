@@ -80,9 +80,48 @@ else
   fi
 fi
 
+# EXP3 Run4 proved that kinds 14/15 are now recognized, but btf_parse_type_sec
+# still returns -EINVAL deeper in the verifier. Do not relax semantics here.
+# Instead, pinpoint whether the rejection is in metadata validation or the
+# resolve/type pass, and print the exact type/kind that failed to dmesg.
+python3 - <<'PY'
+from pathlib import Path
+p = Path('kernel/bpf/btf.c')
+s = p.read_text()
+
+meta_old = '''\
+\t\tmeta_size = btf_check_meta(env, t, end - cur);\n\t\tif (meta_size < 0)\n\t\t\treturn meta_size;\n'''
+meta_new = '''\
+\t\tmeta_size = btf_check_meta(env, t, end - cur);\n\t\tif (meta_size < 0) {\n\t\t\tpr_err_ratelimited("A16-BTF-EXP3 meta-fail type_id=%u kind=%u info=0x%x name_off=%u size_type=%u meta_left=%u err=%d\\n",\n\t\t\t\t\t   env->log_type_id, BTF_INFO_KIND(t->info),\n\t\t\t\t\t   t->info, t->name_off, t->type,\n\t\t\t\t\t   (u32)(end - cur), meta_size);\n\t\t\treturn meta_size;\n\t\t}\n'''
+if s.count(meta_old) != 1:
+    raise SystemExit(f'expected one btf_check_all_metas failure block, got {s.count(meta_old)}')
+s = s.replace(meta_old, meta_new, 1)
+
+resolve_old = '''\
+\t\tif (btf_type_needs_resolve(t) &&\n\t\t    !env_type_is_resolved(env, type_id)) {\n\t\t\terr = btf_resolve(env, t, type_id);\n\t\t\tif (err)\n\t\t\t\treturn err;\n\t\t}\n'''
+resolve_new = '''\
+\t\tif (btf_type_needs_resolve(t) &&\n\t\t    !env_type_is_resolved(env, type_id)) {\n\t\t\terr = btf_resolve(env, t, type_id);\n\t\t\tif (err) {\n\t\t\t\tpr_err_ratelimited("A16-BTF-EXP3 resolve-fail type_id=%u kind=%u info=0x%x name_off=%u size_type=%u err=%d\\n",\n\t\t\t\t\t\t   type_id, BTF_INFO_KIND(t->info), t->info,\n\t\t\t\t\t\t   t->name_off, t->type, err);\n\t\t\t\treturn err;\n\t\t\t}\n\t\t}\n'''
+if s.count(resolve_old) != 1:
+    raise SystemExit(f'expected one top-level btf_resolve failure block, got {s.count(resolve_old)}')
+s = s.replace(resolve_old, resolve_new, 1)
+
+parse_old = '''\
+\terr = btf_check_all_metas(env);\n\tif (err)\n\t\treturn err;\n\n\treturn btf_check_all_types(env);\n'''
+parse_new = '''\
+\terr = btf_check_all_metas(env);\n\tif (err) {\n\t\tpr_err_ratelimited("A16-BTF-EXP3 meta-pass-fail last_type_id=%u err=%d\\n",\n\t\t\t\t   env->log_type_id, err);\n\t\treturn err;\n\t}\n\n\terr = btf_check_all_types(env);\n\tif (err) {\n\t\tconst struct btf_type *bad = btf_type_by_id(env->btf, env->log_type_id);\n\n\t\tpr_err_ratelimited("A16-BTF-EXP3 type-pass-fail last_type_id=%u kind=%u info=0x%x name_off=%u size_type=%u err=%d\\n",\n\t\t\t\t   env->log_type_id, bad ? BTF_INFO_KIND(bad->info) : 0,\n\t\t\t\t   bad ? bad->info : 0, bad ? bad->name_off : 0,\n\t\t\t\t   bad ? bad->type : 0, err);\n\t}\n\treturn err;\n'''
+if s.count(parse_old) != 1:
+    raise SystemExit(f'expected one btf_parse_type_sec pass block, got {s.count(parse_old)}')
+s = s.replace(parse_old, parse_new, 1)
+
+p.write_text(s)
+PY
+
 grep -q 'static int btf_var_resolve' kernel/bpf/btf.c
 grep -q 'static int btf_datasec_resolve' kernel/bpf/btf.c
 grep -q '\[BTF_KIND_VAR\].*= &var_ops' kernel/bpf/btf.c
 grep -q '\[BTF_KIND_DATASEC\].*= &datasec_ops' kernel/bpf/btf.c
+grep -q 'A16-BTF-EXP3 meta-fail' kernel/bpf/btf.c
+grep -q 'A16-BTF-EXP3 resolve-fail' kernel/bpf/btf.c
+grep -q 'A16-BTF-EXP3 type-pass-fail' kernel/bpf/btf.c
 git diff --check
-echo '[PASS] BTF VAR/DATASEC UAPI + kernel verifier support applied cleanly'
+echo '[PASS] BTF VAR/DATASEC support retained; precise EXP3 verifier diagnostics added'

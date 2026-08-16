@@ -142,9 +142,6 @@ jobs:
           python3 "$R" 'Download and verify archived PCHM30 toolchains'
           python3 "$R" 'Resolve and validate toolchains'
 
-          # Nested shell runners do not receive values appended to GITHUB_ENV
-          # until this native Actions step exits. Import only the four simple
-          # toolchain paths needed by the next reused shell step.
           for key in SDCLANG_DIR GCC64_DIR GCC32_DIR MPGEN_DIR; do
             value="$(grep -E "^${key}=" "$GITHUB_ENV" | tail -n1 | cut -d= -f2-)"
             test -n "$value"
@@ -206,9 +203,93 @@ jobs:
           git diff --full-index --binary "$ROOTLESS_BASE_SHA" "$ROOT_SNAPSHOT" -- "${ROOT_FILES[@]}" \
             > "$GITHUB_WORKSPACE/resukisu-susfs220.patch"
           grep '^diff --git ' "$GITHUB_WORKSPACE/resukisu-susfs220.patch"
-          git apply --3way --index "$GITHUB_WORKSPACE/resukisu-susfs220.patch"
+
+          if ! git apply --3way --index "$GITHUB_WORKSPACE/resukisu-susfs220.patch"; then
+            echo '===== Three-way conflict audit ====='
+            mapfile -t CONFLICTS < <(git diff --name-only --diff-filter=U)
+            printf 'conflict: %s\n' "${CONFLICTS[@]}"
+            test "${#CONFLICTS[@]}" -eq 1
+            test "${CONFLICTS[0]}" = 'kernel/sys.c'
+
+            echo '===== Resolve kernel/sys.c: SUSFS spoof first, A16 BPF release override last ====='
+            git checkout --ours -- kernel/sys.c
+            python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('kernel/sys.c')
+          text = path.read_text()
+          signature = 'SYSCALL_DEFINE1(newuname, struct new_utsname __user *, name)'
+          pos = text.find(signature)
+          if pos < 0:
+              raise SystemExit('newuname syscall signature not found')
+
+          extern_block = '''#ifdef CONFIG_KSU_SUSFS_SPOOF_UNAME
+          extern struct static_key_false susfs_is_uname_spoof_buffer_set;
+          extern void susfs_spoof_uname(struct new_utsname* tmp);
+          #endif
+          '''
+          prefix = text[max(0, pos - 500):pos]
+          if 'susfs_is_uname_spoof_buffer_set' not in prefix:
+              text = text[:pos] + extern_block + text[pos:]
+              pos = text.find(signature)
+
+          end_marker = '\n#ifdef __ARCH_WANT_SYS_OLD_UNAME'
+          end = text.find(end_marker, pos)
+          if end < 0:
+              raise SystemExit('end of newuname section not found')
+          section = text[pos:end]
+
+          if 'susfs_spoof_uname(&tmp);' not in section:
+              memcpy_line = '\tmemcpy(&tmp, utsname(), sizeof(tmp));\n'
+              at = section.find(memcpy_line)
+              if at < 0:
+                  raise SystemExit('newuname memcpy anchor not found')
+              at += len(memcpy_line)
+              susfs_block = '''#ifdef CONFIG_KSU_SUSFS_SPOOF_UNAME
+          \tif (static_branch_likely(&susfs_is_uname_spoof_buffer_set))
+          \t\tsusfs_spoof_uname(&tmp);
+          #endif
+          '''
+              section = section[:at] + susfs_block + section[at:]
+
+          # Android 16 BPF compatibility must win over a user-selected SUSFS
+          # uname spoof for these system daemons, otherwise BPF loading can
+          # regress to the pre-A16 failure mode.
+          required = (
+              'bpfloader',
+              'netbpfload',
+              'netd',
+              'strcpy(tmp.release, "5.4.186")',
+          )
+          for needle in required:
+              if needle not in section:
+                  raise SystemExit(f'A16 uname override missing after merge: {needle}')
+
+          text = text[:pos] + section + text[end:]
+          path.write_text(text)
+          PY
+            git add kernel/sys.c
+          fi
+
           git diff --cached --check
           ! git diff --name-only --diff-filter=U | grep .
+          grep -Fq 'susfs_spoof_uname(&tmp);' kernel/sys.c
+          grep -Fq 'strcpy(tmp.release, "5.4.186");' kernel/sys.c
+
+          # Verify ordering: SUSFS generic spoof must precede the hard A16
+          # compatibility release seen by bpfloader/netbpfload/netd.
+          python3 - <<'PY'
+          from pathlib import Path
+          s = Path('kernel/sys.c').read_text()
+          begin = s.index('SYSCALL_DEFINE1(newuname')
+          end = s.index('#ifdef __ARCH_WANT_SYS_OLD_UNAME', begin)
+          u = s[begin:end]
+          sus = u.index('susfs_spoof_uname(&tmp);')
+          a16 = u.index('strcpy(tmp.release, "5.4.186");')
+          if not sus < a16:
+              raise SystemExit('bad uname merge order: A16 override must be last')
+          print('[PASS] kernel/sys.c semantic merge keeps SUSFS spoof + A16 BPF release override')
+          PY
 
           echo '===== Restore the exact ReSukiSU revision used by the verified snapshot ====='
           rm -rf KernelSU
@@ -228,8 +309,6 @@ jobs:
           grep -Fq 'source "drivers/kernelsu/Kconfig"' drivers/Kconfig
           grep -Fq 'obj-$(CONFIG_KSU) += kernelsu/' drivers/Makefile
           grep -Fq 'obj-$(CONFIG_KSU_SUSFS) += susfs.o' fs/Makefile
-          git grep -nE 'ksu_|susfs' -- fs kernel security include drivers \
-            | head -n 120 || true
 
           echo '===== Preserve A16 BPF endpoint after root overlay ====='
           test -f kernel/bpf/btf.c

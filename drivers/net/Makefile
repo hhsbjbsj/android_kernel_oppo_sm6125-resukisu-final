@@ -15,6 +15,7 @@ obj-$(CONFIG_IFB) += ifb.o
 obj-$(CONFIG_MACSEC) += macsec.o
 #ifneq ($(OPLUS_FEATURE_WIFI_LIMMITBGSPEED),)
 obj-$(CONFIG_IMQ) += imq.o
+CFLAGS_imq.o += -include $(srctree)/drivers/net/imq_a16_xfrm_compat.h
 #endif # OPLUS_FEATURE_WIFI_LIMMITBGSPEED
 obj-$(CONFIG_MACVLAN) += macvlan.o
 obj-$(CONFIG_MACVTAP) += macvtap.o

@@ -170,11 +170,24 @@ jobs:
           KERNEL="$GITHUB_WORKSPACE/$KERNEL_REL"
           OUT="$KERNEL/$OUT_DIR"
           WLAN_BASE="$GITHUB_WORKSPACE/source/android/vendor/qcom/opensource/wlan"
-          WLAN="$WLAN_BASE/qcacld-3.0"
-          test -f "$WLAN/Makefile"
-          test -f "$WLAN/Kbuild"
+          test -f "$WLAN_BASE/qcacld-3.0/Makefile"
+          test -f "$WLAN_BASE/qcacld-3.0/Kbuild"
           test -d "$WLAN_BASE/qca-wifi-host-cmn"
           test -d "$WLAN_BASE/fw-api"
+
+          # qcacld has a very large number of repeated -I paths.  GitHub's
+          # workspace path is ~170 chars long, which pushes the generated
+          # clang argv over Linux ARG_MAX before compilation even starts.
+          # Copy only the three WLAN source trees to a short /tmp prefix;
+          # this changes no source content and keeps the kernel/out ABI exact.
+          rm -rf /tmp/pw
+          mkdir -p /tmp/pw
+          cp -a "$WLAN_BASE/qcacld-3.0" /tmp/pw/qcacld-3.0
+          cp -a "$WLAN_BASE/qca-wifi-host-cmn" /tmp/pw/qca-wifi-host-cmn
+          cp -a "$WLAN_BASE/fw-api" /tmp/pw/fw-api
+          WLAN=/tmp/pw/qcacld-3.0
+          WLAN_COMMON=/tmp/pw/qca-wifi-host-cmn
+          WLAN_FW=/tmp/pw/fw-api
 
           make -C "$KERNEL" O="$OUT" M="$WLAN" \
             ARCH=arm64 LOCALVERSION=+ \
@@ -185,8 +198,8 @@ jobs:
             MODNAME=wlan \
             WLAN_ROOT="$WLAN" \
             WLAN_COMMON_ROOT=../qca-wifi-host-cmn \
-            WLAN_COMMON_INC="$WLAN_BASE/qca-wifi-host-cmn" \
-            WLAN_FW_API="$WLAN_BASE/fw-api" \
+            WLAN_COMMON_INC="$WLAN_COMMON" \
+            WLAN_FW_API="$WLAN_FW" \
             WLAN_PROFILE=default \
             BOARD_PLATFORM=trinket \
             CONFIG_QCA_CLD_WLAN=m \

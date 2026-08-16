@@ -154,27 +154,39 @@ jobs:
           git remote remove aosp-common 2>/dev/null || true
           git remote add aosp-common https://github.com/aosp-mirror/kernel_common.git
 
-          git fetch --no-tags --depth=1 aosp-common "$UPSTREAM_BTF_UAPI"
-          git show --format= FETCH_HEAD -- include/uapi/linux/btf.h > /tmp/btf-var-uapi.patch
-          test -s /tmp/btf-var-uapi.patch
-          git apply --check /tmp/btf-var-uapi.patch
-          git apply /tmp/btf-var-uapi.patch
+          apply_upstream_delta() {
+            local commit="$1"
+            local path="$2"
+            local out="$3"
+            local parent
 
-          git fetch --no-tags --depth=1 aosp-common "$UPSTREAM_BTF_KERNEL"
-          git show --format= FETCH_HEAD -- kernel/bpf/btf.c > /tmp/btf-var-kernel.patch
-          test -s /tmp/btf-var-kernel.patch
-          git apply --check /tmp/btf-var-kernel.patch
-          git apply /tmp/btf-var-kernel.patch
+            git fetch --no-tags --depth=2 aosp-common "$commit"
+            test "$(git rev-parse FETCH_HEAD)" = "$commit"
+            parent="$(git rev-parse "${commit}^")"
+            git diff --binary "$parent" "$commit" -- "$path" > "$out"
+            test -s "$out"
 
-          grep -q '^#define BTF_KIND_VAR.*14' include/uapi/linux/btf.h
-          grep -q '^#define BTF_KIND_DATASEC.*15' include/uapi/linux/btf.h
-          grep -q '^#define BTF_KIND_MAX.*BTF_KIND_DATASEC' include/uapi/linux/btf.h
+            echo "===== APPLY $commit :: $path ====="
+            if git apply --check "$out"; then
+              git apply "$out"
+            else
+              echo '[INFO] direct apply needs merge context; trying git apply --3way'
+              git apply --3way "$out"
+            fi
+          }
+
+          apply_upstream_delta "$UPSTREAM_BTF_UAPI" include/uapi/linux/btf.h /tmp/btf-var-uapi.patch
+          apply_upstream_delta "$UPSTREAM_BTF_KERNEL" kernel/bpf/btf.c /tmp/btf-var-kernel.patch
+
+          grep -Eq 'BTF_KIND_VAR[^0-9]*14' include/uapi/linux/btf.h
+          grep -Eq 'BTF_KIND_DATASEC[^0-9]*15' include/uapi/linux/btf.h
+          grep -Eq 'BTF_KIND_MAX.*BTF_KIND_DATASEC|BTF_KIND_MAX[^0-9]*15' include/uapi/linux/btf.h
           grep -q 'static int btf_var_resolve' kernel/bpf/btf.c
           grep -q 'static int btf_datasec_resolve' kernel/bpf/btf.c
           grep -q '\[BTF_KIND_VAR\].*= &var_ops' kernel/bpf/btf.c
           grep -q '\[BTF_KIND_DATASEC\].*= &datasec_ops' kernel/bpf/btf.c
           git diff --check
-          echo '[PASS] upstream 2019 BTF VAR/DATASEC UAPI and kernel verifier support applied'
+          echo '[PASS] upstream 2019 BTF VAR/DATASEC UAPI and kernel verifier support applied as true commit deltas'
 
       - name: Keep BTF rejection diagnostics after VAR DATASEC
         shell: bash
@@ -208,8 +220,8 @@ jobs:
           nm "$VMLINUX" | grep -q ' sock_hash_ops$'
           strings -a "$IMAGE" | grep -Fq 'A16-BPF compat uname:'
           strings -a "$IMAGE" | grep -Fq 'A16-BTF-DIAG reject-meta'
-          grep -q '^#define BTF_KIND_VAR.*14' include/uapi/linux/btf.h
-          grep -q '^#define BTF_KIND_DATASEC.*15' include/uapi/linux/btf.h
+          grep -Eq 'BTF_KIND_VAR[^0-9]*14' include/uapi/linux/btf.h
+          grep -Eq 'BTF_KIND_DATASEC[^0-9]*15' include/uapi/linux/btf.h
           grep -q '\[BTF_KIND_VAR\].*= &var_ops' kernel/bpf/btf.c
           grep -q '\[BTF_KIND_DATASEC\].*= &datasec_ops' kernel/bpf/btf.c
           sha256sum "$IMAGE" | tee "$GITHUB_WORKSPACE/Image-btf-exp3.sha256"

@@ -1,0 +1,237 @@
+name: PCHM30 A16 BTF EXP3 VAR DATASEC
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [pchm30-a16-btf-exp3-var-datasec]
+    paths:
+      - '.github/workflows/pchm30-a16-btf-exp3-var-datasec.yml'
+
+permissions:
+  contents: read
+
+env:
+  TOOLCHAIN_RELEASE_TAG: pchm30-build-environment-20260810
+  TOOLCHAIN_ROOT: /opt/pchm30-toolchains
+  KERNEL_REL: source/android/kernel/msm-4.14
+  OUT_DIR: out-pchm30-a16-bpf
+  CONFIG_FILE: configs/PCHM30-stock-running.config
+  OPPO_VENDOR_REPO: https://github.com/oppo-source/android_kernel_modules_and_devicetree_oppo_sm6125.git
+  OPPO_VENDOR_COMMIT: 5e7bee452c72c948427b9131bec8cd5d92934f83
+  ARESIN_REPO: https://github.com/jsdizkcksv/android_kernel_aresin.git
+  ARESIN_PREREQ: 620d928acca50c8ba013554fc798dcf8b8910918
+  A15_FIRST: a2b662dced04902eb8f1778ec8e30259dc680ff4
+  A15_LAST: bd379f8140acc083fc386cc2600ee205b2a54e31
+  A16_FIRST: c2c621b5448adc69e105b1519b93dd637a581da5
+  A16_LAST: c74436291044381d4365d91afa0c8f4a574b22b4
+  ROOT_SNAPSHOT: b667ba359bf7da11b43c5d6403788d21c19facd7
+  RESUKISU_COMMIT: beaaea0eb895dc41e7b9bf5e3f39e57aa9635bab
+  ROOT_SUCCESS_BRANCH: pchm30-a16-resukisu-susfs220
+  ROOT_SUCCESS_WORKFLOW: .github/workflows/pchm30-a16-resukisu-susfs220-build.yml
+  EXP1_BRANCH: pchm30-a16-btf-sockmap-exp1
+  EXP1_WORKFLOW: .github/workflows/pchm30-a16-btf-sockmap-exp1-v2.yml
+  WIFI_SUCCESS_BRANCH: pchm30-a16-wifi-abi-exp1
+  WIFI_SUCCESS_WORKFLOW: .github/workflows/pchm30-a16-wifi-abi-exp1-build.yml
+  EXP2_BRANCH: pchm30-a16-btf-exp2-diagnose
+  EXP2_WORKFLOW: .github/workflows/pchm30-a16-btf-exp2-diagnose.yml
+  UPSTREAM_BTF_UAPI: f063c889c9458354a92b235a51cbb60d30321070
+  UPSTREAM_BTF_KERNEL: 1dc92851849cc2235a1efef8f8d5a9255efc5f13
+  GH_TOKEN: ${{ github.token }}
+
+jobs:
+  build:
+    name: A16 BTF EXP3 - VAR DATASEC plus matching WLAN
+    runs-on: ubuntu-22.04
+    timeout-minutes: 180
+    steps:
+      - name: Checkout exact successful A16 rootless baseline
+        uses: actions/checkout@v4
+        with:
+          ref: pchm30-a16-bpf-only
+          path: source/android/kernel/msm-4.14
+          fetch-depth: 1
+          submodules: false
+
+      - name: Prepare EXP2 step runner
+        working-directory: source/android/kernel/msm-4.14
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          git fetch --no-tags --depth=1 origin "$EXP2_BRANCH"
+          git show "FETCH_HEAD:$EXP2_WORKFLOW" > "$GITHUB_WORKSPACE/exp2-success.yml"
+          grep -Fq 'PCHM30 A16 BTF EXP2 Diagnose' "$GITHUB_WORKSPACE/exp2-success.yml"
+          cat > "$GITHUB_WORKSPACE/run-exp2-step.py" <<'PY'
+          import os, subprocess, sys
+          from pathlib import Path
+          if len(sys.argv) != 2:
+              raise SystemExit('usage: run-exp2-step.py <step name>')
+          name = sys.argv[1]
+          workspace = Path(os.environ['GITHUB_WORKSPACE'])
+          lines = (workspace / 'exp2-success.yml').read_text().splitlines(True)
+          marker = f'      - name: {name}\n'
+          try:
+              start = lines.index(marker)
+          except ValueError:
+              raise SystemExit(f'EXP2 step not found: {name}')
+          end = len(lines)
+          for i in range(start + 1, len(lines)):
+              if lines[i].startswith('      - name: '):
+                  end = i
+                  break
+          block = lines[start:end]
+          workdir = None
+          run_index = None
+          inline_script = None
+          for i, line in enumerate(block):
+              if line.startswith('        working-directory: '):
+                  workdir = line.split(': ', 1)[1].strip()
+              if line.startswith('        run: '):
+                  value = line.split(': ', 1)[1].rstrip('\n')
+                  if value in ('|', '|-', '|+', '>', '>-', '>+'):
+                      run_index = i + 1
+                  else:
+                      inline_script = value
+                  break
+          if inline_script is None and run_index is None:
+              raise SystemExit(f'EXP2 step is not a shell run step: {name}')
+          if inline_script is not None:
+              script = inline_script + '\n'
+          else:
+              script_lines = []
+              for line in block[run_index:]:
+                  if line.startswith('          '):
+                      script_lines.append(line[10:])
+                  elif line.strip() == '':
+                      script_lines.append('\n')
+                  else:
+                      raise SystemExit(f'unexpected indentation: {line!r}')
+              script = ''.join(script_lines)
+          cwd = workspace / workdir if workdir else workspace
+          print(f'===== REUSE EXP2 STEP: {name} =====')
+          subprocess.run(['bash', '-c', 'set -Eeuo pipefail\n' + script], cwd=cwd,
+                         check=True, env=os.environ.copy())
+          PY
+          python3 -m py_compile "$GITHUB_WORKSPACE/run-exp2-step.py"
+
+      - name: Prepare successful WiFi step runner
+        shell: bash
+        run: python3 "$GITHUB_WORKSPACE/run-exp2-step.py" 'Prepare successful WiFi step runner'
+      - name: Prepare successful EXP1 step runner
+        shell: bash
+        run: python3 "$GITHUB_WORKSPACE/run-exp2-step.py" 'Prepare successful EXP1 step runner'
+      - name: Prepare proven root step runner
+        shell: bash
+        run: python3 "$GITHUB_WORKSPACE/run-exp2-step.py" 'Prepare proven root step runner'
+      - name: Pin rootless baseline and prepare A16 step runner
+        shell: bash
+        run: python3 "$GITHUB_WORKSPACE/run-exp2-step.py" 'Pin rootless baseline and prepare A16 step runner'
+      - name: Reproduce exact successful A16 source state
+        shell: bash
+        run: python3 "$GITHUB_WORKSPACE/run-exp2-step.py" 'Reproduce exact successful A16 source state'
+      - name: Layer verified ReSukiSU SUSFS hooks
+        shell: bash
+        run: python3 "$GITHUB_WORKSPACE/run-exp2-step.py" 'Layer verified ReSukiSU SUSFS hooks'
+      - name: Patch netbpfload uname compatibility
+        shell: bash
+        run: python3 "$GITHUB_WORKSPACE/run-exp2-step.py" 'Patch netbpfload uname compatibility'
+      - name: Prepare proven A16 root config
+        shell: bash
+        run: python3 "$GITHUB_WORKSPACE/run-exp2-step.py" 'Prepare proven A16 root config'
+      - name: Enable BPF stream parser for sockmap sockhash
+        shell: bash
+        run: python3 "$GITHUB_WORKSPACE/run-exp2-step.py" 'Enable BPF stream parser for sockmap sockhash'
+      - name: Relax module signature enforcement for WiFi experiment only
+        shell: bash
+        run: python3 "$GITHUB_WORKSPACE/run-exp2-step.py" 'Relax module signature enforcement for WiFi experiment only'
+
+      - name: Backport upstream BTF VAR and DATASEC
+        working-directory: source/android/kernel/msm-4.14
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          exec > >(tee "$GITHUB_WORKSPACE/btf-exp3-backport.log") 2>&1
+
+          git remote remove aosp-common 2>/dev/null || true
+          git remote add aosp-common https://github.com/aosp-mirror/kernel_common.git
+
+          git fetch --no-tags --depth=1 aosp-common "$UPSTREAM_BTF_UAPI"
+          git show --format= FETCH_HEAD -- include/uapi/linux/btf.h > /tmp/btf-var-uapi.patch
+          test -s /tmp/btf-var-uapi.patch
+          git apply --check /tmp/btf-var-uapi.patch
+          git apply /tmp/btf-var-uapi.patch
+
+          git fetch --no-tags --depth=1 aosp-common "$UPSTREAM_BTF_KERNEL"
+          git show --format= FETCH_HEAD -- kernel/bpf/btf.c > /tmp/btf-var-kernel.patch
+          test -s /tmp/btf-var-kernel.patch
+          git apply --check /tmp/btf-var-kernel.patch
+          git apply /tmp/btf-var-kernel.patch
+
+          grep -q '^#define BTF_KIND_VAR.*14' include/uapi/linux/btf.h
+          grep -q '^#define BTF_KIND_DATASEC.*15' include/uapi/linux/btf.h
+          grep -q '^#define BTF_KIND_MAX.*BTF_KIND_DATASEC' include/uapi/linux/btf.h
+          grep -q 'static int btf_var_resolve' kernel/bpf/btf.c
+          grep -q 'static int btf_datasec_resolve' kernel/bpf/btf.c
+          grep -q '\[BTF_KIND_VAR\].*= &var_ops' kernel/bpf/btf.c
+          grep -q '\[BTF_KIND_DATASEC\].*= &datasec_ops' kernel/bpf/btf.c
+          git diff --check
+          echo '[PASS] upstream 2019 BTF VAR/DATASEC UAPI and kernel verifier support applied'
+
+      - name: Keep BTF rejection diagnostics after VAR DATASEC
+        shell: bash
+        run: python3 "$GITHUB_WORKSPACE/run-exp2-step.py" 'Instrument exact BTF rejection path'
+
+      - name: Build BTF EXP3 kernel
+        shell: bash
+        run: python3 "$GITHUB_WORKSPACE/run-exp2-step.py" 'Build BTF EXP2 kernel'
+      - name: Build matching OPPO qcacld wlan module
+        shell: bash
+        run: python3 "$GITHUB_WORKSPACE/run-exp2-step.py" 'Build matching OPPO qcacld wlan module'
+
+      - name: Verify BTF EXP3 outputs
+        working-directory: source/android/kernel/msm-4.14
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          IMAGE="$OUT_DIR/arch/arm64/boot/Image"
+          VMLINUX="$OUT_DIR/vmlinux"
+          test -s "$IMAGE"
+          test -s "$VMLINUX"
+          test -s "$GITHUB_WORKSPACE/wlan-a16-exp1.ko"
+          grep -q '^CONFIG_BPF_STREAM_PARSER=y$' "$OUT_DIR/.config"
+          grep -q '^CONFIG_STREAM_PARSER=y$' "$OUT_DIR/.config"
+          grep -q '^CONFIG_NET_SOCK_MSG=y$' "$OUT_DIR/.config"
+          grep -q '^CONFIG_KSU=y$' "$OUT_DIR/.config"
+          grep -q '^CONFIG_KSU_SUSFS=y$' "$OUT_DIR/.config"
+          grep -q '^# CONFIG_MODULE_SIG_FORCE is not set$' "$OUT_DIR/.config"
+          grep -q '^CONFIG_MODVERSIONS=y$' "$OUT_DIR/.config"
+          nm "$VMLINUX" | grep -q ' sock_map_ops$'
+          nm "$VMLINUX" | grep -q ' sock_hash_ops$'
+          strings -a "$IMAGE" | grep -Fq 'A16-BPF compat uname:'
+          strings -a "$IMAGE" | grep -Fq 'A16-BTF-DIAG reject-meta'
+          grep -q '^#define BTF_KIND_VAR.*14' include/uapi/linux/btf.h
+          grep -q '^#define BTF_KIND_DATASEC.*15' include/uapi/linux/btf.h
+          grep -q '\[BTF_KIND_VAR\].*= &var_ops' kernel/bpf/btf.c
+          grep -q '\[BTF_KIND_DATASEC\].*= &datasec_ops' kernel/bpf/btf.c
+          sha256sum "$IMAGE" | tee "$GITHUB_WORKSPACE/Image-btf-exp3.sha256"
+          cp -a "$OUT_DIR/Module.symvers" "$GITHUB_WORKSPACE/Module.symvers.a16-btf-exp3"
+          echo '[PASS] EXP3 preserves prior fixes and contains BTF VAR/DATASEC parser support'
+
+      - name: Upload BTF EXP3 artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: PCHM30-A16-BTF-EXP3-VAR-DATASEC-${{ github.run_number }}
+          path: |
+            btf-exp3-backport.log
+            btf-exp2-source.txt
+            wifi-module-build.log
+            wlan-a16-exp1.ko
+            wlan-a16-exp1.sha256
+            wlan-a16-exp1.modinfo.txt
+            wlan-a16-exp1.undefined.txt
+            Image-btf-exp3.sha256
+            Module.symvers.a16-btf-exp3
+            source/android/kernel/msm-4.14/out-pchm30-a16-bpf/.config
+            source/android/kernel/msm-4.14/out-pchm30-a16-bpf/arch/arm64/boot/Image
+          include-hidden-files: true
+          if-no-files-found: warn

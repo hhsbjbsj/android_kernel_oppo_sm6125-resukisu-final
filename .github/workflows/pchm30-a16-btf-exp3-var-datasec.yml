@@ -10,6 +10,7 @@ on:
       - '.github/scripts/exp3-btf-backport.sh'
       - '.github/scripts/exp3-a16-runtime-compat.sh'
       - '.github/scripts/exp3-audio-dlkm.sh'
+      - '.github/scripts/exp3-audio-wcd934x-closure.sh'
       - '.github/scripts/exp3-vendor-dlkm-package.sh'
 
 permissions:
@@ -45,7 +46,7 @@ env:
 
 jobs:
   build:
-    name: A16 EXP3 - BTF plus full matching vendor ABI sweep
+    name: A16 EXP3 - BTF plus closed matching vendor/audio ABI sweep
     runs-on: ubuntu-22.04
     timeout-minutes: 240
 
@@ -78,6 +79,16 @@ jobs:
           chmod +x "$GITHUB_WORKSPACE/exp3-audio-dlkm.sh"
           "$GITHUB_WORKSPACE/exp3-audio-dlkm.sh"
 
+      - name: Close WCD934X Tavil machine audio dependency
+        working-directory: source/android/kernel/msm-4.14
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          git fetch --no-tags --depth=1 origin "$GITHUB_SHA"
+          git show "$GITHUB_SHA:.github/scripts/exp3-audio-wcd934x-closure.sh" > "$GITHUB_WORKSPACE/exp3-audio-wcd934x-closure.sh"
+          chmod +x "$GITHUB_WORKSPACE/exp3-audio-wcd934x-closure.sh"
+          "$GITHUB_WORKSPACE/exp3-audio-wcd934x-closure.sh"
+
       - name: Package unified matching vendor DLKM set
         working-directory: source/android/kernel/msm-4.14
         shell: bash
@@ -101,6 +112,10 @@ jobs:
           test -s "$GITHUB_WORKSPACE/PCHM30-EXP3-MATCHING-VENDOR-DLKM-KSU.zip"
           test -s "$GITHUB_WORKSPACE/audio-exp3/module-layout.txt"
           test -s "$GITHUB_WORKSPACE/audio-exp3/audio-modules.txt"
+          test -s "$GITHUB_WORKSPACE/audio-exp3/raw/wcd934x_dlkm.ko"
+          test -s "$GITHUB_WORKSPACE/audio-exp3/raw/machine_dlkm.ko"
+          test -s "$GITHUB_WORKSPACE/audio-exp3/raw/platform_dlkm.ko"
+          test -s "$GITHUB_WORKSPACE/audio-wcd934x-closure.sha256"
           test -s "$GITHUB_WORKSPACE/vendor-dlkm-exp3/real-device-bugs.txt"
           test -s "$GITHUB_WORKSPACE/vendor-dlkm-exp3/vendor-overlay.sha256"
           grep -q '^CONFIG_MODVERSIONS=y$' "$OUT_DIR/.config"
@@ -115,6 +130,7 @@ jobs:
           grep -q 'q6_pdr_dlkm.ko' "$GITHUB_WORKSPACE/audio-exp3/audio-modules.txt"
           grep -q 'wglink_dlkm.ko' "$GITHUB_WORKSPACE/audio-exp3/audio-modules.txt"
           grep -q 'wcd_core_dlkm.ko' "$GITHUB_WORKSPACE/audio-exp3/audio-modules.txt"
+          grep -q 'wcd934x_dlkm.ko' "$GITHUB_WORKSPACE/audio-exp3/audio-modules.txt"
           grep -q 'machine_dlkm.ko' "$GITHUB_WORKSPACE/audio-exp3/audio-modules.txt"
           grep -q 'platform_dlkm.ko' "$GITHUB_WORKSPACE/audio-exp3/audio-modules.txt"
           grep -q 'bolero_cdc_dlkm.ko' "$GITHUB_WORKSPACE/audio-exp3/audio-modules.txt"
@@ -122,7 +138,9 @@ jobs:
           grep -q 'rx_macro_dlkm.ko' "$GITHUB_WORKSPACE/audio-exp3/audio-modules.txt"
           unzip -l "$GITHUB_WORKSPACE/PCHM30-EXP3-MATCHING-VENDOR-DLKM-KSU.zip" | grep -q 'system/vendor/lib/modules/wlan.ko'
           unzip -l "$GITHUB_WORKSPACE/PCHM30-EXP3-MATCHING-VENDOR-DLKM-KSU.zip" | grep -q 'system/vendor/lib/modules/msm_11ad_proxy.ko'
-          echo '[PASS] EXP3 Image + BTF diagnostics + A16 sysctl fix + matching WLAN/11ad/full audio vendor replacement set ready'
+          unzip -l "$GITHUB_WORKSPACE/PCHM30-EXP3-MATCHING-VENDOR-DLKM-KSU.zip" | grep -q 'system/vendor/lib/modules/audio_wcd934x.ko'
+          unzip -l "$GITHUB_WORKSPACE/PCHM30-EXP3-MATCHING-VENDOR-DLKM-KSU.zip" | grep -q 'system/vendor/lib/modules/audio_machine_trinket.ko'
+          echo '[PASS] EXP3 Image + BTF diagnostics + A16 sysctl fix + matching WLAN/11ad + WCD934X-closed full audio vendor replacement set ready'
 
       - name: Upload BTF EXP3 artifact
         if: always()
@@ -142,6 +160,9 @@ jobs:
             msm_11ad_proxy-exp3.modinfo.txt
             msm_11ad_proxy-exp3.undefined.txt
             audio-dlkm-build.log
+            audio-wcd934x-closure.log
+            audio-wcd934x-closure.sha256
+            machine-exp3.modversions.txt
             audio-exp3/**
             PCHM30-EXP3-AUDIO-DLKM-KSU.zip
             vendor-dlkm-package.log

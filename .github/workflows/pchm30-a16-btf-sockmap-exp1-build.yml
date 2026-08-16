@@ -1,0 +1,273 @@
+name: PCHM30 A16 BTF + Sockmap EXP1
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [pchm30-a16-btf-sockmap-exp1]
+    paths:
+      - '.github/workflows/pchm30-a16-btf-sockmap-exp1-build.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pchm30-a16-btf-sockmap-exp1-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  TOOLCHAIN_RELEASE_TAG: pchm30-build-environment-20260810
+  TOOLCHAIN_ROOT: /opt/pchm30-toolchains
+  KERNEL_REL: source/android/kernel/msm-4.14
+  OUT_DIR: out-pchm30-a16-bpf
+  CONFIG_FILE: configs/PCHM30-stock-running.config
+
+  OPPO_VENDOR_REPO: https://github.com/oppo-source/android_kernel_modules_and_devicetree_oppo_sm6125.git
+  OPPO_VENDOR_COMMIT: 5e7bee452c72c948427b9131bec8cd5d92934f83
+
+  ARESIN_REPO: https://github.com/jsdizkcksv/android_kernel_aresin.git
+  ARESIN_PREREQ: 620d928acca50c8ba013554fc798dcf8b8910918
+  A15_FIRST: a2b662dced04902eb8f1778ec8e30259dc680ff4
+  A15_LAST: bd379f8140acc083fc386cc2600ee205b2a54e31
+  A16_FIRST: c2c621b5448adc69e105b1519b93dd637a581da5
+  A16_LAST: c74436291044381d4365d91afa0c8f4a574b22b4
+
+  ROOT_SNAPSHOT: b667ba359bf7da11b43c5d6403788d21c19facd7
+  RESUKISU_COMMIT: beaaea0eb895dc41e7b9bf5e3f39e57aa9635bab
+  ROOT_SUCCESS_BRANCH: pchm30-a16-resukisu-susfs220
+  ROOT_SUCCESS_WORKFLOW: .github/workflows/pchm30-a16-resukisu-susfs220-build.yml
+  GH_TOKEN: ${{ github.token }}
+
+jobs:
+  build:
+    name: A16 runtime compat EXP1 - 5.4 uname + sockmap
+    runs-on: ubuntu-22.04
+    timeout-minutes: 180
+
+    steps:
+      - name: Checkout exact successful A16 rootless baseline
+        uses: actions/checkout@v4
+        with:
+          ref: pchm30-a16-bpf-only
+          path: source/android/kernel/msm-4.14
+          fetch-depth: 1
+          submodules: false
+
+      - name: Prepare runner for proven A16 ReSukiSU build
+        working-directory: source/android/kernel/msm-4.14
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          git fetch --no-tags --depth=1 origin "$ROOT_SUCCESS_BRANCH"
+          git show "FETCH_HEAD:$ROOT_SUCCESS_WORKFLOW" > "$GITHUB_WORKSPACE/root-success.yml"
+          grep -Fq 'PCHM30 A16 + ReSukiSU + SUSFS 2.2 Build' "$GITHUB_WORKSPACE/root-success.yml"
+
+          cat > "$GITHUB_WORKSPACE/run-root-success-step.py" <<'PY'
+          import os
+          import subprocess
+          import sys
+          from pathlib import Path
+
+          if len(sys.argv) != 2:
+              raise SystemExit('usage: run-root-success-step.py <step name>')
+
+          name = sys.argv[1]
+          workspace = Path(os.environ['GITHUB_WORKSPACE'])
+          lines = (workspace / 'root-success.yml').read_text().splitlines(True)
+          marker = f'      - name: {name}\n'
+          try:
+              start = lines.index(marker)
+          except ValueError:
+              raise SystemExit(f'root success workflow step not found: {name}')
+
+          end = len(lines)
+          for i in range(start + 1, len(lines)):
+              if lines[i].startswith('      - name: '):
+                  end = i
+                  break
+          block = lines[start:end]
+
+          workdir = None
+          run_index = None
+          inline_script = None
+          for i, line in enumerate(block):
+              if line.startswith('        working-directory: '):
+                  workdir = line.split(': ', 1)[1].strip()
+              if line.startswith('        run: '):
+                  value = line.split(': ', 1)[1].rstrip('\n')
+                  if value in ('|', '|-', '|+', '>', '>-', '>+'):
+                      run_index = i + 1
+                  else:
+                      inline_script = value
+                  break
+
+          if inline_script is None and run_index is None:
+              raise SystemExit(f'root success step is not a shell run step: {name}')
+
+          if inline_script is not None:
+              script = inline_script + '\n'
+          else:
+              script_lines = []
+              for line in block[run_index:]:
+                  if line.startswith('          '):
+                      script_lines.append(line[10:])
+                  elif line.strip() == '':
+                      script_lines.append('\n')
+                  else:
+                      raise SystemExit(f'unexpected indentation while extracting {name}: {line!r}')
+              script = ''.join(script_lines)
+
+          cwd = workspace / workdir if workdir else workspace
+          print(f'===== REUSE PROVEN ROOT STEP: {name} =====')
+          print(f'cwd={cwd}')
+          subprocess.run(
+              ['bash', '-c', 'set -Eeuo pipefail\n' + script],
+              cwd=cwd,
+              check=True,
+              env=os.environ.copy(),
+          )
+          PY
+          python3 -m py_compile "$GITHUB_WORKSPACE/run-root-success-step.py"
+
+      - name: Pin rootless baseline and prepare A16 step runner
+        shell: bash
+        run: python3 "$GITHUB_WORKSPACE/run-root-success-step.py" 'Pin rootless baseline and prepare A16 step runner'
+
+      - name: Reproduce the exact successful A16 BPF source state
+        shell: bash
+        run: python3 "$GITHUB_WORKSPACE/run-root-success-step.py" 'Reproduce the exact successful A16 BPF source state'
+
+      - name: Layer verified ReSukiSU and SUSFS 2.2.0 hooks onto A16
+        shell: bash
+        run: python3 "$GITHUB_WORKSPACE/run-root-success-step.py" 'Layer verified ReSukiSU and SUSFS 2.2.0 hooks onto A16'
+
+      - name: EXP1 force netbpfload onto 5.4 BTF compatibility path
+        working-directory: source/android/kernel/msm-4.14
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          exec > >(tee "$GITHUB_WORKSPACE/exp1-source.log") 2>&1
+
+          python3 - <<'PY'
+          from pathlib import Path
+
+          p = Path('kernel/sys.c')
+          s = p.read_text()
+
+          old = '''        if (!strncmp(current->comm, "bpfloader", 9) ||
+\t    !strncmp(current->comm, "netbpfload", 10) ||
+\t    !strncmp(current->comm, "netd", 4)) {
+\t\tstrcpy(tmp.release, "5.4.186");
+\t\tpr_debug("fake uname: %s release=%s\\n",
+\t\t\t current->comm, tmp.release);
+\t}
+'''
+          new = '''        if (!strncmp(current->comm, "bpfloader", 9) ||
+\t    !strncmp(current->comm, "netbpfload", 10) ||
+\t    !strncmp(current->comm, "netd", 4) ||
+\t    !strncmp(current->group_leader->comm, "bpfloader", 9) ||
+\t    !strncmp(current->group_leader->comm, "netbpfload", 10) ||
+\t    !strncmp(current->group_leader->comm, "netd", 4)) {
+\t\tstrcpy(tmp.release, "5.4.186");
+\t\tpr_info("A16-BPF compat uname: comm=%s leader=%s release=%s\\n",
+\t\t\tcurrent->comm, current->group_leader->comm, tmp.release);
+\t}
+'''
+
+          if old not in s:
+              raise SystemExit('expected donor A16 fake-uname block not found')
+          if s.count(old) != 1:
+              raise SystemExit(f'fake-uname block count is {s.count(old)}, expected 1')
+          s = s.replace(old, new, 1)
+          p.write_text(s)
+          PY
+
+          grep -Fq 'current->group_leader->comm, "netbpfload"' kernel/sys.c
+          grep -Fq 'A16-BPF compat uname:' kernel/sys.c
+          grep -Fq 'strcpy(tmp.release, "5.4.186");' kernel/sys.c
+          git diff --check
+
+          echo '===== Why this targets BTF -EINVAL ====='
+          echo 'Android netbpfload loads .BTF only when uname reports kernel >= 5.10.'
+          echo 'The A16 donor intentionally reports 5.4.186 to bpfloader/netbpfload/netd.'
+          echo 'EXP1 extends the match to worker threads via group_leader and logs every hit.'
+
+      - name: Prepare proven A16 root config
+        shell: bash
+        run: python3 "$GITHUB_WORKSPACE/run-root-success-step.py" 'Prepare A16 BPF + ReSukiSU + SUSFS config'
+
+      - name: EXP1 enable sockmap and sockhash runtime map types
+        working-directory: source/android/kernel/msm-4.14
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          ./scripts/config --file "$OUT_DIR/.config" -e BPF_STREAM_PARSER
+
+          unset LLVM LLVM_IAS KBUILD_COMPILER_STRING
+          make O="$OUT_DIR" ARCH=arm64 LOCALVERSION=+ \
+            CC="$CC" REAL_CC="$REAL_CC" LD="$LD" \
+            CROSS_COMPILE="$CROSS_COMPILE" \
+            CROSS_COMPILE_ARM32="$CROSS_COMPILE_ARM32" \
+            CLANG_TRIPLE="$CLANG_TRIPLE" olddefconfig
+
+          echo '===== EXP1 sockmap config =====' | tee "$GITHUB_WORKSPACE/exp1-config.log"
+          grep -E '^CONFIG_(BPF_STREAM_PARSER|STREAM_PARSER|NET_SOCK_MSG)=' "$OUT_DIR/.config" \
+            | tee -a "$GITHUB_WORKSPACE/exp1-config.log"
+
+          grep -q '^CONFIG_BPF_STREAM_PARSER=y$' "$OUT_DIR/.config"
+          grep -q '^CONFIG_STREAM_PARSER=y$' "$OUT_DIR/.config"
+          grep -q '^CONFIG_NET_SOCK_MSG=y$' "$OUT_DIR/.config"
+
+      - name: Build EXP1 kernel
+        shell: bash
+        run: python3 "$GITHUB_WORKSPACE/run-root-success-step.py" 'Build A16 BPF + ReSukiSU + SUSFS kernel'
+
+      - name: Verify EXP1 output and target symbols
+        working-directory: source/android/kernel/msm-4.14
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          IMAGE="$OUT_DIR/arch/arm64/boot/Image"
+          VMLINUX="$OUT_DIR/vmlinux"
+          test -s "$IMAGE"
+          test -s "$VMLINUX"
+
+          grep -q '^CONFIG_BPF_STREAM_PARSER=y$' "$OUT_DIR/.config"
+          grep -q '^CONFIG_STREAM_PARSER=y$' "$OUT_DIR/.config"
+          grep -q '^CONFIG_NET_SOCK_MSG=y$' "$OUT_DIR/.config"
+          grep -q '^CONFIG_KSU=y$' "$OUT_DIR/.config"
+          grep -q '^CONFIG_KSU_SUSFS=y$' "$OUT_DIR/.config"
+
+          nm "$VMLINUX" | grep -E ' sock_map_ops$| sock_hash_ops$' | tee "$GITHUB_WORKSPACE/exp1-sockmap-symbols.txt"
+          grep -q ' sock_map_ops$' "$GITHUB_WORKSPACE/exp1-sockmap-symbols.txt"
+          grep -q ' sock_hash_ops$' "$GITHUB_WORKSPACE/exp1-sockmap-symbols.txt"
+
+          strings -a "$IMAGE" | grep -F 'A16-BPF compat uname:' | tee "$GITHUB_WORKSPACE/exp1-uname-string.txt"
+          strings -a "$IMAGE" | grep -Fx '5.4.186' >> "$GITHUB_WORKSPACE/exp1-uname-string.txt"
+
+          file "$IMAGE"
+          sha256sum "$IMAGE" | tee "$GITHUB_WORKSPACE/Image.sha256"
+          echo '[PASS] EXP1 compiled: sockmap/sockhash linked; netbpfload 5.4 compatibility hook present'
+
+      - name: Upload EXP1 diagnostics and Image
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: PCHM30-A16-BTF-SOCKMAP-EXP1-${{ github.run_number }}
+          path: |
+            bpf-apply.log
+            a15-bpf-commit-list.txt
+            a16-bpf-commit-list.txt
+            root-apply.log
+            root-grep.txt
+            root-hook-files.txt
+            resukisu-susfs220.patch
+            exp1-source.log
+            exp1-config.log
+            exp1-sockmap-symbols.txt
+            exp1-uname-string.txt
+            build.log
+            Image.sha256
+            source/android/kernel/msm-4.14/out-pchm30-a16-bpf/.config
+            source/android/kernel/msm-4.14/out-pchm30-a16-bpf/arch/arm64/boot/Image
+          include-hidden-files: true
+          if-no-files-found: warn

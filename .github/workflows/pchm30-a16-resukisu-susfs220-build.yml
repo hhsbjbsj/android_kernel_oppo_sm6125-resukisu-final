@@ -87,26 +87,35 @@ jobs:
 
           workdir = None
           run_index = None
+          inline_script = None
           for i, line in enumerate(block):
               if line.startswith('        working-directory: '):
                   workdir = line.split(': ', 1)[1].strip()
-              if line == '        run: |\n':
-                  run_index = i + 1
+              if line.startswith('        run: '):
+                  value = line.split(': ', 1)[1].rstrip('\n')
+                  if value in ('|', '|-', '|+', '>', '>-', '>+'):
+                      run_index = i + 1
+                  else:
+                      inline_script = value
                   break
-          if run_index is None:
-              raise SystemExit(f'A16 step is not a multiline shell run step: {name}')
 
-          script_lines = []
-          for line in block[run_index:]:
-              if line.startswith('          '):
-                  script_lines.append(line[10:])
-              elif line.strip() == '':
-                  script_lines.append('\n')
-              else:
-                  raise SystemExit(f'unexpected indentation while extracting {name}: {line!r}')
+          if inline_script is None and run_index is None:
+              raise SystemExit(f'A16 step is not a shell run step: {name}')
+
+          if inline_script is not None:
+              script = inline_script + '\n'
+          else:
+              script_lines = []
+              for line in block[run_index:]:
+                  if line.startswith('          '):
+                      script_lines.append(line[10:])
+                  elif line.strip() == '':
+                      script_lines.append('\n')
+                  else:
+                      raise SystemExit(f'unexpected indentation while extracting {name}: {line!r}')
+              script = ''.join(script_lines)
 
           cwd = workspace / workdir if workdir else workspace
-          script = ''.join(script_lines)
           print(f'===== REUSE PROVEN A16 STEP: {name} =====')
           print(f'cwd={cwd}')
           subprocess.run(

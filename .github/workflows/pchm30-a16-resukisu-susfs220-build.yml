@@ -313,7 +313,6 @@ jobs:
           git clone -q https://github.com/ReSukiSU/ReSukiSU.git KernelSU
           git -C KernelSU checkout -q --detach "$RESUKISU_COMMIT"
           test "$(git -C KernelSU rev-parse HEAD)" = "$RESUKISU_COMMIT"
-          rm -rf KernelSU/.git
 
           echo '===== Root/SUSFS structural audit ====='
           test -L drivers/kernelsu

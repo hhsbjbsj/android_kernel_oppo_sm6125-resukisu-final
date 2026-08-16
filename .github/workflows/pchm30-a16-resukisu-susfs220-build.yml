@@ -333,9 +333,10 @@ jobs:
             | head -n 120 || true
 
           echo '===== Preserve A16 BPF endpoint after root overlay ====='
-          test -f kernel/bpf/btf.c
-          test -f include/linux/btf.h
-          test -f include/uapi/linux/btf.h
+          # The donor endpoint contains BTF files from older pre-tutorial
+          # history, but the proven PCHM30 A15+A16 replay intentionally does
+          # not import that unrelated pre-state. Audit only semantics actually
+          # introduced by the replayed tutorial range.
           grep -Fq 'BPF_FUNC_spin_lock' include/uapi/linux/bpf.h
           grep -Fq 'PTR_TO_SOCK_COMMON_OR_NULL' kernel/bpf/verifier.c
           grep -Fq 'strcpy(tmp.release, "5.4.186");' kernel/sys.c

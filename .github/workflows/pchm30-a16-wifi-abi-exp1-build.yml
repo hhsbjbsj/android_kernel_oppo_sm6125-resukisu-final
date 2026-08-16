@@ -1,0 +1,218 @@
+name: PCHM30 A16 WiFi ABI EXP1
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [pchm30-a16-btf-sockmap-exp1]
+    paths:
+      - '.github/workflows/pchm30-a16-wifi-abi-exp1-build.yml'
+
+permissions:
+  contents: read
+
+env:
+  EXP1_BRANCH: pchm30-a16-btf-sockmap-exp1
+  EXP1_WORKFLOW: .github/workflows/pchm30-a16-btf-sockmap-exp1-v2.yml
+  KERNEL_REL: source/android/kernel/msm-4.14
+  OUT_DIR: out-pchm30-a16-bpf
+
+jobs:
+  build:
+    name: A16 WiFi ABI EXP1 - rebuild qcacld against current kernel
+    runs-on: ubuntu-22.04
+    timeout-minutes: 180
+
+    steps:
+      - name: Checkout exact successful A16 rootless baseline
+        uses: actions/checkout@v4
+        with:
+          ref: pchm30-a16-bpf-only
+          path: source/android/kernel/msm-4.14
+          fetch-depth: 1
+          submodules: false
+
+      - name: Prepare successful EXP1 step runner
+        working-directory: source/android/kernel/msm-4.14
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          git fetch --no-tags --depth=1 origin "$EXP1_BRANCH"
+          git show "FETCH_HEAD:$EXP1_WORKFLOW" > "$GITHUB_WORKSPACE/exp1-success.yml"
+          grep -Fq 'PCHM30 A16 BTF Sockmap EXP1 v2' "$GITHUB_WORKSPACE/exp1-success.yml"
+
+          cat > "$GITHUB_WORKSPACE/run-exp1-step.py" <<'PY'
+          import os, subprocess, sys
+          from pathlib import Path
+          if len(sys.argv) != 2:
+              raise SystemExit('usage: run-exp1-step.py <step name>')
+          name = sys.argv[1]
+          workspace = Path(os.environ['GITHUB_WORKSPACE'])
+          lines = (workspace / 'exp1-success.yml').read_text().splitlines(True)
+          marker = f'      - name: {name}\n'
+          try:
+              start = lines.index(marker)
+          except ValueError:
+              raise SystemExit(f'EXP1 step not found: {name}')
+          end = len(lines)
+          for i in range(start + 1, len(lines)):
+              if lines[i].startswith('      - name: '):
+                  end = i
+                  break
+          block = lines[start:end]
+          workdir = None
+          run_index = None
+          inline_script = None
+          for i, line in enumerate(block):
+              if line.startswith('        working-directory: '):
+                  workdir = line.split(': ', 1)[1].strip()
+              if line.startswith('        run: '):
+                  value = line.split(': ', 1)[1].rstrip('\n')
+                  if value in ('|', '|-', '|+', '>', '>-', '>+'):
+                      run_index = i + 1
+                  else:
+                      inline_script = value
+                  break
+          if inline_script is None and run_index is None:
+              raise SystemExit(f'EXP1 step is not a shell run step: {name}')
+          if inline_script is not None:
+              script = inline_script + '\n'
+          else:
+              script_lines = []
+              for line in block[run_index:]:
+                  if line.startswith('          '):
+                      script_lines.append(line[10:])
+                  elif line.strip() == '':
+                      script_lines.append('\n')
+                  else:
+                      raise SystemExit(f'unexpected indentation: {line!r}')
+              script = ''.join(script_lines)
+          cwd = workspace / workdir if workdir else workspace
+          print(f'===== REUSE EXP1 STEP: {name} =====')
+          subprocess.run(['bash', '-c', 'set -Eeuo pipefail\n' + script], cwd=cwd,
+                         check=True, env=os.environ.copy())
+          PY
+          python3 -m py_compile "$GITHUB_WORKSPACE/run-exp1-step.py"
+
+      - name: Prepare proven root step runner
+        shell: bash
+        run: python3 "$GITHUB_WORKSPACE/run-exp1-step.py" 'Prepare proven root step runner'
+
+      - name: Pin rootless baseline and prepare A16 step runner
+        shell: bash
+        run: python3 "$GITHUB_WORKSPACE/run-exp1-step.py" 'Pin rootless baseline and prepare A16 step runner'
+
+      - name: Reproduce exact successful A16 source state
+        shell: bash
+        run: python3 "$GITHUB_WORKSPACE/run-exp1-step.py" 'Reproduce exact successful A16 source state'
+
+      - name: Layer verified ReSukiSU SUSFS hooks
+        shell: bash
+        run: python3 "$GITHUB_WORKSPACE/run-exp1-step.py" 'Layer verified ReSukiSU SUSFS hooks'
+
+      - name: Patch netbpfload uname compatibility
+        shell: bash
+        run: python3 "$GITHUB_WORKSPACE/run-exp1-step.py" 'Patch netbpfload uname compatibility'
+
+      - name: Prepare proven A16 root config
+        shell: bash
+        run: python3 "$GITHUB_WORKSPACE/run-exp1-step.py" 'Prepare proven A16 root config'
+
+      - name: Enable BPF stream parser for sockmap sockhash
+        shell: bash
+        run: python3 "$GITHUB_WORKSPACE/run-exp1-step.py" 'Enable BPF stream parser for sockmap sockhash'
+
+      - name: Relax module signature enforcement for WiFi experiment only
+        working-directory: source/android/kernel/msm-4.14
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          ./scripts/config --file "$OUT_DIR/.config" -d MODULE_SIG_FORCE
+          unset LLVM LLVM_IAS KBUILD_COMPILER_STRING
+          make O="$OUT_DIR" ARCH=arm64 LOCALVERSION=+ \
+            CC="$CC" REAL_CC="$REAL_CC" LD="$LD" \
+            CROSS_COMPILE="$CROSS_COMPILE" \
+            CROSS_COMPILE_ARM32="$CROSS_COMPILE_ARM32" \
+            CLANG_TRIPLE="$CLANG_TRIPLE" olddefconfig
+          grep -q '^# CONFIG_MODULE_SIG_FORCE is not set$' "$OUT_DIR/.config"
+          grep -q '^CONFIG_MODVERSIONS=y$' "$OUT_DIR/.config"
+          echo '[PASS] only signature enforcement relaxed; MODVERSIONS remains enabled'
+
+      - name: Build WiFi EXP1 kernel
+        shell: bash
+        run: python3 "$GITHUB_WORKSPACE/run-exp1-step.py" 'Build EXP1 kernel'
+
+      - name: Build matching OPPO qcacld wlan module
+        working-directory: source/android/kernel/msm-4.14
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          exec > >(tee "$GITHUB_WORKSPACE/wifi-module-build.log") 2>&1
+          KERNEL="$GITHUB_WORKSPACE/$KERNEL_REL"
+          OUT="$KERNEL/$OUT_DIR"
+          WLAN_BASE="$GITHUB_WORKSPACE/source/android/vendor/qcom/opensource/wlan"
+          WLAN="$WLAN_BASE/qcacld-3.0"
+          test -f "$WLAN/Makefile"
+          test -f "$WLAN/Kbuild"
+          test -d "$WLAN_BASE/qca-wifi-host-cmn"
+          test -d "$WLAN_BASE/fw-api"
+
+          make -C "$KERNEL" O="$OUT" M="$WLAN" \
+            ARCH=arm64 LOCALVERSION=+ \
+            CC="$CC" REAL_CC="$REAL_CC" LD="$LD" \
+            CROSS_COMPILE="$CROSS_COMPILE" \
+            CROSS_COMPILE_ARM32="$CROSS_COMPILE_ARM32" \
+            CLANG_TRIPLE="$CLANG_TRIPLE" \
+            MODNAME=wlan \
+            WLAN_ROOT="$WLAN" \
+            WLAN_COMMON_ROOT=../qca-wifi-host-cmn \
+            WLAN_COMMON_INC="$WLAN_BASE/qca-wifi-host-cmn" \
+            WLAN_FW_API="$WLAN_BASE/fw-api" \
+            WLAN_PROFILE=default \
+            BOARD_PLATFORM=trinket \
+            CONFIG_QCA_CLD_WLAN=m \
+            modules -j"$(nproc)"
+
+          WLAN_KO="$(find "$WLAN" "$OUT" -type f -name 'wlan.ko' -print -quit)"
+          test -n "$WLAN_KO"
+          test -s "$WLAN_KO"
+          cp -a "$WLAN_KO" "$GITHUB_WORKSPACE/wlan-a16-exp1.ko"
+          file "$GITHUB_WORKSPACE/wlan-a16-exp1.ko"
+          sha256sum "$GITHUB_WORKSPACE/wlan-a16-exp1.ko" | tee "$GITHUB_WORKSPACE/wlan-a16-exp1.sha256"
+          readelf -p .modinfo "$GITHUB_WORKSPACE/wlan-a16-exp1.ko" | tee "$GITHUB_WORKSPACE/wlan-a16-exp1.modinfo.txt" || true
+          nm -u "$GITHUB_WORKSPACE/wlan-a16-exp1.ko" | sort -u > "$GITHUB_WORKSPACE/wlan-a16-exp1.undefined.txt" || true
+
+      - name: Verify WiFi EXP1 outputs
+        working-directory: source/android/kernel/msm-4.14
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          IMAGE="$OUT_DIR/arch/arm64/boot/Image"
+          test -s "$IMAGE"
+          test -s "$GITHUB_WORKSPACE/wlan-a16-exp1.ko"
+          grep -q '^# CONFIG_MODULE_SIG_FORCE is not set$' "$OUT_DIR/.config"
+          grep -q '^CONFIG_MODVERSIONS=y$' "$OUT_DIR/.config"
+          grep -q '^CONFIG_BPF_STREAM_PARSER=y$' "$OUT_DIR/.config"
+          nm "$OUT_DIR/vmlinux" | grep -q ' sock_map_ops$'
+          nm "$OUT_DIR/vmlinux" | grep -q ' sock_hash_ops$'
+          strings -a "$IMAGE" | grep -Fq 'A16-BPF compat uname:'
+          sha256sum "$IMAGE" | tee "$GITHUB_WORKSPACE/Image-wifi-exp1.sha256"
+          cp -a "$OUT_DIR/Module.symvers" "$GITHUB_WORKSPACE/Module.symvers.a16-wifi-exp1"
+          echo '[PASS] A16 kernel + matching qcacld wlan.ko built from the same headers and symbol CRC set'
+
+      - name: Upload WiFi EXP1 artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: PCHM30-A16-WIFI-ABI-EXP1-${{ github.run_number }}
+          path: |
+            wifi-module-build.log
+            wlan-a16-exp1.ko
+            wlan-a16-exp1.sha256
+            wlan-a16-exp1.modinfo.txt
+            wlan-a16-exp1.undefined.txt
+            Image-wifi-exp1.sha256
+            Module.symvers.a16-wifi-exp1
+            source/android/kernel/msm-4.14/out-pchm30-a16-bpf/.config
+            source/android/kernel/msm-4.14/out-pchm30-a16-bpf/arch/arm64/boot/Image
+          include-hidden-files: true
+          if-no-files-found: warn

@@ -22,6 +22,14 @@
 
 #include <linux/tracepoint.h>
 
+/*
+ * Android-16 raw tracepoint BPF only provides bpf_trace_run1..12.  This OPPO
+ * vendor event class carries 18 scalar arguments, so include/trace/bpf_probe.h
+ * cannot expose it as a raw BPF tracepoint.  CAST_TO_U64 is defined only for
+ * that BPF re-read pass.  Skip these three oversized raw-BPF maps there while
+ * keeping the original ftrace/perf tracepoint ABI and all 18 payload fields.
+ */
+#ifndef CAST_TO_U64
 DECLARE_EVENT_CLASS(rot_entry_template,
 	TP_PROTO(u32 ss_id, u32 sq_id, u32 pr_id, u32 flags,
 			u32 src_fmt, u32 src_bw, u32 src_bh,
@@ -115,6 +123,7 @@ DEFINE_EVENT(rot_entry_template, rot_entry_done,
 			src_fmt, src_bw, src_bh, src_x, src_y, src_w, src_h,
 			dst_fmt, dst_bw, dst_bh, dst_x, dst_y, dst_w, dst_h)
 );
+#endif /* !CAST_TO_U64 */
 
 TRACE_EVENT(rot_perf_set_qos_luts,
 	TP_PROTO(u32 pnum, u32 fmt, u32 lut, bool linear),

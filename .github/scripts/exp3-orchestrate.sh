@@ -63,8 +63,22 @@ subprocess.run(['bash', '-c', 'set -Eeuo pipefail\n' + script], cwd=cwd,
 PY
 python3 -m py_compile "$GITHUB_WORKSPACE/run-exp2-step.py"
 
+sync_github_env() {
+  # Reused workflow steps run as child processes. GitHub normally imports
+  # $GITHUB_ENV between native workflow steps, but our orchestrator must do
+  # that explicitly before launching the next child step.
+  [ -f "$GITHUB_ENV" ] || return 0
+  while IFS='=' read -r key value; do
+    case "$key" in
+      ''|*[^A-Za-z0-9_]*) continue ;;
+    esac
+    export "$key=$value"
+  done < "$GITHUB_ENV"
+}
+
 run_step() {
   python3 "$GITHUB_WORKSPACE/run-exp2-step.py" "$1"
+  sync_github_env
 }
 
 run_step 'Prepare successful WiFi step runner'

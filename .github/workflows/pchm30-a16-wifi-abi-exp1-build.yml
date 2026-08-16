@@ -3,7 +3,7 @@ name: PCHM30 A16 WiFi ABI EXP1
 on:
   workflow_dispatch:
   push:
-    branches: [pchm30-a16-btf-sockmap-exp1]
+    branches: [pchm30-a16-wifi-abi-exp1]
     paths:
       - '.github/workflows/pchm30-a16-wifi-abi-exp1-build.yml'
 

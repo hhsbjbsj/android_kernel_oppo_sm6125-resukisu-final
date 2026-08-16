@@ -103,6 +103,18 @@ run_step 'Instrument exact BTF rejection path'
 run_step 'Build BTF EXP2 kernel'
 run_step 'Build matching OPPO qcacld wlan module'
 
+# OPPO TRINKET audio headers use an external-linkage C inline helper. With
+# modern clang and a DLKM made of several translation units this can become a
+# duplicate/undefined-linkage trap. Keep semantics identical but make the
+# header helper private to each translation unit before rebuilding audio.
+AUDIO_SND_EVENT="$GITHUB_WORKSPACE/source/android/vendor/qcom/opensource/audio-kernel/include/soc/snd_event.h"
+test -f "$AUDIO_SND_EVENT"
+if grep -q '^inline bool is_snd_event_fwk_enabled' "$AUDIO_SND_EVENT"; then
+  sed -i 's/^inline bool is_snd_event_fwk_enabled/static inline bool is_snd_event_fwk_enabled/' "$AUDIO_SND_EVENT"
+fi
+grep -q '^static inline bool is_snd_event_fwk_enabled' "$AUDIO_SND_EVENT"
+echo '[PASS] snd_event helper uses static inline for matching audio DLKM build'
+
 IMAGE="$OUT_DIR/arch/arm64/boot/Image"
 VMLINUX="$OUT_DIR/vmlinux"
 test -s "$IMAGE"

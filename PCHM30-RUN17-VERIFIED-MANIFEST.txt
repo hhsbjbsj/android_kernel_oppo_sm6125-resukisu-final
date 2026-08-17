@@ -1,0 +1,9 @@
+PCHM30 A16 Run17 Built-in Runtime - REAL DEVICE VERIFIED
+========================================================
+Original build run: 32022682577
+Original artifact: 9286674495 / PCHM30-A16-RUN17-BUILTIN-RUNTIME-1
+Original source commit: 942335793248cdfda03afc85319cd011ce507061
+Kernel Image SHA256: f92896bb8549849de1d5bff41a2e66a936fba702544b61ec8e72c428a8ffe0ea
+Real-device result: boot OK; Wi-Fi OK; speaker OK; matching vendor module absent.
+Recompiled for this package: NO
+Recommended reusable package: PCHM30-A16-RUN17-BUILTIN-RUNTIME-VERIFIED-AK3.zip

@@ -1,0 +1,84 @@
+name: PCHM30 Run17 Publish Verified Flashable
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [pchm30-a16-run17-builtin-runtime]
+    paths:
+      - '.github/workflows/pchm30-run17-publish-verified.yml'
+      - '.github/scripts/package-pchm30-run17-ak3.sh'
+
+permissions:
+  contents: read
+  actions: read
+
+env:
+  VERIFIED_ARTIFACT_ID: '9286674495'
+  VERIFIED_IMAGE_SHA256: 'f92896bb8549849de1d5bff41a2e66a936fba702544b61ec8e72c428a8ffe0ea'
+  GH_TOKEN: ${{ github.token }}
+
+jobs:
+  publish:
+    name: Package exact real-device-verified Run17 artifact
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout packaging scripts only
+        uses: actions/checkout@v4
+        with:
+          ref: pchm30-a16-run17-builtin-runtime
+          fetch-depth: 1
+
+      - name: Download exact successful Run17 number 1 artifact
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          gh api "/repos/${GITHUB_REPOSITORY}/actions/artifacts/${VERIFIED_ARTIFACT_ID}/zip" > "$GITHUB_WORKSPACE/run17-verified-artifact.zip"
+          mkdir -p "$GITHUB_WORKSPACE/run17-verified-artifact"
+          unzip -q "$GITHUB_WORKSPACE/run17-verified-artifact.zip" -d "$GITHUB_WORKSPACE/run17-verified-artifact"
+          IMAGE="$GITHUB_WORKSPACE/run17-verified-artifact/source/android/kernel/msm-4.14/out-pchm30-a16-bpf/arch/arm64/boot/Image"
+          test -s "$IMAGE"
+          echo "${VERIFIED_IMAGE_SHA256}  $IMAGE" | sha256sum -c -
+          cp -f "$IMAGE" "$GITHUB_WORKSPACE/PCHM30-A16-RUN17-VERIFIED-Image"
+
+      - name: Build AnyKernel3 from exact verified Image without recompiling
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          chmod +x .github/scripts/package-pchm30-run17-ak3.sh
+          .github/scripts/package-pchm30-run17-ak3.sh \
+            "$GITHUB_WORKSPACE/PCHM30-A16-RUN17-VERIFIED-Image" \
+            "$GITHUB_WORKSPACE/PCHM30-A16-RUN17-BUILTIN-RUNTIME-VERIFIED-AK3.zip"
+
+      - name: Create verified release manifest
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          cat > "$GITHUB_WORKSPACE/PCHM30-RUN17-VERIFIED-MANIFEST.txt" <<EOF
+          PCHM30 A16 Run17 Built-in Runtime - REAL DEVICE VERIFIED
+          ========================================================
+          Original build run: 32022682577
+          Original artifact: 9286674495 / PCHM30-A16-RUN17-BUILTIN-RUNTIME-1
+          Original source commit: 942335793248cdfda03afc85319cd011ce507061
+          Kernel Image SHA256: ${VERIFIED_IMAGE_SHA256}
+          Real-device result: boot OK; Wi-Fi OK; speaker OK; matching vendor module absent.
+          Recompiled for this package: NO
+          Package contents: exact verified Image + AnyKernel3 flashable ZIP.
+          EOF
+          sha256sum \
+            "$GITHUB_WORKSPACE/PCHM30-A16-RUN17-VERIFIED-Image" \
+            "$GITHUB_WORKSPACE/PCHM30-A16-RUN17-BUILTIN-RUNTIME-VERIFIED-AK3.zip" \
+            > "$GITHUB_WORKSPACE/SHA256SUMS-RUN17-VERIFIED.txt"
+
+      - name: Upload reusable verified Run17 flashables
+        uses: actions/upload-artifact@v4
+        with:
+          name: PCHM30-RUN17-REALDEVICE-VERIFIED-FLASHABLE
+          path: |
+            PCHM30-A16-RUN17-VERIFIED-Image
+            PCHM30-A16-RUN17-BUILTIN-RUNTIME-VERIFIED-AK3.zip
+            PCHM30-A16-RUN17-BUILTIN-RUNTIME-VERIFIED-AK3.zip.sha256
+            PCHM30-RUN17-VERIFIED-MANIFEST.txt
+            SHA256SUMS-RUN17-VERIFIED.txt
+          if-no-files-found: error

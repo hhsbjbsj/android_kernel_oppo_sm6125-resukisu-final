@@ -1,0 +1,130 @@
+name: PCHM30 A16 Run17 Built-in Runtime
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [pchm30-a16-run17-builtin-runtime]
+    paths:
+      - '.github/workflows/pchm30-a16-run17-builtin-runtime.yml'
+      - '.github/scripts/run17-builtin-runtime-retry.sh'
+
+env:
+  TOOLCHAIN_RELEASE_TAG: pchm30-build-environment-20260810
+  TOOLCHAIN_ROOT: /opt/pchm30-toolchains
+  KERNEL_REL: source/android/kernel/msm-4.14
+  OUT_DIR: out-pchm30-a16-bpf
+  CONFIG_FILE: configs/PCHM30-stock-running.config
+  OPPO_VENDOR_REPO: https://github.com/oppo-source/android_kernel_modules_and_devicetree_oppo_sm6125.git
+  OPPO_VENDOR_COMMIT: 5e7bee452c72c948427b9131bec8cd5d92934f83
+  ARESIN_REPO: https://github.com/jsdizkcksv/android_kernel_aresin.git
+  ARESIN_PREREQ: 620d928acca50c8ba013554fc798dcf8b8910918
+  A15_FIRST: a2b662dced04902eb8f1778ec8e30259dc680ff4
+  A15_LAST: bd379f8140acc083fc386cc2600ee205b2a54e31
+  A16_FIRST: c2c621b5448adc69e105b1519b93dd637a581da5
+  A16_LAST: c74436291044381d4365d91afa0c8f4a574b22b4
+  ROOT_SNAPSHOT: b667ba359bf7da11b43c5d6403788d21c19facd7
+  RESUKISU_COMMIT: beaaea0eb895dc41e7b9bf5e3f39e57aa9635bab
+  ROOT_SUCCESS_BRANCH: pchm30-a16-resukisu-susfs220
+  ROOT_SUCCESS_WORKFLOW: .github/workflows/pchm30-a16-resukisu-susfs220-build.yml
+  EXP1_BRANCH: pchm30-a16-btf-sockmap-exp1
+  EXP1_WORKFLOW: .github/workflows/pchm30-a16-btf-sockmap-exp1-v2.yml
+  WIFI_SUCCESS_BRANCH: pchm30-a16-wifi-abi-exp1
+  WIFI_SUCCESS_WORKFLOW: .github/workflows/pchm30-a16-wifi-abi-exp1-build.yml
+  EXP2_BRANCH: pchm30-a16-btf-exp2-diagnose
+  EXP2_WORKFLOW: .github/workflows/pchm30-a16-btf-exp2-diagnose.yml
+  UPSTREAM_BTF_UAPI: f063c889c9458354a92b235a51cbb60d30321070
+  UPSTREAM_BTF_KERNEL: 1dc92851849cc2235a1efef8f8d5a9255efc5f13
+  GH_TOKEN: ${{ github.token }}
+
+jobs:
+  build:
+    name: Run17 - runtime-started true built-in WLAN plus audio
+    runs-on: ubuntu-22.04
+    timeout-minutes: 300
+
+    steps:
+      - name: Checkout exact successful A16 rootless baseline
+        uses: actions/checkout@v4
+        with:
+          ref: pchm30-a16-bpf-only
+          path: source/android/kernel/msm-4.14
+          fetch-depth: 1
+          submodules: false
+
+      - name: Build Run16 true built-ins plus Run17 runtime retries
+        working-directory: source/android/kernel/msm-4.14
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          git fetch --no-tags --depth=1 origin "$GITHUB_SHA"
+          git show "$GITHUB_SHA:.github/scripts/run16-orchestrate.sh" > "$GITHUB_WORKSPACE/run17-orchestrate.sh"
+          git show "$GITHUB_SHA:.github/scripts/run17-builtin-runtime-retry.sh" > "$GITHUB_WORKSPACE/run17-builtin-runtime-retry.sh"
+          chmod +x "$GITHUB_WORKSPACE/run17-orchestrate.sh" "$GITHUB_WORKSPACE/run17-builtin-runtime-retry.sh"
+
+          python3 - <<'PY'
+          from pathlib import Path
+          import os
+          p = Path(os.environ['GITHUB_WORKSPACE']) / 'run17-orchestrate.sh'
+          s = p.read_text()
+          old = '"$GITHUB_WORKSPACE/run16-builtin-wifi-audio.sh"\n\nrun_step \'Instrument exact BTF rejection path\''
+          new = '"$GITHUB_WORKSPACE/run16-builtin-wifi-audio.sh"\n"$GITHUB_WORKSPACE/run17-builtin-runtime-retry.sh"\n\nrun_step \'Instrument exact BTF rejection path\''
+          if old not in s:
+              raise SystemExit('cannot locate Run16 staging call in orchestrator')
+          p.write_text(s.replace(old, new, 1))
+          PY
+
+          "$GITHUB_WORKSPACE/run17-orchestrate.sh"
+
+      - name: Verify Run17 true built-ins and runtime-start markers
+        working-directory: source/android/kernel/msm-4.14
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          IMAGE="$OUT_DIR/arch/arm64/boot/Image"
+          VMLINUX="$OUT_DIR/vmlinux"
+          test -s "$IMAGE"
+          test -s "$VMLINUX"
+          test -s "$GITHUB_WORKSPACE/run16-builtin-proof.txt"
+          test -s "$GITHUB_WORKSPACE/run17-builtin-runtime-proof.txt"
+          test ! -s "$GITHUB_WORKSPACE/run16-unwanted-ko.txt"
+
+          grep -q '^CONFIG_QCA_CLD_WLAN=y$' "$OUT_DIR/.config"
+          grep -q '^CONFIG_MSM_11AD=y$' "$OUT_DIR/.config"
+          grep -q '^CONFIG_KSU=y$' "$OUT_DIR/.config"
+          grep -q '^CONFIG_KSU_SUSFS=y$' "$OUT_DIR/.config"
+          grep -q '^CONFIG_BPF_STREAM_PARSER=y$' "$OUT_DIR/.config"
+          grep -q '^CONFIG_MODVERSIONS=y$' "$OUT_DIR/.config"
+
+          strings -a "$IMAGE" > "$GITHUB_WORKSPACE/run17-image-strings.txt"
+          grep -Fq 'PCHM30 RUN17 built-in WLAN delayed start armed' "$GITHUB_WORKSPACE/run17-image-strings.txt"
+          grep -Fq 'PCHM30 RUN17 built-in WLAN delayed start succeeded' "$GITHUB_WORKSPACE/run17-image-strings.txt"
+          grep -Fq 'PCHM30 RUN17 q6core active reprobe armed' "$GITHUB_WORKSPACE/run17-image-strings.txt"
+          grep -Fq 'PCHM30 RUN17 q6core active reprobe succeeded' "$GITHUB_WORKSPACE/run17-image-strings.txt"
+
+          nm "$VMLINUX" > "$GITHUB_WORKSPACE/run17-vmlinux-nm.txt"
+          grep -Eq '[[:space:]]hdd_driver_load$' "$GITHUB_WORKSPACE/run17-vmlinux-nm.txt"
+          grep -Eq '[[:space:]]q6core_probe$' "$GITHUB_WORKSPACE/run17-vmlinux-nm.txt"
+          grep -Eq '[[:space:]]pchm30_builtin_wlan_start_workfn$' "$GITHUB_WORKSPACE/run17-vmlinux-nm.txt"
+          grep -Eq '[[:space:]]pchm30_q6core_retry_workfn$' "$GITHUB_WORKSPACE/run17-vmlinux-nm.txt"
+
+          echo '[PASS] Run17 keeps WLAN/audio built-in and embeds runtime self-start/reprobe logic'
+
+      - name: Upload Run17 built-in runtime artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: PCHM30-A16-RUN17-BUILTIN-RUNTIME-${{ github.run_number }}
+          path: |
+            run16-builtin-stage.log
+            run16-builtin-manifest.txt
+            run16-builtin-proof.txt
+            run16-unwanted-ko.txt
+            run17-builtin-runtime.log
+            run17-builtin-runtime-proof.txt
+            run17-image-strings.txt
+            Image-run16-builtin.sha256
+            Module.symvers.run16-builtin
+            source/android/kernel/msm-4.14/out-pchm30-a16-bpf/.config
+            source/android/kernel/msm-4.14/out-pchm30-a16-bpf/arch/arm64/boot/Image
+          include-hidden-files: true
+          if-no-files-found: warn

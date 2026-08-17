@@ -7,10 +7,19 @@ cd "$KERNEL_DIR"
 MODE="${1:-defer}"
 RUN17_STAGE="$GITHUB_WORKSPACE/run17-bbg-lz4kd.sh"
 RUN17_PROOF="$GITHUB_WORKSPACE/run17-bbg-zram-stage-proof.txt"
+RUN21_STAGE="$GITHUB_WORKSPACE/run21-selinux-hide-compat.sh"
 LOG="$GITHUB_WORKSPACE/run19-kpm-enable.log"
 
 if [[ "$MODE" != "--apply" ]]; then
   exec > >(tee "$LOG") 2>&1
+
+  echo '===== RUN21: apply Linux 4.14 SELinux-hide compatibility before KPM defer ====='
+  git show "$GITHUB_SHA:.github/scripts/run21-selinux-hide-compat.sh" > "$RUN21_STAGE"
+  chmod +x "$RUN21_STAGE"
+  "$RUN21_STAGE"
+  test -s "$GITHUB_WORKSPACE/run21-selinux-hide-proof.txt"
+  grep -Fxq 'selinux_hide_4_14=enabled' "$GITHUB_WORKSPACE/run21-selinux-hide-proof.txt"
+
   echo '===== RUN20: defer KPM until proven Run17 BBG/LZ4KD stage completes ====='
   test -f "$RUN17_STAGE"
 
@@ -49,8 +58,6 @@ from pathlib import Path
 p = Path('KernelSU/kernel/kpm/kpm.c')
 s = p.read_text()
 
-# Linux 4.14 arm64 still uses the legacy three-argument access_ok().
-# Keep read/write intent explicit: KPM LIST/INFO/VERSION return data to userspace.
 if 'pchm30_kpm_access_ok_read' not in s:
     s = s.replace('access_ok(', 'pchm30_kpm_access_ok_read(')
     anchor = '#define KPM_NAME_LEN 32\n'
@@ -80,28 +87,17 @@ static inline bool pchm30_kpm_access_ok_write(unsigned long addr,
         raise SystemExit(f'KPM helper anchor count={s.count(anchor)}')
     s = s.replace(anchor, helper + anchor, 1)
 
-# Upstream/pinned KPM LIST bug: arg2 is the requested length, while arg1 is the
-# destination userspace pointer. Checking arg2 as a pointer breaks module-list
-# refresh and can leave Manager waiting after an install.
 old = 'if (!pchm30_kpm_access_ok_read(arg2, len)) {'
 new = 'if (!pchm30_kpm_access_ok_write(arg1, len)) {'
 if s.count(old) != 1:
     raise SystemExit(f'KPM LIST access_ok bug anchor count={s.count(old)}')
 s = s.replace(old, new, 1)
 
-# INFO also writes its result to arg2; result_code is written back to userspace.
-s = s.replace(
-    'if (!pchm30_kpm_access_ok_read(arg2, size)) {',
-    'if (!pchm30_kpm_access_ok_write(arg2, size)) {',
-    1,
-)
-s = s.replace(
-    'if (!pchm30_kpm_access_ok_read(cmd.result_code, sizeof(int))) {',
-    'if (!pchm30_kpm_access_ok_write(cmd.result_code, sizeof(int))) {',
-    1,
-)
+s = s.replace('if (!pchm30_kpm_access_ok_read(arg2, size)) {',
+              'if (!pchm30_kpm_access_ok_write(arg2, size)) {', 1)
+s = s.replace('if (!pchm30_kpm_access_ok_read(cmd.result_code, sizeof(int))) {',
+              'if (!pchm30_kpm_access_ok_write(cmd.result_code, sizeof(int))) {', 1)
 
-# Never pass uninitialized stack bytes to the patched KernelPatch handlers.
 s = s.replace('char kernel_load_path[256];', 'char kernel_load_path[256] = { 0 };')
 s = s.replace('char kernel_args_buffer[256];', 'char kernel_args_buffer[256] = { 0 };')
 s = s.replace('char kernel_name_buffer[256];', 'char kernel_name_buffer[256] = { 0 };')
@@ -109,9 +105,6 @@ s = s.replace('char buf[256];', 'char buf[256] = { 0 };')
 s = s.replace('char buf[1024];', 'char buf[1024] = { 0 };')
 s = s.replace('int size;\n', 'int size = 0;\n', 1)
 
-# Add markers around the functions that KernelPatch replaces/hooks. If a KPM
-# module init hangs, ENTER appears without EXIT. If load returns but refresh is
-# broken, both LOAD lines appear and LIST markers expose the next failing leg.
 load_call = '''        sukisu_kpm_load_module_path((const char *)&kernel_load_path,
                                     (const char *)&kernel_args_buffer, NULL,
                                     &res);'''
@@ -132,8 +125,6 @@ if s.count(list_call) != 1:
     raise SystemExit(f'KPM list call anchor count={s.count(list_call)}')
 s = s.replace(list_call, list_repl, 1)
 
-# VERSION copies to arg1; reject a zero-length or invalid destination instead
-# of underflowing len = outlen - 1.
 version_anchor = '''        unsigned int outlen = (unsigned int)arg2;
         int len = strlen(buffer);'''
 version_repl = '''        unsigned int outlen = (unsigned int)arg2;
@@ -157,7 +148,6 @@ grep -Fq 'PCHM30 RUN20 KPM list EXIT' KernelSU/kernel/kpm/kpm.c
 grep -Fq 'pchm30_kpm_access_ok_write(arg1, len)' KernelSU/kernel/kpm/kpm.c
 ! grep -Fq 'pchm30_kpm_access_ok_read(arg2, len)' KernelSU/kernel/kpm/kpm.c
 
-# PCHM30 already carries the arm64 pageattr implementation required by KPM.
 grep -Fq 'select ARCH_HAS_SET_MEMORY' arch/arm64/Kconfig
 grep -Fq 'int set_memory_x(unsigned long addr, int numpages)' arch/arm64/mm/pageattr.c
 grep -Fq 'int set_memory_rw(unsigned long addr, int numpages)' arch/arm64/mm/pageattr.c
@@ -195,6 +185,7 @@ grep -Fq '#define SUSFS_VERSION "v2.2.0"' include/linux/susfs.h
   echo 'bbg=preserved'
   echo 'lz4k_lz4kd=preserved'
   echo 'run18_stack=preserved'
+  echo 'run21_selinux_hide=staged'
 } | tee "$GITHUB_WORKSPACE/run19-kpm-config-proof.txt"
 
-echo '[PASS] Run20 enabled and hardened KPM after proven Run17 BBG/LZ4KD staging'
+echo '[PASS] Run21 kept Run20 KPM hardening and staged SELinux-hide compatibility'

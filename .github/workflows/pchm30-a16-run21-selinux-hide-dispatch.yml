@@ -1,5 +1,6 @@
 name: PCHM30 A16 Run21 SELinux Hide Dispatch
 
+# Retry trigger after making SELinux-hide runtime-hook patching idempotent.
 on:
   workflow_dispatch:
   push:

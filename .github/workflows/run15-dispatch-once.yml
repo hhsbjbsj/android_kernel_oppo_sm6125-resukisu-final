@@ -1,0 +1,27 @@
+name: Run15 One-shot Dispatcher
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/run15-dispatch-trigger'
+  workflow_dispatch:
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  dispatch:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Dispatch proven EXP3 workflow on Run15 branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -Eeuo pipefail
+          echo 'Dispatching pchm30-a16-btf-exp3-var-datasec.yml on pchm30-a16-audio-apr-latefix'
+          gh workflow run pchm30-a16-btf-exp3-var-datasec.yml \
+            --repo "$GITHUB_REPOSITORY" \
+            --ref pchm30-a16-audio-apr-latefix
+          echo '[PASS] workflow_dispatch accepted'

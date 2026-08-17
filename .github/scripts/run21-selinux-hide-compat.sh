@@ -126,9 +126,13 @@ p = Path('KernelSU/kernel/runtime/ksud.c')
 s = p.read_text()
 for call in ['ksu_selinux_hide_handle_post_fs_data();', 'ksu_selinux_hide_handle_second_stage();']:
     old = '#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0)\n    ' + call + '\n#endif'
-    if old not in s:
-        raise SystemExit(f'ksud guard not found for {call}')
-    s = s.replace(old, '    ' + call, 1)
+    if old in s:
+        s = s.replace(old, '    ' + call, 1)
+        print(f'[PASS] removed legacy ksud guard: {call}')
+    elif call in s:
+        print(f'[PASS] ksud call already unguarded: {call}')
+    else:
+        raise SystemExit(f'ksud SELinux-hide call missing: {call}')
 p.write_text(s)
 PY
 

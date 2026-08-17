@@ -1,0 +1,118 @@
+name: PCHM30 Run17 Persist Verified Flashables
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [pchm30-a16-run17-builtin-runtime]
+    paths:
+      - '.github/workflows/pchm30-run17-persist-verified.yml'
+
+permissions:
+  contents: write
+  actions: read
+
+env:
+  VERIFIED_ARTIFACT_ID: '9286674495'
+  VERIFIED_IMAGE_SHA256: 'f92896bb8549849de1d5bff41a2e66a936fba702544b61ec8e72c428a8ffe0ea'
+  VERIFIED_SOURCE_COMMIT: '942335793248cdfda03afc85319cd011ce507061'
+  PUBLISH_BRANCH: 'pchm30-run17-flashables'
+  GH_TOKEN: ${{ github.token }}
+
+jobs:
+  persist:
+    name: Persist exact real-device-verified Run17 flashables
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout publisher branch
+        uses: actions/checkout@v4
+        with:
+          ref: pchm30-a16-run17-builtin-runtime
+          fetch-depth: 1
+
+      - name: Download and verify exact Run17 number 1 Image
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          gh api "/repos/${GITHUB_REPOSITORY}/actions/artifacts/${VERIFIED_ARTIFACT_ID}/zip" > "$RUNNER_TEMP/run17-original.zip"
+          mkdir -p "$RUNNER_TEMP/run17-original"
+          unzip -q "$RUNNER_TEMP/run17-original.zip" -d "$RUNNER_TEMP/run17-original"
+          IMAGE="$RUNNER_TEMP/run17-original/source/android/kernel/msm-4.14/out-pchm30-a16-bpf/arch/arm64/boot/Image"
+          test -s "$IMAGE"
+          echo "${VERIFIED_IMAGE_SHA256}  $IMAGE" | sha256sum -c -
+          cp -f "$IMAGE" "$RUNNER_TEMP/PCHM30-A16-RUN17-VERIFIED-Image"
+
+      - name: Build AnyKernel3 from exact verified Image without recompiling
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          chmod +x .github/scripts/package-pchm30-run17-ak3.sh
+          GITHUB_WORKSPACE="$GITHUB_WORKSPACE" .github/scripts/package-pchm30-run17-ak3.sh \
+            "$RUNNER_TEMP/PCHM30-A16-RUN17-VERIFIED-Image" \
+            "$RUNNER_TEMP/PCHM30-A16-RUN17-BUILTIN-RUNTIME-VERIFIED-AK3.zip"
+
+      - name: Prepare persistent flashables branch contents
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          cat > "$RUNNER_TEMP/PCHM30-RUN17-VERIFIED-MANIFEST.txt" <<EOF
+          PCHM30 A16 Run17 Built-in Runtime - REAL DEVICE VERIFIED
+          ========================================================
+          Original build run: 32022682577
+          Original artifact: 9286674495 / PCHM30-A16-RUN17-BUILTIN-RUNTIME-1
+          Original source commit: ${VERIFIED_SOURCE_COMMIT}
+          Kernel Image SHA256: ${VERIFIED_IMAGE_SHA256}
+          Real-device result: boot OK; Wi-Fi OK; speaker OK; matching vendor module absent.
+          Recompiled for this package: NO
+          Recommended reusable package: PCHM30-A16-RUN17-BUILTIN-RUNTIME-VERIFIED-AK3.zip
+          EOF
+
+          sha256sum \
+            "$RUNNER_TEMP/PCHM30-A16-RUN17-VERIFIED-Image" \
+            "$RUNNER_TEMP/PCHM30-A16-RUN17-BUILTIN-RUNTIME-VERIFIED-AK3.zip" \
+            > "$RUNNER_TEMP/SHA256SUMS-RUN17-VERIFIED.txt"
+
+          cat > "$RUNNER_TEMP/README.md" <<EOF
+          # PCHM30 Run17 — real-device verified flashables
+
+          This branch permanently stores the exact Run17 kernel that passed real-device testing on PCHM30 / OPPO A11x.
+
+          - Original Actions run: \`32022682577\`
+          - Source commit: \`${VERIFIED_SOURCE_COMMIT}\`
+          - Kernel Image SHA256: \`${VERIFIED_IMAGE_SHA256}\`
+          - Real-device result: Android boots, Wi-Fi works, speaker works, old matching WLAN/audio module is not required.
+
+          ## Reuse
+
+          **Recommended:** flash \`PCHM30-A16-RUN17-BUILTIN-RUNTIME-VERIFIED-AK3.zip\` in a compatible recovery. It performs a kernel-only replacement and preserves the installed boot ramdisk/DTB layout.
+
+          \`PCHM30-A16-RUN17-VERIFIED-Image\` is the raw kernel Image, not a boot.img; do not flash it directly to the boot partition.
+          EOF
+
+      - name: Publish orphan flashables branch
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          git config user.name 'PCHM30 Run17 Publisher'
+          git config user.email '107346247+hhsbjbsj@users.noreply.github.com'
+
+          git checkout --orphan "$PUBLISH_BRANCH"
+          git rm -rf . >/dev/null 2>&1 || true
+          find . -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +
+
+          cp -f "$RUNNER_TEMP/README.md" .
+          cp -f "$RUNNER_TEMP/PCHM30-A16-RUN17-VERIFIED-Image" .
+          cp -f "$RUNNER_TEMP/PCHM30-A16-RUN17-BUILTIN-RUNTIME-VERIFIED-AK3.zip" .
+          cp -f "$RUNNER_TEMP/PCHM30-A16-RUN17-BUILTIN-RUNTIME-VERIFIED-AK3.zip.sha256" .
+          cp -f "$RUNNER_TEMP/PCHM30-RUN17-VERIFIED-MANIFEST.txt" .
+          cp -f "$RUNNER_TEMP/SHA256SUMS-RUN17-VERIFIED.txt" .
+
+          git add README.md \
+            PCHM30-A16-RUN17-VERIFIED-Image \
+            PCHM30-A16-RUN17-BUILTIN-RUNTIME-VERIFIED-AK3.zip \
+            PCHM30-A16-RUN17-BUILTIN-RUNTIME-VERIFIED-AK3.zip.sha256 \
+            PCHM30-RUN17-VERIFIED-MANIFEST.txt \
+            SHA256SUMS-RUN17-VERIFIED.txt
+          git commit -m 'PCHM30 Run17 real-device verified flashables'
+          git push --force origin "$PUBLISH_BRANCH"

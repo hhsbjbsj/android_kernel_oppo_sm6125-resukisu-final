@@ -16,7 +16,7 @@ env:
   VERIFIED_ARTIFACT_ID: '9286674495'
   VERIFIED_IMAGE_SHA256: 'f92896bb8549849de1d5bff41a2e66a936fba702544b61ec8e72c428a8ffe0ea'
   VERIFIED_SOURCE_COMMIT: '942335793248cdfda03afc85319cd011ce507061'
-  RELEASE_TAG: 'pchm30-run17-realdevice-verified'
+  PUBLISH_BRANCH: 'pchm30-run17-flashables'
   GH_TOKEN: ${{ github.token }}
 
 jobs:
@@ -53,7 +53,7 @@ jobs:
             "$GITHUB_WORKSPACE/PCHM30-A16-RUN17-VERIFIED-Image" \
             "$GITHUB_WORKSPACE/PCHM30-A16-RUN17-BUILTIN-RUNTIME-VERIFIED-AK3.zip"
 
-      - name: Create verified release manifest
+      - name: Create verified manifest
         shell: bash
         run: |
           set -Eeuo pipefail
@@ -72,6 +72,24 @@ jobs:
             "$GITHUB_WORKSPACE/PCHM30-A16-RUN17-VERIFIED-Image" \
             "$GITHUB_WORKSPACE/PCHM30-A16-RUN17-BUILTIN-RUNTIME-VERIFIED-AK3.zip" \
             > "$GITHUB_WORKSPACE/SHA256SUMS-RUN17-VERIFIED.txt"
+          cat > "$GITHUB_WORKSPACE/README-RUN17-FLASHABLES.md" <<EOF
+          # PCHM30 Run17 real-device verified flashables
+
+          This branch stores the **exact Run17 kernel that passed real-device testing** on PCHM30 / OPPO A11x.
+
+          - Original Actions run: \`32022682577\`
+          - Source commit: \`${VERIFIED_SOURCE_COMMIT}\`
+          - Kernel Image SHA256: \`${VERIFIED_IMAGE_SHA256}\`
+          - Real-device result: Android boots, Wi-Fi works, speaker works, and the old matching vendor WLAN/audio module is not required.
+
+          ## Files
+
+          - \`PCHM30-A16-RUN17-BUILTIN-RUNTIME-VERIFIED-AK3.zip\`: flashable AnyKernel3 package; recommended for reuse.
+          - \`PCHM30-A16-RUN17-VERIFIED-Image\`: raw kernel Image; not a boot.img and should not be flashed directly to the boot partition.
+          - \`SHA256SUMS-RUN17-VERIFIED.txt\`: checksums.
+
+          The AK3 package performs a kernel-only replacement and preserves the currently installed boot ramdisk and DTB layout.
+          EOF
 
       - name: Upload reusable verified Run17 flashables
         uses: actions/upload-artifact@v4
@@ -83,24 +101,33 @@ jobs:
             PCHM30-A16-RUN17-BUILTIN-RUNTIME-VERIFIED-AK3.zip.sha256
             PCHM30-RUN17-VERIFIED-MANIFEST.txt
             SHA256SUMS-RUN17-VERIFIED.txt
+            README-RUN17-FLASHABLES.md
           if-no-files-found: error
 
-      - name: Publish persistent GitHub Release
+      - name: Persist verified flashables on dedicated branch
         shell: bash
         run: |
           set -Eeuo pipefail
-          FILES=(
-            "$GITHUB_WORKSPACE/PCHM30-A16-RUN17-VERIFIED-Image"
-            "$GITHUB_WORKSPACE/PCHM30-A16-RUN17-BUILTIN-RUNTIME-VERIFIED-AK3.zip"
-            "$GITHUB_WORKSPACE/PCHM30-A16-RUN17-BUILTIN-RUNTIME-VERIFIED-AK3.zip.sha256"
-            "$GITHUB_WORKSPACE/PCHM30-RUN17-VERIFIED-MANIFEST.txt"
-            "$GITHUB_WORKSPACE/SHA256SUMS-RUN17-VERIFIED.txt"
-          )
-          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
-            gh release upload "$RELEASE_TAG" "${FILES[@]}" --clobber
-          else
-            gh release create "$RELEASE_TAG" "${FILES[@]}" \
-              --target "$VERIFIED_SOURCE_COMMIT" \
-              --title 'PCHM30 A16 Run17 Built-in Runtime - Real Device Verified' \
-              --notes-file "$GITHUB_WORKSPACE/PCHM30-RUN17-VERIFIED-MANIFEST.txt"
-          fi
+          cd "$GITHUB_WORKSPACE"
+          export GIT_AUTHOR_NAME='PCHM30 Run17 Publisher'
+          export GIT_AUTHOR_EMAIL='107346247+hhsbjbsj@users.noreply.github.com'
+          export GIT_COMMITTER_NAME="$GIT_AUTHOR_NAME"
+          export GIT_COMMITTER_EMAIL="$GIT_AUTHOR_EMAIL"
+
+          image_blob=$(git hash-object -w PCHM30-A16-RUN17-VERIFIED-Image)
+          ak3_blob=$(git hash-object -w PCHM30-A16-RUN17-BUILTIN-RUNTIME-VERIFIED-AK3.zip)
+          ak3sha_blob=$(git hash-object -w PCHM30-A16-RUN17-BUILTIN-RUNTIME-VERIFIED-AK3.zip.sha256)
+          manifest_blob=$(git hash-object -w PCHM30-RUN17-VERIFIED-MANIFEST.txt)
+          sums_blob=$(git hash-object -w SHA256SUMS-RUN17-VERIFIED.txt)
+          readme_blob=$(git hash-object -w README-RUN17-FLASHABLES.md)
+
+          tree=$(printf '%s\n' \
+            "100644 blob $readme_blob\tREADME.md" \
+            "100644 blob $image_blob\tPCHM30-A16-RUN17-VERIFIED-Image" \
+            "100644 blob $ak3_blob\tPCHM30-A16-RUN17-BUILTIN-RUNTIME-VERIFIED-AK3.zip" \
+            "100644 blob $ak3sha_blob\tPCHM30-A16-RUN17-BUILTIN-RUNTIME-VERIFIED-AK3.zip.sha256" \
+            "100644 blob $manifest_blob\tPCHM30-RUN17-VERIFIED-MANIFEST.txt" \
+            "100644 blob $sums_blob\tSHA256SUMS-RUN17-VERIFIED.txt" | git mktree)
+          commit=$(printf '%s\n' 'PCHM30 Run17 real-device verified flashables' | git commit-tree "$tree")
+          git push --force origin "$commit:refs/heads/$PUBLISH_BRANCH"
+          echo "Persistent branch published: $PUBLISH_BRANCH"

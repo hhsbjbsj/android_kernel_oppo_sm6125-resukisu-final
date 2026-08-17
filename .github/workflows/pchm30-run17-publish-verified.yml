@@ -9,12 +9,14 @@ on:
       - '.github/scripts/package-pchm30-run17-ak3.sh'
 
 permissions:
-  contents: read
+  contents: write
   actions: read
 
 env:
   VERIFIED_ARTIFACT_ID: '9286674495'
   VERIFIED_IMAGE_SHA256: 'f92896bb8549849de1d5bff41a2e66a936fba702544b61ec8e72c428a8ffe0ea'
+  VERIFIED_SOURCE_COMMIT: '942335793248cdfda03afc85319cd011ce507061'
+  RELEASE_TAG: 'pchm30-run17-realdevice-verified'
   GH_TOKEN: ${{ github.token }}
 
 jobs:
@@ -60,7 +62,7 @@ jobs:
           ========================================================
           Original build run: 32022682577
           Original artifact: 9286674495 / PCHM30-A16-RUN17-BUILTIN-RUNTIME-1
-          Original source commit: 942335793248cdfda03afc85319cd011ce507061
+          Original source commit: ${VERIFIED_SOURCE_COMMIT}
           Kernel Image SHA256: ${VERIFIED_IMAGE_SHA256}
           Real-device result: boot OK; Wi-Fi OK; speaker OK; matching vendor module absent.
           Recompiled for this package: NO
@@ -82,3 +84,23 @@ jobs:
             PCHM30-RUN17-VERIFIED-MANIFEST.txt
             SHA256SUMS-RUN17-VERIFIED.txt
           if-no-files-found: error
+
+      - name: Publish persistent GitHub Release
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          FILES=(
+            "$GITHUB_WORKSPACE/PCHM30-A16-RUN17-VERIFIED-Image"
+            "$GITHUB_WORKSPACE/PCHM30-A16-RUN17-BUILTIN-RUNTIME-VERIFIED-AK3.zip"
+            "$GITHUB_WORKSPACE/PCHM30-A16-RUN17-BUILTIN-RUNTIME-VERIFIED-AK3.zip.sha256"
+            "$GITHUB_WORKSPACE/PCHM30-RUN17-VERIFIED-MANIFEST.txt"
+            "$GITHUB_WORKSPACE/SHA256SUMS-RUN17-VERIFIED.txt"
+          )
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release upload "$RELEASE_TAG" "${FILES[@]}" --clobber
+          else
+            gh release create "$RELEASE_TAG" "${FILES[@]}" \
+              --target "$VERIFIED_SOURCE_COMMIT" \
+              --title 'PCHM30 A16 Run17 Built-in Runtime - Real Device Verified' \
+              --notes-file "$GITHUB_WORKSPACE/PCHM30-RUN17-VERIFIED-MANIFEST.txt"
+          fi

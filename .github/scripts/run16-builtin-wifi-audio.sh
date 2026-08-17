@@ -127,6 +127,7 @@ if marker not in s:
     s += """
 # RUN16_OPLUS_PA_BUILTIN_DIRS
 ifeq ($(KERNEL_BUILD), 1)
+obj-y += bolero/
 obj-y += tfa98xx-v6/
 obj-y += sia81xx/
 endif
@@ -134,9 +135,11 @@ endif
     p.write_text(s)
 PY
 
-for d in tfa98xx-v6 sia81xx; do
-  test -f "$AUDIO_DST/asoc/codecs/$d/Kbuild" || { echo "[FATAL] missing PA Kbuild: $d"; exit 83; }
+for d in bolero tfa98xx-v6 sia81xx; do
+  test -f "$AUDIO_DST/asoc/codecs/$d/Kbuild" || { echo "[FATAL] missing codec/PA Kbuild: $d"; exit 83; }
 done
+
+grep -Fq 'obj-y += bolero/' "$AUDIO_DST/asoc/codecs/Kbuild"
 
 echo '===== STAGE RUN16 QCACLD INTO drivers/staging ====='
 rm -rf "$STAGING/qcacld-3.0" "$STAGING/qca-wifi-host-cmn" "$STAGING/fw-api"

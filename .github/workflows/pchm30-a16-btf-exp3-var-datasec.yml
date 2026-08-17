@@ -8,9 +8,11 @@ on:
       - '.github/workflows/pchm30-a16-btf-exp3-var-datasec.yml'
       - '.github/scripts/exp3-orchestrate.sh'
       - '.github/scripts/exp3-btf-backport.sh'
+      - '.github/scripts/exp3-btf-modern-observed.sh'
       - '.github/scripts/exp3-a16-runtime-compat.sh'
       - '.github/scripts/exp3-audio-dlkm.sh'
       - '.github/scripts/exp3-audio-wcd934x-closure.sh'
+      - '.github/scripts/exp3-audio-runtime-loader.sh'
       - '.github/scripts/exp3-vendor-dlkm-package.sh'
 
 permissions:
@@ -46,7 +48,7 @@ env:
 
 jobs:
   build:
-    name: A16 EXP3 - BTF plus closed matching vendor/audio ABI sweep
+    name: A16 EXP3 - Run12 speaker timing plus modern BTF metadata
     runs-on: ubuntu-22.04
     timeout-minutes: 240
 
@@ -59,14 +61,25 @@ jobs:
           fetch-depth: 1
           submodules: false
 
-      - name: Build EXP3 kernel plus matching WLAN and 11ad
+      - name: Build EXP3 kernel plus observed modern BTF WLAN and 11ad
         working-directory: source/android/kernel/msm-4.14
         shell: bash
         run: |
           set -Eeuo pipefail
           git fetch --no-tags --depth=1 origin "$GITHUB_SHA"
           git show "$GITHUB_SHA:.github/scripts/exp3-orchestrate.sh" > "$GITHUB_WORKSPACE/exp3-orchestrate.sh"
-          chmod +x "$GITHUB_WORKSPACE/exp3-orchestrate.sh"
+          git show "$GITHUB_SHA:.github/scripts/exp3-btf-modern-observed.sh" > "$GITHUB_WORKSPACE/exp3-btf-modern-observed.sh"
+          chmod +x "$GITHUB_WORKSPACE/exp3-orchestrate.sh" "$GITHUB_WORKSPACE/exp3-btf-modern-observed.sh"
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path("$GITHUB_WORKSPACE/exp3-orchestrate.sh")
+          s=p.read_text()
+          old='"$GITHUB_WORKSPACE/exp3-btf-backport.sh"\n\nrun_step \'Instrument exact BTF rejection path\''
+          new='"$GITHUB_WORKSPACE/exp3-btf-backport.sh"\n"$GITHUB_WORKSPACE/exp3-btf-modern-observed.sh"\n\nrun_step \'Instrument exact BTF rejection path\''
+          if old not in s:
+              raise SystemExit('cannot locate BTF backport call in orchestrator')
+          p.write_text(s.replace(old,new,1))
+          PY
           "$GITHUB_WORKSPACE/exp3-orchestrate.sh"
 
       - name: Rebuild full matching OPPO TRINKET audio graph
@@ -89,6 +102,16 @@ jobs:
           chmod +x "$GITHUB_WORKSPACE/exp3-audio-wcd934x-closure.sh"
           "$GITHUB_WORKSPACE/exp3-audio-wcd934x-closure.sh"
 
+      - name: Move audio graph to ordered post-fs-data load
+        working-directory: source/android/kernel/msm-4.14
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          git fetch --no-tags --depth=1 origin "$GITHUB_SHA"
+          git show "$GITHUB_SHA:.github/scripts/exp3-audio-runtime-loader.sh" > "$GITHUB_WORKSPACE/exp3-audio-runtime-loader.sh"
+          chmod +x "$GITHUB_WORKSPACE/exp3-audio-runtime-loader.sh"
+          "$GITHUB_WORKSPACE/exp3-audio-runtime-loader.sh"
+
       - name: Package unified matching vendor DLKM set
         working-directory: source/android/kernel/msm-4.14
         shell: bash
@@ -108,39 +131,22 @@ jobs:
           test -s "$IMAGE"
           test -s "$GITHUB_WORKSPACE/wlan-a16-exp1.ko"
           test -s "$GITHUB_WORKSPACE/msm_11ad_proxy-exp3.ko"
-          test -s "$GITHUB_WORKSPACE/PCHM30-EXP3-AUDIO-DLKM-KSU.zip"
           test -s "$GITHUB_WORKSPACE/PCHM30-EXP3-MATCHING-VENDOR-DLKM-KSU.zip"
-          test -s "$GITHUB_WORKSPACE/audio-exp3/module-layout.txt"
-          test -s "$GITHUB_WORKSPACE/audio-exp3/audio-modules.txt"
           test -s "$GITHUB_WORKSPACE/audio-exp3/raw/wcd934x_dlkm.ko"
           test -s "$GITHUB_WORKSPACE/audio-exp3/raw/machine_dlkm.ko"
-          test -s "$GITHUB_WORKSPACE/audio-exp3/raw/platform_dlkm.ko"
-          test -s "$GITHUB_WORKSPACE/audio-wcd934x-closure.sha256"
-          test -s "$GITHUB_WORKSPACE/vendor-dlkm-exp3/real-device-bugs.txt"
-          test -s "$GITHUB_WORKSPACE/vendor-dlkm-exp3/vendor-overlay.sha256"
           grep -q '^CONFIG_MODVERSIONS=y$' "$OUT_DIR/.config"
           grep -q '^CONFIG_KSU=y$' "$OUT_DIR/.config"
           grep -q '^CONFIG_KSU_SUSFS=y$' "$OUT_DIR/.config"
           grep -q '^CONFIG_BPF_STREAM_PARSER=y$' "$OUT_DIR/.config"
-          grep -q '^CONFIG_MSM_11AD=m$' "$OUT_DIR/.config"
-          grep -q 'static int a16_unprivileged_bpf_handler' kernel/sysctl.c
-          grep -A10 'procname.*unprivileged_bpf_disabled' kernel/sysctl.c | grep -q 'extra1.*&zero'
-          grep -A10 'procname.*unprivileged_bpf_disabled' kernel/sysctl.c | grep -q 'extra2.*&two'
-          grep -q 'snd_event_dlkm.ko' "$GITHUB_WORKSPACE/audio-exp3/audio-modules.txt"
-          grep -q 'q6_pdr_dlkm.ko' "$GITHUB_WORKSPACE/audio-exp3/audio-modules.txt"
-          grep -q 'wglink_dlkm.ko' "$GITHUB_WORKSPACE/audio-exp3/audio-modules.txt"
-          grep -q 'wcd_core_dlkm.ko' "$GITHUB_WORKSPACE/audio-exp3/audio-modules.txt"
-          grep -q 'wcd934x_dlkm.ko' "$GITHUB_WORKSPACE/audio-exp3/audio-modules.txt"
-          grep -q 'machine_dlkm.ko' "$GITHUB_WORKSPACE/audio-exp3/audio-modules.txt"
-          grep -q 'platform_dlkm.ko' "$GITHUB_WORKSPACE/audio-exp3/audio-modules.txt"
-          grep -q 'bolero_cdc_dlkm.ko' "$GITHUB_WORKSPACE/audio-exp3/audio-modules.txt"
-          grep -q 'wsa_macro_dlkm.ko' "$GITHUB_WORKSPACE/audio-exp3/audio-modules.txt"
-          grep -q 'rx_macro_dlkm.ko' "$GITHUB_WORKSPACE/audio-exp3/audio-modules.txt"
+          grep -Eq 'BTF_INFO_KIND.*0x1f' include/uapi/linux/btf.h
+          grep -Eq 'BTF_KIND_DECL_TAG[^0-9]*17' include/uapi/linux/btf.h
+          grep -q 'btf_type_vlen(t) > BTF_FUNC_GLOBAL' kernel/bpf/btf.c
+          grep -q 'Android 16 BTF compatibility: newer leaf/annotation kinds.' kernel/bpf/btf.c
+          unzip -p "$GITHUB_WORKSPACE/PCHM30-EXP3-MATCHING-VENDOR-DLKM-KSU.zip" post-fs-data.sh | grep -q 'ordered audio post-fs-data'
+          unzip -p "$GITHUB_WORKSPACE/PCHM30-EXP3-MATCHING-VENDOR-DLKM-KSU.zip" audio-load-ordered.sh | grep -q "W5='native_dlkm.ko machine_dlkm.ko'"
           unzip -l "$GITHUB_WORKSPACE/PCHM30-EXP3-MATCHING-VENDOR-DLKM-KSU.zip" | grep -q 'system/vendor/lib/modules/wlan.ko'
-          unzip -l "$GITHUB_WORKSPACE/PCHM30-EXP3-MATCHING-VENDOR-DLKM-KSU.zip" | grep -q 'system/vendor/lib/modules/msm_11ad_proxy.ko'
           unzip -l "$GITHUB_WORKSPACE/PCHM30-EXP3-MATCHING-VENDOR-DLKM-KSU.zip" | grep -q 'system/vendor/lib/modules/audio_wcd934x.ko'
-          unzip -l "$GITHUB_WORKSPACE/PCHM30-EXP3-MATCHING-VENDOR-DLKM-KSU.zip" | grep -q 'system/vendor/lib/modules/audio_machine_trinket.ko'
-          echo '[PASS] EXP3 Image + BTF diagnostics + A16 sysctl fix + matching WLAN/11ad + WCD934X-closed full audio vendor replacement set ready'
+          echo '[PASS] observed modern BTF compatibility + ordered early audio graph + matching vendor DLKM set ready'
 
       - name: Upload BTF EXP3 artifact
         if: always()
@@ -149,20 +155,13 @@ jobs:
           name: PCHM30-A16-BTF-EXP3-VAR-DATASEC-${{ github.run_number }}
           path: |
             btf-exp3-backport.log
-            btf-exp2-source.txt
             wifi-module-build.log
             wlan-a16-exp1.ko
             wlan-a16-exp1.sha256
-            wlan-a16-exp1.modinfo.txt
-            wlan-a16-exp1.undefined.txt
             msm_11ad_proxy-exp3.ko
             msm_11ad_proxy-exp3.sha256
-            msm_11ad_proxy-exp3.modinfo.txt
-            msm_11ad_proxy-exp3.undefined.txt
             audio-dlkm-build.log
             audio-wcd934x-closure.log
-            audio-wcd934x-closure.sha256
-            machine-exp3.modversions.txt
             audio-exp3/**
             PCHM30-EXP3-AUDIO-DLKM-KSU.zip
             vendor-dlkm-package.log

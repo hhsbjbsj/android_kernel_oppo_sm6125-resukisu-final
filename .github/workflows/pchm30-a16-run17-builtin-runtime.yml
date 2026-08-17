@@ -7,6 +7,7 @@ on:
     paths:
       - '.github/workflows/pchm30-a16-run17-builtin-runtime.yml'
       - '.github/scripts/run17-builtin-runtime-retry.sh'
+      - '.github/scripts/package-pchm30-run17-ak3.sh'
 
 env:
   TOOLCHAIN_RELEASE_TAG: pchm30-build-environment-20260810
@@ -109,6 +110,19 @@ jobs:
 
           echo '[PASS] Run17 keeps WLAN/audio built-in and embeds runtime self-start/reprobe logic'
 
+      - name: Package reusable PCHM30 AnyKernel3 ZIP
+        working-directory: source/android/kernel/msm-4.14
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          git fetch --no-tags --depth=1 origin "$GITHUB_SHA"
+          git show "$GITHUB_SHA:.github/scripts/package-pchm30-run17-ak3.sh" > "$GITHUB_WORKSPACE/package-pchm30-run17-ak3.sh"
+          chmod +x "$GITHUB_WORKSPACE/package-pchm30-run17-ak3.sh"
+          "$GITHUB_WORKSPACE/package-pchm30-run17-ak3.sh" \
+            "$OUT_DIR/arch/arm64/boot/Image" \
+            "$GITHUB_WORKSPACE/PCHM30-A16-RUN17-BUILTIN-RUNTIME-AK3-${GITHUB_RUN_NUMBER}.zip"
+          cp -f "$OUT_DIR/arch/arm64/boot/Image" "$GITHUB_WORKSPACE/PCHM30-A16-RUN17-Image-${GITHUB_RUN_NUMBER}"
+
       - name: Upload Run17 built-in runtime artifact
         if: always()
         uses: actions/upload-artifact@v4
@@ -124,6 +138,9 @@ jobs:
             run17-image-strings.txt
             Image-run16-builtin.sha256
             Module.symvers.run16-builtin
+            PCHM30-A16-RUN17-Image-${{ github.run_number }}
+            PCHM30-A16-RUN17-BUILTIN-RUNTIME-AK3-${{ github.run_number }}.zip
+            PCHM30-A16-RUN17-BUILTIN-RUNTIME-AK3-${{ github.run_number }}.zip.sha256
             source/android/kernel/msm-4.14/out-pchm30-a16-bpf/.config
             source/android/kernel/msm-4.14/out-pchm30-a16-bpf/arch/arm64/boot/Image
           include-hidden-files: true

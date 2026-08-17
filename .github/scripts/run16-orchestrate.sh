@@ -159,7 +159,8 @@ nm "$VMLINUX" | grep -q ' sock_hash_ops$'
     "$OUT_DIR/drivers/staging/qcacld-3.0/built-in.o" \
     "$OUT_DIR/drivers/platform/msm/msm_11ad/built-in.o"
   echo '===== key vmlinux symbols ====='
-  nm "$VMLINUX" | grep -E ' apr_probe$| q6core_probe$| tavil_cdc_mclk_enable$| sia81xx_| wlan_hdd_' | head -n 120
+  nm "$VMLINUX" | grep -E ' apr_probe$| q6core_probe$| tavil_cdc_mclk_enable$| sia81xx_| wlan_hdd_' > "$GITHUB_WORKSPACE/run16-key-vmlinux-symbols.txt"
+  head -n 120 "$GITHUB_WORKSPACE/run16-key-vmlinux-symbols.txt"
 } | tee "$GITHUB_WORKSPACE/run16-builtin-proof.txt"
 
 find "$OUT_DIR/techpack/audio" "$OUT_DIR/drivers/staging/qcacld-3.0" \

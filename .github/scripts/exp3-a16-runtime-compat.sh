@@ -76,3 +76,73 @@ grep -A10 'procname.*unprivileged_bpf_disabled' kernel/sysctl.c | grep -q 'extra
 grep -A10 'procname.*unprivileged_bpf_disabled' kernel/sysctl.c | grep -q 'extra2.*&two'
 git diff --check -- kernel/sysctl.c
 echo '[PASS] Android 16 can write unprivileged_bpf_disabled=0 without weakening locked state 1'
+
+echo '===== PATCH PCHM30 LATE AUDIO DLKM APR CHILD POPULATION ====='
+python3 - <<'PY'
+from pathlib import Path
+
+root = Path(__import__('os').environ['GITHUB_WORKSPACE']) / 'source/android/vendor/qcom/opensource/audio-kernel'
+apr = root / 'ipc/apr.c'
+q6core = root / 'dsp/q6core.c'
+if not apr.is_file() or not q6core.is_file():
+    raise SystemExit(f'audio source missing: apr={apr} q6core={q6core}')
+
+s = apr.read_text()
+old = '''\tapr_tal_init();
+
+\tret = snd_event_client_register(&pdev->dev, &apr_ssr_ops, NULL);'''
+new = '''\tapr_tal_init();
+
+\t/*
+\t * PCHM30 Android 16 late-DLKM recovery.
+\t *
+\t * The stock path populates APR child platform devices from apr_adsp_up().
+\t * When apr_dlkm is inserted after ADSP is already running, the one-shot
+\t * AUDIO_NOTIFIER_SERVICE_UP edge has already happened.  The APR parent can
+\t * bind successfully while q6core and the SM6150 sound-card devices are
+\t * never created.  Populate once from probe as well.  OF population skips
+\t * nodes that are already populated, so the normal notifier path remains
+\t * valid when it did run first.
+\t */
+\tdev_info(&pdev->dev,
+\t\t "PCHM30 A16 late-DLKM: schedule APR child population from probe\\n");
+\tschedule_work(&apr_priv->add_chld_dev_work);
+
+\tret = snd_event_client_register(&pdev->dev, &apr_ssr_ops, NULL);'''
+if 'PCHM30 A16 late-DLKM: schedule APR child population from probe' not in s:
+    if s.count(old) != 1:
+        raise SystemExit(f'apr probe anchor count={s.count(old)}')
+    s = s.replace(old, new, 1)
+apr.write_text(s)
+
+s = q6core.read_text()
+old = '''\trc = q6core_is_avs_up(&avs_state);
+\tif (rc < 0)
+\t\tgoto err;
+\tq6core_lcl.avs_state = avs_state;'''
+new = '''\trc = q6core_is_avs_up(&avs_state);
+\tif (rc < 0) {
+\t\t/*
+\t\t * APR can now create this platform device before AVS is ready.
+\t\t * Do not make that first timing miss permanent: ask the driver core
+\t\t * to retry the probe after the remaining audio/ADSP dependencies land.
+\t\t */
+\t\tdev_warn(&pdev->dev,
+\t\t\t "PCHM30 A16 late-DLKM: AVS not ready, defer q6core probe\\n");
+\t\treturn -EPROBE_DEFER;
+\t}
+\tq6core_lcl.avs_state = avs_state;'''
+if 'PCHM30 A16 late-DLKM: AVS not ready, defer q6core probe' not in s:
+    if s.count(old) != 1:
+        raise SystemExit(f'q6core probe anchor count={s.count(old)}')
+    s = s.replace(old, new, 1)
+q6core.write_text(s)
+PY
+
+APR_SRC="$GITHUB_WORKSPACE/source/android/vendor/qcom/opensource/audio-kernel/ipc/apr.c"
+Q6CORE_SRC="$GITHUB_WORKSPACE/source/android/vendor/qcom/opensource/audio-kernel/dsp/q6core.c"
+grep -Fq 'PCHM30 A16 late-DLKM: schedule APR child population from probe' "$APR_SRC"
+grep -Fq 'schedule_work(&apr_priv->add_chld_dev_work);' "$APR_SRC"
+grep -Fq 'PCHM30 A16 late-DLKM: AVS not ready, defer q6core probe' "$Q6CORE_SRC"
+grep -Fq 'return -EPROBE_DEFER;' "$Q6CORE_SRC"
+echo '[PASS] APR late-load path will create q6core/sound children and q6core can defer until AVS is ready'

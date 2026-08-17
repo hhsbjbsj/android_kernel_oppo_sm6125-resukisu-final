@@ -71,14 +71,15 @@ jobs:
           git show "$GITHUB_SHA:.github/scripts/exp3-btf-modern-observed.sh" > "$GITHUB_WORKSPACE/exp3-btf-modern-observed.sh"
           chmod +x "$GITHUB_WORKSPACE/exp3-orchestrate.sh" "$GITHUB_WORKSPACE/exp3-btf-modern-observed.sh"
           python3 - <<'PY'
+          import os
           from pathlib import Path
-          p=Path("$GITHUB_WORKSPACE/exp3-orchestrate.sh")
-          s=p.read_text()
-          old='"$GITHUB_WORKSPACE/exp3-btf-backport.sh"\n\nrun_step \'Instrument exact BTF rejection path\''
-          new='"$GITHUB_WORKSPACE/exp3-btf-backport.sh"\n"$GITHUB_WORKSPACE/exp3-btf-modern-observed.sh"\n\nrun_step \'Instrument exact BTF rejection path\''
+          p = Path(os.environ['GITHUB_WORKSPACE']) / 'exp3-orchestrate.sh'
+          s = p.read_text()
+          old = '"$GITHUB_WORKSPACE/exp3-btf-backport.sh"\n\nrun_step \'Instrument exact BTF rejection path\''
+          new = '"$GITHUB_WORKSPACE/exp3-btf-backport.sh"\n"$GITHUB_WORKSPACE/exp3-btf-modern-observed.sh"\n\nrun_step \'Instrument exact BTF rejection path\''
           if old not in s:
               raise SystemExit('cannot locate BTF backport call in orchestrator')
-          p.write_text(s.replace(old,new,1))
+          p.write_text(s.replace(old, new, 1))
           PY
           "$GITHUB_WORKSPACE/exp3-orchestrate.sh"
 

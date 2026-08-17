@@ -7,6 +7,7 @@ on:
     paths:
       - '.github/workflows/pchm30-a16-run17-builtin-runtime.yml'
       - '.github/scripts/run17-builtin-runtime-retry.sh'
+      - '.github/scripts/run17-bbg-lz4kd.sh'
       - '.github/scripts/package-pchm30-run17-ak3.sh'
 
 env:
@@ -39,7 +40,7 @@ env:
 
 jobs:
   build:
-    name: Run17 - runtime-started true built-in WLAN plus audio
+    name: Run17 - built-in WLAN/audio plus BBG and LZ4K/LZ4KD
     runs-on: ubuntu-22.04
     timeout-minutes: 300
 
@@ -52,7 +53,7 @@ jobs:
           fetch-depth: 1
           submodules: false
 
-      - name: Build Run16 true built-ins plus Run17 runtime retries
+      - name: Build Run17 true built-ins plus runtime retries, BBG and ZRAM algorithms
         working-directory: source/android/kernel/msm-4.14
         shell: bash
         run: |
@@ -60,7 +61,11 @@ jobs:
           git fetch --no-tags --depth=1 origin "$GITHUB_SHA"
           git show "$GITHUB_SHA:.github/scripts/run16-orchestrate.sh" > "$GITHUB_WORKSPACE/run17-orchestrate.sh"
           git show "$GITHUB_SHA:.github/scripts/run17-builtin-runtime-retry.sh" > "$GITHUB_WORKSPACE/run17-builtin-runtime-retry.sh"
-          chmod +x "$GITHUB_WORKSPACE/run17-orchestrate.sh" "$GITHUB_WORKSPACE/run17-builtin-runtime-retry.sh"
+          git show "$GITHUB_SHA:.github/scripts/run17-bbg-lz4kd.sh" > "$GITHUB_WORKSPACE/run17-bbg-lz4kd.sh"
+          chmod +x \
+            "$GITHUB_WORKSPACE/run17-orchestrate.sh" \
+            "$GITHUB_WORKSPACE/run17-builtin-runtime-retry.sh" \
+            "$GITHUB_WORKSPACE/run17-bbg-lz4kd.sh"
 
           python3 - <<'PY'
           from pathlib import Path
@@ -68,7 +73,10 @@ jobs:
           p = Path(os.environ['GITHUB_WORKSPACE']) / 'run17-orchestrate.sh'
           s = p.read_text()
           old = '"$GITHUB_WORKSPACE/run16-builtin-wifi-audio.sh"\n\nrun_step \'Instrument exact BTF rejection path\''
-          new = '"$GITHUB_WORKSPACE/run16-builtin-wifi-audio.sh"\n"$GITHUB_WORKSPACE/run17-builtin-runtime-retry.sh"\n\nrun_step \'Instrument exact BTF rejection path\''
+          new = ('"$GITHUB_WORKSPACE/run16-builtin-wifi-audio.sh"\n'
+                 '"$GITHUB_WORKSPACE/run17-builtin-runtime-retry.sh"\n'
+                 '"$GITHUB_WORKSPACE/run17-bbg-lz4kd.sh"\n\n'
+                 'run_step \'Instrument exact BTF rejection path\'')
           if old not in s:
               raise SystemExit('cannot locate Run16 staging call in orchestrator')
           p.write_text(s.replace(old, new, 1))
@@ -76,7 +84,7 @@ jobs:
 
           "$GITHUB_WORKSPACE/run17-orchestrate.sh"
 
-      - name: Verify Run17 true built-ins and runtime-start markers
+      - name: Verify Run17 built-ins, BBG and LZ4K/LZ4KD
         working-directory: source/android/kernel/msm-4.14
         shell: bash
         run: |
@@ -87,6 +95,8 @@ jobs:
           test -s "$VMLINUX"
           test -s "$GITHUB_WORKSPACE/run16-builtin-proof.txt"
           test -s "$GITHUB_WORKSPACE/run17-builtin-runtime-proof.txt"
+          test -s "$GITHUB_WORKSPACE/run17-bbg-zram-stage-proof.txt"
+          test -s "$GITHUB_WORKSPACE/run17-bbg-zram.log"
           test ! -s "$GITHUB_WORKSPACE/run16-unwanted-ko.txt"
 
           grep -q '^CONFIG_QCA_CLD_WLAN=y$' "$OUT_DIR/.config"
@@ -95,20 +105,34 @@ jobs:
           grep -q '^CONFIG_KSU_SUSFS=y$' "$OUT_DIR/.config"
           grep -q '^CONFIG_BPF_STREAM_PARSER=y$' "$OUT_DIR/.config"
           grep -q '^CONFIG_MODVERSIONS=y$' "$OUT_DIR/.config"
+          grep -q '^CONFIG_BBG=y$' "$OUT_DIR/.config"
+          grep -q '^CONFIG_CRYPTO_LZ4K=y$' "$OUT_DIR/.config"
+          grep -q '^CONFIG_CRYPTO_LZ4KD=y$' "$OUT_DIR/.config"
+          grep -q '^CONFIG_LZ4K_COMPRESS=y$' "$OUT_DIR/.config"
+          grep -q '^CONFIG_LZ4K_DECOMPRESS=y$' "$OUT_DIR/.config"
+          grep -q '^CONFIG_LZ4KD_COMPRESS=y$' "$OUT_DIR/.config"
+          grep -q '^CONFIG_LZ4KD_DECOMPRESS=y$' "$OUT_DIR/.config"
+          ! grep -q '^CONFIG_KPM=y$' "$OUT_DIR/.config"
 
           strings -a "$IMAGE" > "$GITHUB_WORKSPACE/run17-image-strings.txt"
           grep -Fq 'PCHM30 RUN17 built-in WLAN delayed start armed' "$GITHUB_WORKSPACE/run17-image-strings.txt"
           grep -Fq 'PCHM30 RUN17 built-in WLAN delayed start succeeded' "$GITHUB_WORKSPACE/run17-image-strings.txt"
           grep -Fq 'PCHM30 RUN17 q6core active reprobe armed' "$GITHUB_WORKSPACE/run17-image-strings.txt"
           grep -Fq 'PCHM30 RUN17 q6core active reprobe succeeded' "$GITHUB_WORKSPACE/run17-image-strings.txt"
+          grep -Fq 'baseband_guard power by' "$GITHUB_WORKSPACE/run17-image-strings.txt"
 
           nm "$VMLINUX" > "$GITHUB_WORKSPACE/run17-vmlinux-nm.txt"
           grep -Eq '[[:space:]]hdd_driver_load$' "$GITHUB_WORKSPACE/run17-vmlinux-nm.txt"
           grep -Eq '[[:space:]]q6core_probe$' "$GITHUB_WORKSPACE/run17-vmlinux-nm.txt"
           grep -Eq '[[:space:]]pchm30_builtin_wlan_start_workfn$' "$GITHUB_WORKSPACE/run17-vmlinux-nm.txt"
           grep -Eq '[[:space:]]pchm30_q6core_retry_workfn$' "$GITHUB_WORKSPACE/run17-vmlinux-nm.txt"
+          grep -Eq '[[:space:]]bbg_init$' "$GITHUB_WORKSPACE/run17-vmlinux-nm.txt"
+          grep -Eq '[[:space:]]lz4k_mod_init$' "$GITHUB_WORKSPACE/run17-vmlinux-nm.txt"
+          grep -Eq '[[:space:]]lz4kd_mod_init$' "$GITHUB_WORKSPACE/run17-vmlinux-nm.txt"
 
-          echo '[PASS] Run17 keeps WLAN/audio built-in and embeds runtime self-start/reprobe logic'
+          grep -Fq 'default_compressor = "lz4kd"' drivers/block/zram/zram_drv.c
+
+          echo '[PASS] Run17 keeps verified WLAN/audio behavior and adds BBG + built-in LZ4K/LZ4KD; KPM remains disabled'
 
       - name: Package reusable PCHM30 AnyKernel3 ZIP
         working-directory: source/android/kernel/msm-4.14
@@ -135,7 +159,10 @@ jobs:
             run16-unwanted-ko.txt
             run17-builtin-runtime.log
             run17-builtin-runtime-proof.txt
+            run17-bbg-zram.log
+            run17-bbg-zram-stage-proof.txt
             run17-image-strings.txt
+            run17-vmlinux-nm.txt
             Image-run16-builtin.sha256
             Module.symvers.run16-builtin
             PCHM30-A16-RUN17-Image-${{ github.run_number }}

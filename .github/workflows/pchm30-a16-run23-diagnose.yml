@@ -1,11 +1,11 @@
 name: PCHM30 A16 Run23 Diagnose
+# status refresh after SIGPIPE fix
 
 on:
   push:
     branches: [pchm30-a16-run23-kpm-runtimefix-btf]
     paths:
       - '.github/workflows/pchm30-a16-run23-diagnose.yml'
-  workflow_dispatch:
 
 permissions:
   actions: read
@@ -14,114 +14,51 @@ permissions:
 jobs:
   diagnose:
     runs-on: ubuntu-22.04
-    timeout-minutes: 10
+    timeout-minutes: 5
     steps:
-      - name: Checkout Run23 branch
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
           ref: pchm30-a16-run23-kpm-runtimefix-btf
           fetch-depth: 1
 
-      - name: Inspect recent Run23 runs and failed job logs
+      - name: Capture current Run23 status
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
-          BRANCH: pchm30-a16-run23-kpm-runtimefix-btf
-          TARGET_WF: PCHM30 A16 Run23 KPM RuntimeFix + BTF Kprobe
         shell: bash
         run: |
           set -Eeuo pipefail
           python3 - <<'PY'
-          import json, os, re, subprocess, urllib.request
+          import json, os, urllib.request
           from pathlib import Path
-
-          token = os.environ['GH_TOKEN']
-          repo = os.environ['REPO']
-          branch = os.environ['BRANCH']
-          target = os.environ['TARGET_WF']
-          api = 'https://api.github.com'
-          headers = {
-              'Accept': 'application/vnd.github+json',
-              'Authorization': f'Bearer {token}',
-              'X-GitHub-Api-Version': '2022-11-28',
-              'User-Agent': 'run23-diagnose',
-          }
-
-          def get_json(path):
-              req = urllib.request.Request(api + path, headers=headers)
-              with urllib.request.urlopen(req, timeout=30) as r:
-                  return json.load(r)
-
-          runs = get_json(f'/repos/{repo}/actions/runs?branch={branch}&per_page=30')['workflow_runs']
-          runs = [r for r in runs if r.get('name') == target]
-          out = []
-          out.append('===== RUN23 RECENT MAIN RUNS =====')
-          for r in runs[:12]:
-              out.append(f"run_id={r['id']} run_number={r.get('run_number')} event={r.get('event')} status={r.get('status')} conclusion={r.get('conclusion')} head_sha={r.get('head_sha')} created={r.get('created_at')} updated={r.get('updated_at')}")
-
-          failed = [r for r in runs if r.get('status') == 'completed' and r.get('conclusion') == 'failure']
-          active = [r for r in runs if r.get('status') in ('queued','in_progress','waiting','requested','pending')]
-          out.append('')
-          out.append('===== ACTIVE RUN23 =====')
-          for r in active[:8]:
-              out.append(f"run_id={r['id']} run_number={r.get('run_number')} status={r.get('status')} head_sha={r.get('head_sha')} updated={r.get('updated_at')}")
-              jobs = get_json(f"/repos/{repo}/actions/runs/{r['id']}/jobs?per_page=100").get('jobs', [])
-              for j in jobs:
-                  out.append(f"  job_id={j['id']} name={j['name']} status={j['status']} conclusion={j.get('conclusion')} started={j.get('started_at')} completed={j.get('completed_at')}")
-                  for s in j.get('steps', []):
-                      if s.get('status') in ('in_progress','queued','pending') or s.get('conclusion') == 'failure':
-                          out.append(f"    STEP #{s.get('number')} {s.get('name')} status={s.get('status')} conclusion={s.get('conclusion')}")
-
-          if failed:
-              r = failed[0]
-              out.append('')
-              out.append('===== LATEST FAILED RUN23 =====')
-              out.append(f"run_id={r['id']} run_number={r.get('run_number')} head_sha={r.get('head_sha')} created={r.get('created_at')} updated={r.get('updated_at')}")
-              jobs = get_json(f"/repos/{repo}/actions/runs/{r['id']}/jobs?per_page=100").get('jobs', [])
-              for j in jobs:
-                  out.append(f"job_id={j['id']} name={j['name']} status={j['status']} conclusion={j.get('conclusion')}")
-                  for s in j.get('steps', []):
-                      out.append(f"  STEP #{s.get('number')} {s.get('name')} status={s.get('status')} conclusion={s.get('conclusion')}")
-                  if j.get('conclusion') == 'failure':
-                      log_url = f"{api}/repos/{repo}/actions/jobs/{j['id']}/logs"
-                      p = subprocess.run([
-                          'curl','-fsSL','--connect-timeout','20','--max-time','120',
-                          '-H','Accept: application/vnd.github+json',
-                          '-H',f'Authorization: Bearer {token}',
-                          '-H','X-GitHub-Api-Version: 2022-11-28',
-                          log_url
-                      ], stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-                      text = p.stdout.decode('utf-8', 'replace')
-                      lines = text.splitlines()
-                      out.append('')
-                      out.append('----- FIRST ERROR/FATAL CANDIDATES -----')
-                      pats = re.compile(r'(##\[error\]|\bfatal\b|\berror:|\[FATAL\]|Process completed with exit code|command not found|No such file|timed out|Unable to|failed)', re.I)
-                      hits = [(i, line) for i, line in enumerate(lines) if pats.search(line)]
-                      for i, line in hits[:120]:
-                          start=max(0,i-3); end=min(len(lines),i+5)
-                          out.append(f'--- context line {i+1} ---')
-                          out.extend(lines[start:end])
-                      out.append('')
-                      out.append('----- FAILED JOB LOG TAIL -----')
-                      out.extend(lines[-500:])
-          else:
-              out.append('')
-              out.append('NO_COMPLETED_FAILURE_FOUND')
-
-          Path('run23-diagnose-latest.txt').write_text('\n'.join(out) + '\n')
+          repo=os.environ['REPO']; token=os.environ['GH_TOKEN']
+          headers={'Accept':'application/vnd.github+json','Authorization':f'Bearer {token}','X-GitHub-Api-Version':'2022-11-28','User-Agent':'run23-status'}
+          def get(path):
+              req=urllib.request.Request('https://api.github.com'+path,headers=headers)
+              with urllib.request.urlopen(req,timeout=30) as r: return json.load(r)
+          runs=get(f'/repos/{repo}/actions/runs?branch=pchm30-a16-run23-kpm-runtimefix-btf&per_page=20')['workflow_runs']
+          runs=[r for r in runs if r.get('name')=='PCHM30 A16 Run23 KPM RuntimeFix + BTF Kprobe']
+          out=['===== RUN23 STATUS REFRESH =====']
+          for r in runs[:10]:
+              out.append(f"run_id={r['id']} run_number={r.get('run_number')} status={r.get('status')} conclusion={r.get('conclusion')} sha={r.get('head_sha')} created={r.get('created_at')} updated={r.get('updated_at')}")
+              if r.get('status') in ('queued','in_progress'):
+                  jobs=get(f"/repos/{repo}/actions/runs/{r['id']}/jobs?per_page=100").get('jobs',[])
+                  for j in jobs:
+                      out.append(f"  job_id={j['id']} status={j.get('status')} conclusion={j.get('conclusion')}")
+                      for s in j.get('steps',[]):
+                          if s.get('status') in ('in_progress','queued','pending') or s.get('conclusion')=='failure':
+                              out.append(f"    step#{s.get('number')} {s.get('name')} status={s.get('status')} conclusion={s.get('conclusion')}")
+          Path('run23-status-latest.txt').write_text('\n'.join(out)+'\n')
+          print('\n'.join(out))
           PY
-          sed -n '1,220p' run23-diagnose-latest.txt
 
-      - name: Commit diagnostic report
+      - name: Commit status report
         shell: bash
         run: |
           set -Eeuo pipefail
           git config user.name github-actions[bot]
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-          git add run23-diagnose-latest.txt
-          if git diff --cached --quiet; then
-            echo '[PASS] diagnostic report unchanged'
-            exit 0
-          fi
-          git commit -m 'run23: capture current Actions failure diagnostics'
+          git add run23-status-latest.txt
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m 'run23: refresh current Actions status'
           git push origin HEAD:pchm30-a16-run23-kpm-runtimefix-btf

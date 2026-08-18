@@ -1,6 +1,6 @@
 name: PCHM30 A16 Run21 SELinux Hide Dispatch
 
-# Retry trigger after making SELinux-hide runtime-hook patching idempotent.
+# Manual trigger 2026-08-18 after confirming current Run21 hook fix is present.
 on:
   workflow_dispatch:
   push:

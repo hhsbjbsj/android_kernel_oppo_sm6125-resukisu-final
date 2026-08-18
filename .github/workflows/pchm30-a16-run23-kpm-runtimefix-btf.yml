@@ -1,5 +1,5 @@
 name: PCHM30 A16 Run23 KPM RuntimeFix + BTF Kprobe
-# retrigger after removing invalid branch-local workflow_dispatch launcher
+# Run23: bounded non-Azure APT + SIGPIPE-safe verification
 
 on:
   workflow_dispatch:
@@ -7,6 +7,7 @@ on:
     branches: [pchm30-a16-run23-kpm-runtimefix-btf]
     paths:
       - '.github/workflows/pchm30-a16-run23-kpm-runtimefix-btf.yml'
+      - '.github/scripts/run16-orchestrate.sh'
 
 env:
   TOOLCHAIN_RELEASE_TAG: pchm30-build-environment-20260810
@@ -69,9 +70,6 @@ jobs:
           cat /etc/apt/apt-mirrors.txt 2>/dev/null || true
           grep -R "azure.archive.ubuntu.com\|mirror+file" /etc/apt/sources.list /etc/apt/sources.list.d 2>/dev/null || true
 
-          # GitHub hosted Ubuntu runners may point Ubuntu suites at the Azure mirrorlist.
-          # The Azure mirror occasionally hangs for tens of minutes while archive.ubuntu.com
-          # is healthy, so pin this build to the working public archive mirror.
           if [ -f /etc/apt/apt-mirrors.txt ]; then
             printf '%s\n' 'https://archive.ubuntu.com/ubuntu/' | sudo tee /etc/apt/apt-mirrors.txt >/dev/null
           fi
@@ -92,13 +90,16 @@ jobs:
           )
 
           apt_retry() {
-            local attempt
+            local attempt rc
             for attempt in 1 2 3; do
               echo "===== apt attempt ${attempt}/3: $* ====="
-              if sudo timeout 240s apt-get "${APT_OPTS[@]}" "$@"; then
+              set +e
+              sudo timeout 240s apt-get "${APT_OPTS[@]}" "$@"
+              rc=$?
+              set -e
+              if [ "$rc" -eq 0 ]; then
                 return 0
               fi
-              rc=$?
               echo "[WARN] apt attempt ${attempt} failed/timed out rc=${rc}"
               sudo rm -rf /var/lib/apt/lists/partial/* || true
               sleep $((attempt * 5))
@@ -238,6 +239,7 @@ jobs:
           CONFIG="$OUT_DIR/.config"
           CROSS64="${CROSS_COMPILE:-$TOOLCHAIN_ROOT/aarch64-linux-android-4.9/bin/aarch64-linux-android-}"
           OBJCOPY_BIN="${CROSS64}objcopy"
+          RUN23_NM="$GITHUB_WORKSPACE/run23-vmlinux-nm.txt"
           test -s "$IMAGE"
           test -s "$VMLINUX"
           test -x "$OBJCOPY_BIN"
@@ -280,11 +282,14 @@ jobs:
           test "$(readelf -SW "$VMLINUX" | grep -Ec '[[:space:]]\.BTF[[:space:]]')" -eq 1
           "$OBJCOPY_BIN" --dump-section .BTF="$GITHUB_WORKSPACE/run23-vmlinux.btf" "$VMLINUX"
           test -s "$GITHUB_WORKSPACE/run23-vmlinux.btf"
-          nm "$VMLINUX" | grep -E '_binary__btf_vmlinux_bin_(start|end)$' | tee -a "$GITHUB_WORKSPACE/run23-btf-kprobe-proof.txt"
-          nm "$VMLINUX" | grep -Eq '[[:space:]]register_kprobe$'
-          nm "$VMLINUX" | grep -Eq '[[:space:]]register_kretprobe$'
+
+          # Materialize nm once so grep -q cannot SIGPIPE nm under pipefail.
+          nm "$VMLINUX" > "$RUN23_NM"
+          grep -E '_binary__btf_vmlinux_bin_(start|end)$' "$RUN23_NM" | tee -a "$GITHUB_WORKSPACE/run23-btf-kprobe-proof.txt"
+          grep -Eq '[[:space:]]register_kprobe$' "$RUN23_NM"
+          grep -Eq '[[:space:]]register_kretprobe$' "$RUN23_NM"
           for sym in sys_bind sys_getsockname sys_close; do
-            nm "$VMLINUX" | grep -Eq "[[:space:]]${sym}$" || { echo "[FATAL] missing ${sym}"; exit 92; }
+            grep -Eq "[[:space:]]${sym}$" "$RUN23_NM" || { echo "[FATAL] missing ${sym}"; exit 92; }
           done
           for sym in BPF_PROG_TYPE_CGROUP_SOCK_ADDR BPF_CGROUP_INET4_BIND BPF_CGROUP_INET6_BIND BPF_CGROUP_INET4_CONNECT BPF_CGROUP_INET6_CONNECT; do
             grep -q "$sym" include/uapi/linux/bpf.h || { echo "[FATAL] missing $sym"; exit 93; }
@@ -323,6 +328,7 @@ jobs:
             run19-btf-kprobe-scene-fix.log
             run23-btf-kprobe-proof.txt
             run23-vmlinux.btf
+            run23-vmlinux-nm.txt
             run19-prepatch-image-strings.txt
             run19-patched-image-strings.txt
             run19-vmlinux-nm.txt

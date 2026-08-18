@@ -1,0 +1,39 @@
+name: PCHM30 Run19 BTF Status Snapshot
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [pchm30-a16-run19-btf-kprobe-fix]
+    paths:
+      - '.github/workflows/pchm30-a16-run19-btf-status.yml'
+
+permissions:
+  actions: read
+  contents: write
+
+jobs:
+  snapshot:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: pchm30-a16-run19-btf-kprobe-fix
+          fetch-depth: 1
+      - name: Capture latest Run19 BTF build status
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          BRANCH: pchm30-a16-run19-btf-kprobe-fix
+          WORKFLOW: pchm30-a16-run19-btf-kprobe-fix.yml
+        run: |
+          set -Eeuo pipefail
+          mkdir -p ci-diagnostics
+          API="https://api.github.com/repos/$REPO"
+          runs="$(curl -fsSL -H 'Accept: application/vnd.github+json' -H "Authorization: Bearer $GH_TOKEN" -H 'X-GitHub-Api-Version: 2022-11-28' "$API/actions/workflows/$WORKFLOW/runs?branch=$BRANCH&per_page=5")"
+          jq -r '.workflow_runs[0] | "run_id="+(.id|tostring)+"\nstatus="+.status+"\nconclusion="+(.conclusion//"")+"\nhead_sha="+.head_sha+"\ncreated_at="+.created_at+"\nupdated_at="+.updated_at+"\nrun_url="+.html_url' <<<"$runs" > ci-diagnostics/run19-btf-latest-status.txt
+          cat ci-diagnostics/run19-btf-latest-status.txt
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add ci-diagnostics/run19-btf-latest-status.txt
+          git commit -m 'ci: snapshot Run19 BTF status' || exit 0
+          git push origin HEAD:pchm30-a16-run19-btf-kprobe-fix

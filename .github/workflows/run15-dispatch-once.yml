@@ -9,11 +9,10 @@ on:
 
 permissions:
   actions: write
-  contents: write
+  contents: read
 
 jobs:
   dispatch:
-    if: github.event_name == 'workflow_dispatch' || !contains(github.event.head_commit.message, '[publish-run17-ak3]')
     runs-on: ubuntu-22.04
     steps:
       - name: Dispatch proven EXP3 workflow on Run15 branch
@@ -26,103 +25,3 @@ jobs:
             --repo "$GITHUB_REPOSITORY" \
             --ref pchm30-a16-audio-apr-latefix
           echo '[PASS] workflow_dispatch accepted'
-
-  publish_run17_ak3:
-    if: github.event_name == 'push' && contains(github.event.head_commit.message, '[publish-run17-ak3]')
-    runs-on: ubuntu-22.04
-    timeout-minutes: 10
-    steps:
-      - name: Checkout target artifact branch
-        uses: actions/checkout@v4
-        with:
-          ref: pchm30-a16-resukisu-run17-ak3-artifact
-          fetch-depth: 1
-
-      - name: Recover exact successful ReSukiSU Run17 AK3
-        env:
-          GH_TOKEN: ${{ github.token }}
-          REPO: ${{ github.repository }}
-          ARTIFACT_ID: '9325893576'
-          EXPECTED_SHA256: '5de8bcf35e7efec057d72f044fc6718b70e5ad4bc838a9a6c83940c7f716ee5d'
-        shell: bash
-        run: |
-          set -Eeuo pipefail
-          rm -rf /tmp/run17-publish artifacts
-          mkdir -p /tmp/run17-publish artifacts
-          python3 - <<'PY'
-          import hashlib, os, shutil, urllib.request, zipfile
-          from pathlib import Path
-
-          token=os.environ['GH_TOKEN']
-          repo=os.environ['REPO']
-          artifact_id=os.environ['ARTIFACT_ID']
-          expected=os.environ['EXPECTED_SHA256']
-          req=urllib.request.Request(
-              f'https://api.github.com/repos/{repo}/actions/artifacts/{artifact_id}/zip',
-              headers={
-                  'Accept':'application/vnd.github+json',
-                  'Authorization':f'Bearer {token}',
-                  'X-GitHub-Api-Version':'2022-11-28',
-                  'User-Agent':'pchm30-run17-ak3-publish',
-              }
-          )
-          outer=Path('/tmp/run17-publish/artifact.zip')
-          with urllib.request.urlopen(req, timeout=180) as r, outer.open('wb') as f:
-              shutil.copyfileobj(r,f)
-          with zipfile.ZipFile(outer) as z:
-              z.extractall('/tmp/run17-publish/extracted')
-          root=Path('/tmp/run17-publish/extracted')
-          matches=sorted(root.rglob('PCHM30-A16-RUN17-BTF-KPROBE-FIX-AK3-*.zip'))
-          if len(matches)!=1:
-              raise SystemExit(f'expected one AK3, found {len(matches)}: {matches}')
-          src=matches[0]
-          sha=hashlib.sha256(src.read_bytes()).hexdigest()
-          if sha!=expected:
-              raise SystemExit(f'SHA mismatch: {sha} != {expected}')
-          dst=Path('artifacts/PCHM30-A16-ReSukiSU-RUN17-BTF-KPROBE-AK3.zip')
-          shutil.copy2(src,dst)
-          Path(str(dst)+'.sha256').write_text(f'{sha}  {dst.name}\n')
-          Path('artifacts/SOURCE.txt').write_text(
-              'PCHM30 A16 ReSukiSU Run17 AK3\n'
-              'source_branch=pchm30-a16-run17-btf-kprobe-fix\n'
-              'source_workflow=PCHM30 A16 Run17 BTF Kprobe Fix\n'
-              'source_run_id=32139126636\n'
-              'source_run_number=3\n'
-              'source_job_id=95717334294\n'
-              'source_head_sha=bc983ae72d5795d0ec2a5b5dd4292dfab1417e57\n'
-              'github_artifact_id=9325893576\n'
-              'github_artifact_name=PCHM30-A16-RUN17-BTF-KPROBE-FIX-3\n'
-              f'original_ak3_name={src.name}\n'
-              f'ak3_sha256={sha}\n'
-              'root_method=ReSukiSU + SUSFS 2.2.0\n'
-              'kpm=disabled\n'
-              'features=BTF,KPROBES,KRETPROBES,Scene prerequisites,BBG,LZ4K,LZ4KD,built-in WiFi,built-in Audio\n'
-          )
-          Path('README-RUN17-RESUKISU-AK3.md').write_text(
-              '# PCHM30 A16 ReSukiSU Run17 AK3\n\n'
-              'Verified AnyKernel3 package recovered byte-for-byte from the successful Run17 Actions artifact.\n\n'
-              '- Root: ReSukiSU + SUSFS 2.2.0\n'
-              '- KPM: disabled\n'
-              '- Source run: `32139126636` / run number `3`\n'
-              '- Source commit: `bc983ae72d5795d0ec2a5b5dd4292dfab1417e57`\n'
-              '- GitHub artifact: `PCHM30-A16-RUN17-BTF-KPROBE-FIX-3`\n'
-              f'- AK3 SHA256: `{sha}`\n\n'
-              'Flash: `artifacts/PCHM30-A16-ReSukiSU-RUN17-BTF-KPROBE-AK3.zip`\n'
-          )
-          print(f'[PASS] recovered AK3 sha256={sha}')
-          PY
-
-      - name: Commit AK3 to product branch
-        shell: bash
-        run: |
-          set -Eeuo pipefail
-          git config user.name github-actions[bot]
-          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-          git add artifacts README-RUN17-RESUKISU-AK3.md
-          if git diff --cached --quiet; then
-            echo '[PASS] target branch already contains identical product'
-            exit 0
-          fi
-          git commit -m 'publish: verified ReSukiSU Run17 AK3 artifact'
-          git pull --rebase origin pchm30-a16-resukisu-run17-ak3-artifact
-          git push origin HEAD:pchm30-a16-resukisu-run17-ak3-artifact

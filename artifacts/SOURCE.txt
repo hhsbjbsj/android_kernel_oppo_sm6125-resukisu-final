@@ -1,0 +1,17 @@
+PCHM30 A16 SukiSU Run23 verified artifact
+source_branch=pchm30-a16-run23-kpm-runtimefix-btf
+source_workflow=PCHM30 A16 Run23 KPM RuntimeFix + BTF Kprobe
+source_run_id=32165962039
+source_run_number=5
+source_head_sha=64d77ea102b168372067d8e651e8d7178a198201
+github_artifact_id=9337439851
+github_artifact_name=PCHM30-A16-RUN23-KPM-RUNTIMEFIX-BTF-5
+github_artifact_digest=sha256:522750aa93986b13bd9505a584cb99ba590ca9921bd61abaaf9b83eb74de9bb7
+original_ak3_name=PCHM30-A16-RUN19-KPM-SUKISU-SUSFS220-AK3-5.zip
+published_ak3_name=PCHM30-A16-SukiSU-RUN23-KPM-RUNTIMEFIX-BTF-AK3.zip
+ak3_size_bytes=24891738
+ak3_sha256=79affeb902789af760bd422ab4be6184b0b29313b7c8fae77544b3360916baa2
+root_method=SukiSU Ultra + SUSFS 2.2.0 + KPM runtimefix
+features=KPM runtimefix,BTF,KPROBES,KRETPROBES,Scene prerequisites,BBG,LZ4K,LZ4KD,built-in WiFi,built-in Audio
+device_validation=PASS
+kpm_validation=PASS; load ENTER/EXIT and list ENTER/EXIT observed; SukiSU Manager remained responsive

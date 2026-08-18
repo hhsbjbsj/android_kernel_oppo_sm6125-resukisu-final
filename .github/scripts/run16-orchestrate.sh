@@ -4,6 +4,39 @@ set -Eeuo pipefail
 KERNEL_DIR="$GITHUB_WORKSPACE/$KERNEL_REL"
 cd "$KERNEL_DIR"
 
+# Run21 CI-only guard: GitHub's Ubuntu runner can occasionally stall for a
+# very long time on the Azure Ubuntu mirror. Keep the proven build recipe
+# unchanged, but make every nested apt-get call fail/retry in bounded time.
+echo '===== RUN21 CI: harden apt networking against mirror stalls ====='
+sudo tee /etc/apt/apt.conf.d/99-pchm30-run21-network >/dev/null <<'APTCONF'
+Acquire::Retries "3";
+Acquire::http::Timeout "20";
+Acquire::https::Timeout "20";
+Acquire::ftp::Timeout "20";
+Acquire::ForceIPv4 "true";
+DPkg::Lock::Timeout "30";
+APTCONF
+
+if [ -f /etc/apt/apt-mirrors.txt ]; then
+  sudo sed -i \
+    -e 's#http://azure.archive.ubuntu.com/ubuntu#https://archive.ubuntu.com/ubuntu#g' \
+    -e 's#https://azure.archive.ubuntu.com/ubuntu#https://archive.ubuntu.com/ubuntu#g' \
+    /etc/apt/apt-mirrors.txt || true
+fi
+sudo sed -i \
+  -e 's#http://azure.archive.ubuntu.com/ubuntu#https://archive.ubuntu.com/ubuntu#g' \
+  -e 's#https://azure.archive.ubuntu.com/ubuntu#https://archive.ubuntu.com/ubuntu#g' \
+  /etc/apt/sources.list 2>/dev/null || true
+for f in /etc/apt/sources.list.d/*.list /etc/apt/sources.list.d/*.sources; do
+  [ -e "$f" ] || continue
+  sudo sed -i \
+    -e 's#http://azure.archive.ubuntu.com/ubuntu#https://archive.ubuntu.com/ubuntu#g' \
+    -e 's#https://azure.archive.ubuntu.com/ubuntu#https://archive.ubuntu.com/ubuntu#g' \
+    "$f" || true
+done
+
+echo '[PASS] Run21 apt mirror guard installed: retries=3 timeout=20s IPv4=forced'
+
 git fetch --no-tags --depth=1 origin "$EXP2_BRANCH"
 git show "FETCH_HEAD:$EXP2_WORKFLOW" > "$GITHUB_WORKSPACE/exp2-success.yml"
 grep -Fq 'PCHM30 A16 BTF EXP2 Diagnose' "$GITHUB_WORKSPACE/exp2-success.yml"

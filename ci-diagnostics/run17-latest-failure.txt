@@ -1,0 +1,546 @@
+run_id=32135934011
+run_url=https://github.com/hhsbjbsj/android_kernel_oppo_sm6125-resukisu-final/actions/runs/32135934011
+head_sha=7145b7dc596183ffacf705db0e1ba5de69e8aee9
+created_at=2026-08-18T12:16:08Z
+updated_at=2026-08-18T12:44:00Z
+failed_job_id=95707138780
+failed_job_name=Run17 fixed - BTF sysfs + KPROBES + Scene prerequisites
+
+===== JOB/STEP SUMMARY =====
+job=Run17 fixed - BTF sysfs + KPROBES + Scene prerequisites status=completed conclusion=failure id=95707138780
+  step=Set up job status=completed conclusion=success
+  step=Checkout exact successful A16 rootless baseline status=completed conclusion=success
+  step=Install BTF host tooling status=completed conclusion=success
+  step=Build Run17 with real vmlinux BTF and probe support status=completed conclusion=success
+  step=Hard verify Run17 BTF Kprobes and preserved runtime features status=completed conclusion=failure
+  step=Package reusable PCHM30 AnyKernel3 ZIP status=completed conclusion=skipped
+  step=Upload Run17 BTF Kprobe fix artifact status=completed conclusion=success
+  step=Post Checkout exact successful A16 rootless baseline status=completed conclusion=success
+  step=Complete job status=completed conclusion=success
+
+===== FIRST ERROR/FATAL WINDOW =====
+366:2026-08-18T12:16:43.9259189Z [36;1m    raise SystemExit('cannot locate Run16 staging call in orchestrator')[0m
+712:2026-08-18T12:18:26.5254223Z error: could not apply d0780629b... BACKPORT: net: bpf: rename ndo_xdp to ndo_bpf
+876:2026-08-18T12:18:29.7772067Z error: could not apply 7ec2cf6eb... bpf: Add map and need_defer parameters to .map_fd_put_ptr()
+1028:2026-08-18T12:19:17.0642548Z 565968144 bpf: reject any prog that failed read-only lock
+1041:2026-08-18T12:19:17.1096230Z 17c4b9005 bpf: undo prog rejection on read-only lock failure
+1247:2026-08-18T12:19:22.1400150Z error: could not apply 855f570c3... BACKPORT: bpf: Sysctl hook
+1526:2026-08-18T12:19:29.3327355Z error: could not apply 79362c5a0... bpf: squash of log related commits
+1597:2026-08-18T12:19:30.9298693Z error: could not apply 4793e2890... bpf: add support for bpf_call to interpreter
+1842:2026-08-18T12:19:36.8416966Z >>> 565968144 bpf: reject any prog that failed read-only lock
+1846:2026-08-18T12:19:37.0101054Z [pchm30-a16-bpf-only 7a05d8a65] bpf: reject any prog that failed read-only lock
+1915:2026-08-18T12:19:38.6908366Z error: could not apply b4eac9a69... bpf: introduce bpf_spin_lock
+1935:2026-08-18T12:19:39.2161774Z error: could not apply a2ef751de... SQUASH! bpf: Add a bpf_sock pointer to __sk_buff and a bpf_sk_fullsock helpe
+1957:2026-08-18T12:19:39.8052058Z >>> 17c4b9005 bpf: undo prog rejection on read-only lock failure
+1960:2026-08-18T12:19:39.9695486Z [pchm30-a16-bpf-only 61c111fb2] bpf: undo prog rejection on read-only lock failure
+3602:2026-08-18T12:21:59.1713227Z -- Baseband-guard: flask.h not found, starting generation
+3632:2026-08-18T12:22:01.8364200Z grep: ../include/linux/seccomp_types.h: No such file or directory
+7014:2026-08-18T12:33:06.2644462Z grep: ../include/linux/seccomp_types.h: No such file or directory
+9195:2026-08-18T12:42:32.9572280Z WARNING: EXPORT symbol "gsi_write_channel_scratch" [vmlinux] version generation failed, symbol will not be versioned.
+9742:2026-08-18T12:43:31.5931705Z WARNING: EXPORT symbol "gsi_write_channel_scratch" [vmlinux] version generation failed, symbol will not be versioned.
+10263:2026-08-18T12:43:47.4121689Z [36;1m  grep -qx "$cfg" "$CONFIG" || { echo "[FATAL] missing $cfg"; exit 81; }[0m
+10287:2026-08-18T12:43:47.4135020Z [36;1m  nm "$VMLINUX" | grep -Eq "[[:space:]]${sym}$" || { echo "[FATAL] missing ${sym}"; exit 82; }[0m
+10296:2026-08-18T12:43:47.4137404Z [36;1m  grep -q "$sym" include/uapi/linux/bpf.h || { echo "[FATAL] missing $sym"; exit 83; }[0m
+10372:2026-08-18T12:43:53.5271838Z ##[error]Process completed with exit code 1.
+
+===== LAST 500 LOG LINES =====
+2026-08-18T12:43:39.1414712Z arch/arm64/boot/dts/19021/trinket-rumi.dtb: Warning (avoid_default_addr_size): Relying on default #size-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l4@4300
+2026-08-18T12:43:39.1417151Z arch/arm64/boot/dts/19021/trinket-rumi.dtb: Warning (avoid_default_addr_size): Relying on default #address-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l5@4400
+2026-08-18T12:43:39.1419576Z arch/arm64/boot/dts/19021/trinket-rumi.dtb: Warning (avoid_default_addr_size): Relying on default #size-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l5@4400
+2026-08-18T12:43:39.1422007Z arch/arm64/boot/dts/19021/trinket-rumi.dtb: Warning (avoid_default_addr_size): Relying on default #address-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l6@4400
+2026-08-18T12:43:39.1424633Z arch/arm64/boot/dts/19021/trinket-rumi.dtb: Warning (avoid_default_addr_size): Relying on default #size-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l6@4400
+2026-08-18T12:43:39.1427074Z arch/arm64/boot/dts/19021/trinket-rumi.dtb: Warning (avoid_default_addr_size): Relying on default #address-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l7@4400
+2026-08-18T12:43:39.1429727Z arch/arm64/boot/dts/19021/trinket-rumi.dtb: Warning (avoid_default_addr_size): Relying on default #size-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l7@4400
+2026-08-18T12:43:39.1684653Z arch/arm64/boot/dts/19021/trinket-idp-19328.dtb: Warning (reg_format): "reg" property in /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l1@4000 has invalid length (2 bytes) (#address-cells == 2, #size-cells == 1)
+2026-08-18T12:43:39.1714308Z arch/arm64/boot/dts/19021/trinket-idp-19328.dtb: Warning (reg_format): "reg" property in /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l2@4100 has invalid length (2 bytes) (#address-cells == 2, #size-cells == 1)
+2026-08-18T12:43:39.1744283Z arch/arm64/boot/dts/19021/trinket-idp-19328.dtb: Warning (reg_format): "reg" property in /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l3@4200 has invalid length (2 bytes) (#address-cells == 2, #size-cells == 1)
+2026-08-18T12:43:39.1774523Z arch/arm64/boot/dts/19021/trinket-idp-19328.dtb: Warning (reg_format): "reg" property in /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l4@4300 has invalid length (2 bytes) (#address-cells == 2, #size-cells == 1)
+2026-08-18T12:43:39.1804278Z arch/arm64/boot/dts/19021/trinket-idp-19328.dtb: Warning (reg_format): "reg" property in /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l5@4400 has invalid length (2 bytes) (#address-cells == 2, #size-cells == 1)
+2026-08-18T12:43:39.1834267Z arch/arm64/boot/dts/19021/trinket-idp-19328.dtb: Warning (reg_format): "reg" property in /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l6@4400 has invalid length (2 bytes) (#address-cells == 2, #size-cells == 1)
+2026-08-18T12:43:39.1864257Z arch/arm64/boot/dts/19021/trinket-idp-19328.dtb: Warning (reg_format): "reg" property in /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l7@4400 has invalid length (2 bytes) (#address-cells == 2, #size-cells == 1)
+2026-08-18T12:43:39.1894124Z arch/arm64/boot/dts/19021/trinket-idp-19328.dtb: Warning (avoid_default_addr_size): Relying on default #address-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l1@4000
+2026-08-18T12:43:39.1924121Z arch/arm64/boot/dts/19021/trinket-idp-19328.dtb: Warning (avoid_default_addr_size): Relying on default #size-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l1@4000
+2026-08-18T12:43:39.1954122Z arch/arm64/boot/dts/19021/trinket-idp-19328.dtb: Warning (avoid_default_addr_size): Relying on default #address-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l2@4100
+2026-08-18T12:43:39.1984072Z arch/arm64/boot/dts/19021/trinket-idp-19328.dtb: Warning (avoid_default_addr_size): Relying on default #size-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l2@4100
+2026-08-18T12:43:39.2014196Z arch/arm64/boot/dts/19021/trinket-idp-19328.dtb: Warning (avoid_default_addr_size): Relying on default #address-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l3@4200
+2026-08-18T12:43:39.2044090Z arch/arm64/boot/dts/19021/trinket-idp-19328.dtb: Warning (avoid_default_addr_size): Relying on default #size-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l3@4200
+2026-08-18T12:43:39.2074161Z arch/arm64/boot/dts/19021/trinket-idp-19328.dtb: Warning (avoid_default_addr_size): Relying on default #address-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l4@4300
+2026-08-18T12:43:39.2104090Z arch/arm64/boot/dts/19021/trinket-idp-19328.dtb: Warning (avoid_default_addr_size): Relying on default #size-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l4@4300
+2026-08-18T12:43:39.2134111Z arch/arm64/boot/dts/19021/trinket-idp-19328.dtb: Warning (avoid_default_addr_size): Relying on default #address-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l5@4400
+2026-08-18T12:43:39.2164096Z arch/arm64/boot/dts/19021/trinket-idp-19328.dtb: Warning (avoid_default_addr_size): Relying on default #size-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l5@4400
+2026-08-18T12:43:39.2194115Z arch/arm64/boot/dts/19021/trinket-idp-19328.dtb: Warning (avoid_default_addr_size): Relying on default #address-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l6@4400
+2026-08-18T12:43:39.2224133Z arch/arm64/boot/dts/19021/trinket-idp-19328.dtb: Warning (avoid_default_addr_size): Relying on default #size-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l6@4400
+2026-08-18T12:43:39.2254140Z arch/arm64/boot/dts/19021/trinket-idp-19328.dtb: Warning (avoid_default_addr_size): Relying on default #address-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l7@4400
+2026-08-18T12:43:39.2264349Z arch/arm64/boot/dts/19021/trinket-idp-19328.dtb: Warning (avoid_default_addr_size): Relying on default #size-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l7@4400
+2026-08-18T12:43:39.2314688Z arch/arm64/boot/dts/19021/trinket-usbc-external-codec-idp.dtb: Warning (reg_format): "reg" property in /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l1@4000 has invalid length (2 bytes) (#address-cells == 2, #size-cells == 1)
+2026-08-18T12:43:39.2344400Z arch/arm64/boot/dts/19021/trinket-usbc-external-codec-idp.dtb: Warning (reg_format): "reg" property in /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l2@4100 has invalid length (2 bytes) (#address-cells == 2, #size-cells == 1)
+2026-08-18T12:43:39.2347389Z arch/arm64/boot/dts/19021/trinket-usbc-external-codec-idp.dtb: Warning (reg_format): "reg" property in /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l3@4200 has invalid length (2 bytes) (#address-cells == 2, #size-cells == 1)
+2026-08-18T12:43:39.2354446Z arch/arm64/boot/dts/19021/trinket-usbc-external-codec-idp.dtb: Warning (reg_format): "reg" property in /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l4@4300 has invalid length (2 bytes) (#address-cells == 2, #size-cells == 1)
+2026-08-18T12:43:39.2404598Z arch/arm64/boot/dts/19021/trinket-usbc-external-codec-idp.dtb: Warning (reg_format): "reg" property in /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l5@4400 has invalid length (2 bytes) (#address-cells == 2, #size-cells == 1)
+2026-08-18T12:43:39.2434526Z arch/arm64/boot/dts/19021/trinket-usbc-external-codec-idp.dtb: Warning (reg_format): "reg" property in /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l6@4400 has invalid length (2 bytes) (#address-cells == 2, #size-cells == 1)
+2026-08-18T12:43:39.2437492Z arch/arm64/boot/dts/19021/trinket-usbc-external-codec-idp.dtb: Warning (reg_format): "reg" property in /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l7@4400 has invalid length (2 bytes) (#address-cells == 2, #size-cells == 1)
+2026-08-18T12:43:39.2474533Z arch/arm64/boot/dts/19021/trinket-usbc-external-codec-idp.dtb: Warning (avoid_default_addr_size): Relying on default #address-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l1@4000
+2026-08-18T12:43:39.2524232Z arch/arm64/boot/dts/19021/trinket-usbc-external-codec-idp.dtb: Warning (avoid_default_addr_size): Relying on default #size-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l1@4000
+2026-08-18T12:43:39.2534572Z arch/arm64/boot/dts/19021/trinket-usbc-external-codec-idp.dtb: Warning (avoid_default_addr_size): Relying on default #address-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l2@4100
+2026-08-18T12:43:39.2584221Z arch/arm64/boot/dts/19021/trinket-usbc-external-codec-idp.dtb: Warning (avoid_default_addr_size): Relying on default #size-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l2@4100
+2026-08-18T12:43:39.2614259Z arch/arm64/boot/dts/19021/trinket-usbc-external-codec-idp.dtb: Warning (avoid_default_addr_size): Relying on default #address-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l3@4200
+2026-08-18T12:43:39.2634552Z arch/arm64/boot/dts/19021/trinket-usbc-external-codec-idp.dtb: Warning (avoid_default_addr_size): Relying on default #size-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l3@4200
+2026-08-18T12:43:39.2655421Z arch/arm64/boot/dts/19021/trinket-usbc-external-codec-idp.dtb: Warning (avoid_default_addr_size): Relying on default #address-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l4@4300
+2026-08-18T12:43:39.2704207Z arch/arm64/boot/dts/19021/trinket-usbc-external-codec-idp.dtb: Warning (avoid_default_addr_size): Relying on default #size-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l4@4300
+2026-08-18T12:43:39.2706897Z arch/arm64/boot/dts/19021/trinket-usbc-external-codec-idp.dtb: Warning (avoid_default_addr_size): Relying on default #address-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l5@4400
+2026-08-18T12:43:39.2724939Z arch/arm64/boot/dts/19021/trinket-usbc-external-codec-idp.dtb: Warning (avoid_default_addr_size): Relying on default #size-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l5@4400
+2026-08-18T12:43:39.2764180Z arch/arm64/boot/dts/19021/trinket-usbc-external-codec-idp.dtb: Warning (avoid_default_addr_size): Relying on default #address-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l6@4400
+2026-08-18T12:43:39.2804448Z arch/arm64/boot/dts/19021/trinket-usbc-external-codec-idp.dtb: Warning (avoid_default_addr_size): Relying on default #size-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l6@4400
+2026-08-18T12:43:39.2834156Z arch/arm64/boot/dts/19021/trinket-usbc-external-codec-idp.dtb: Warning (avoid_default_addr_size): Relying on default #address-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l7@4400
+2026-08-18T12:43:39.2854185Z arch/arm64/boot/dts/19021/trinket-usbc-external-codec-idp.dtb: Warning (avoid_default_addr_size): Relying on default #size-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l7@4400
+2026-08-18T12:43:39.2884194Z arch/arm64/boot/dts/19021/trinket-idp-19321.dtb: Warning (reg_format): "reg" property in /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l1@4000 has invalid length (2 bytes) (#address-cells == 2, #size-cells == 1)
+2026-08-18T12:43:39.2894236Z arch/arm64/boot/dts/19021/trinket-idp-19321.dtb: Warning (reg_format): "reg" property in /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l2@4100 has invalid length (2 bytes) (#address-cells == 2, #size-cells == 1)
+2026-08-18T12:43:39.2896922Z arch/arm64/boot/dts/19021/trinket-idp-19321.dtb: Warning (reg_format): "reg" property in /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l3@4200 has invalid length (2 bytes) (#address-cells == 2, #size-cells == 1)
+2026-08-18T12:43:39.2899589Z arch/arm64/boot/dts/19021/trinket-idp-19321.dtb: Warning (reg_format): "reg" property in /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l4@4300 has invalid length (2 bytes) (#address-cells == 2, #size-cells == 1)
+2026-08-18T12:43:39.2902233Z arch/arm64/boot/dts/19021/trinket-idp-19321.dtb: Warning (reg_format): "reg" property in /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l5@4400 has invalid length (2 bytes) (#address-cells == 2, #size-cells == 1)
+2026-08-18T12:43:39.2905058Z arch/arm64/boot/dts/19021/trinket-idp-19321.dtb: Warning (reg_format): "reg" property in /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l6@4400 has invalid length (2 bytes) (#address-cells == 2, #size-cells == 1)
+2026-08-18T12:43:39.2907780Z arch/arm64/boot/dts/19021/trinket-idp-19321.dtb: Warning (reg_format): "reg" property in /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l7@4400 has invalid length (2 bytes) (#address-cells == 2, #size-cells == 1)
+2026-08-18T12:43:39.2910581Z arch/arm64/boot/dts/19021/trinket-idp-19321.dtb: Warning (avoid_default_addr_size): Relying on default #address-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l1@4000
+2026-08-18T12:43:39.2913155Z arch/arm64/boot/dts/19021/trinket-idp-19321.dtb: Warning (avoid_default_addr_size): Relying on default #size-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l1@4000
+2026-08-18T12:43:39.2915490Z arch/arm64/boot/dts/19021/trinket-idp-19321.dtb: Warning (avoid_default_addr_size): Relying on default #address-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l2@4100
+2026-08-18T12:43:39.2917811Z arch/arm64/boot/dts/19021/trinket-idp-19321.dtb: Warning (avoid_default_addr_size): Relying on default #size-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l2@4100
+2026-08-18T12:43:39.2920131Z arch/arm64/boot/dts/19021/trinket-idp-19321.dtb: Warning (avoid_default_addr_size): Relying on default #address-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l3@4200
+2026-08-18T12:43:39.2922648Z arch/arm64/boot/dts/19021/trinket-idp-19321.dtb: Warning (avoid_default_addr_size): Relying on default #size-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l3@4200
+2026-08-18T12:43:39.2945597Z arch/arm64/boot/dts/19021/trinket-idp-19321.dtb: Warning (avoid_default_addr_size): Relying on default #address-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l4@4300
+2026-08-18T12:43:39.2947958Z arch/arm64/boot/dts/19021/trinket-idp-19321.dtb: Warning (avoid_default_addr_size): Relying on default #size-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l4@4300
+2026-08-18T12:43:39.2950308Z arch/arm64/boot/dts/19021/trinket-idp-19321.dtb: Warning (avoid_default_addr_size): Relying on default #address-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l5@4400
+2026-08-18T12:43:39.2952637Z arch/arm64/boot/dts/19021/trinket-idp-19321.dtb: Warning (avoid_default_addr_size): Relying on default #size-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l5@4400
+2026-08-18T12:43:39.2955120Z arch/arm64/boot/dts/19021/trinket-idp-19321.dtb: Warning (avoid_default_addr_size): Relying on default #address-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l6@4400
+2026-08-18T12:43:39.2957422Z arch/arm64/boot/dts/19021/trinket-idp-19321.dtb: Warning (avoid_default_addr_size): Relying on default #size-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l6@4400
+2026-08-18T12:43:39.2959720Z arch/arm64/boot/dts/19021/trinket-idp-19321.dtb: Warning (avoid_default_addr_size): Relying on default #address-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l7@4400
+2026-08-18T12:43:39.2962050Z arch/arm64/boot/dts/19021/trinket-idp-19321.dtb: Warning (avoid_default_addr_size): Relying on default #size-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l7@4400
+2026-08-18T12:43:39.4235840Z   DTC     arch/arm64/boot/dts/19375/trinket-idp.dtb
+2026-08-18T12:43:39.5474596Z arch/arm64/boot/dts/19375/trinket-idp.dtb: Warning (reg_format): "reg" property in /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l1@4000 has invalid length (2 bytes) (#address-cells == 2, #size-cells == 1)
+2026-08-18T12:43:39.5504305Z arch/arm64/boot/dts/19375/trinket-idp.dtb: Warning (reg_format): "reg" property in /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l2@4100 has invalid length (2 bytes) (#address-cells == 2, #size-cells == 1)
+2026-08-18T12:43:39.5534226Z arch/arm64/boot/dts/19375/trinket-idp.dtb: Warning (reg_format): "reg" property in /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l3@4200 has invalid length (2 bytes) (#address-cells == 2, #size-cells == 1)
+2026-08-18T12:43:39.5564217Z arch/arm64/boot/dts/19375/trinket-idp.dtb: Warning (reg_format): "reg" property in /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l4@4300 has invalid length (2 bytes) (#address-cells == 2, #size-cells == 1)
+2026-08-18T12:43:39.5594195Z arch/arm64/boot/dts/19375/trinket-idp.dtb: Warning (reg_format): "reg" property in /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l5@4400 has invalid length (2 bytes) (#address-cells == 2, #size-cells == 1)
+2026-08-18T12:43:39.5624198Z arch/arm64/boot/dts/19375/trinket-idp.dtb: Warning (reg_format): "reg" property in /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l6@4400 has invalid length (2 bytes) (#address-cells == 2, #size-cells == 1)
+2026-08-18T12:43:39.5654183Z arch/arm64/boot/dts/19375/trinket-idp.dtb: Warning (reg_format): "reg" property in /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l7@4400 has invalid length (2 bytes) (#address-cells == 2, #size-cells == 1)
+2026-08-18T12:43:39.5684298Z arch/arm64/boot/dts/19375/trinket-idp.dtb: Warning (avoid_default_addr_size): Relying on default #address-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l1@4000
+2026-08-18T12:43:39.5704341Z arch/arm64/boot/dts/19375/trinket-idp.dtb: Warning (avoid_default_addr_size): Relying on default #size-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l1@4000
+2026-08-18T12:43:39.5744144Z arch/arm64/boot/dts/19375/trinket-idp.dtb: Warning (avoid_default_addr_size): Relying on default #address-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l2@4100
+2026-08-18T12:43:39.5764231Z arch/arm64/boot/dts/19375/trinket-idp.dtb: Warning (avoid_default_addr_size): Relying on default #size-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l2@4100
+2026-08-18T12:43:39.5766709Z arch/arm64/boot/dts/19375/trinket-idp.dtb: Warning (avoid_default_addr_size): Relying on default #address-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l3@4200
+2026-08-18T12:43:39.5794183Z arch/arm64/boot/dts/19375/trinket-idp.dtb: Warning (avoid_default_addr_size): Relying on default #size-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l3@4200
+2026-08-18T12:43:39.5824846Z arch/arm64/boot/dts/19375/trinket-idp.dtb: Warning (avoid_default_addr_size): Relying on default #address-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l4@4300
+2026-08-18T12:43:39.5854307Z arch/arm64/boot/dts/19375/trinket-idp.dtb: Warning (avoid_default_addr_size): Relying on default #size-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l4@4300
+2026-08-18T12:43:39.5884068Z arch/arm64/boot/dts/19375/trinket-idp.dtb: Warning (avoid_default_addr_size): Relying on default #address-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l5@4400
+2026-08-18T12:43:39.5886370Z arch/arm64/boot/dts/19375/trinket-idp.dtb: Warning (avoid_default_addr_size): Relying on default #size-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l5@4400
+2026-08-18T12:43:39.5924095Z arch/arm64/boot/dts/19375/trinket-idp.dtb: Warning (avoid_default_addr_size): Relying on default #address-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l6@4400
+2026-08-18T12:43:39.5944050Z arch/arm64/boot/dts/19375/trinket-idp.dtb: Warning (avoid_default_addr_size): Relying on default #size-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l6@4400
+2026-08-18T12:43:39.5946358Z arch/arm64/boot/dts/19375/trinket-idp.dtb: Warning (avoid_default_addr_size): Relying on default #address-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l7@4400
+2026-08-18T12:43:39.5948622Z arch/arm64/boot/dts/19375/trinket-idp.dtb: Warning (avoid_default_addr_size): Relying on default #size-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l7@4400
+2026-08-18T12:43:39.6234436Z ./scripts/dtc/dtc -O dtb -o rtic_mp.dtb -b 0 -Wno-unit_address_vs_reg -Wno-simple_bus_reg -Wno-unit_address_format -Wno-pci_bridge -Wno-pci_device_bus_num -Wno-pci_device_reg  rtic_mp.dts
+2026-08-18T12:43:39.8975084Z   CAT     arch/arm64/boot/Image.gz-dtb
+2026-08-18T12:43:39.9208942Z make[1]: Leaving directory '/home/runner/work/android_kernel_oppo_sm6125-resukisu-final/android_kernel_oppo_sm6125-resukisu-final/source/android/kernel/msm-4.14/out-pchm30-a16-bpf'
+2026-08-18T12:43:39.9222024Z ===== REUSE PROVEN A15 STEP: Build rootless A15-BPF kernel =====
+2026-08-18T12:43:39.9223400Z cwd=/home/runner/work/android_kernel_oppo_sm6125-resukisu-final/android_kernel_oppo_sm6125-resukisu-final/source/android/kernel/msm-4.14
+2026-08-18T12:43:39.9266278Z ===== REUSE ROOT STEP: Build A16 BPF + ReSukiSU + SUSFS kernel =====
+2026-08-18T12:43:39.9313373Z ===== REUSE EXP1 STEP: Build EXP1 kernel =====
+2026-08-18T12:43:39.9353688Z ===== REUSE WIFI STEP: Build WiFi EXP1 kernel =====
+2026-08-18T12:43:39.9444962Z ===== RUN16 VERIFY TRUE BUILT-INS =====
+2026-08-18T12:43:46.9901202Z ===== built-in object sizes =====
+2026-08-18T12:43:46.9902203Z 13084 out-pchm30-a16-bpf/techpack/audio/built-in.o
+2026-08-18T12:43:46.9903354Z 360 out-pchm30-a16-bpf/techpack/audio/ipc/built-in.o
+2026-08-18T12:43:46.9903975Z 4122 out-pchm30-a16-bpf/techpack/audio/dsp/built-in.o
+2026-08-18T12:43:46.9904582Z 7678 out-pchm30-a16-bpf/techpack/audio/asoc/built-in.o
+2026-08-18T12:43:46.9905294Z 370 out-pchm30-a16-bpf/techpack/audio/asoc/codecs/wcd934x/built-in.o
+2026-08-18T12:43:46.9906092Z 684 out-pchm30-a16-bpf/techpack/audio/asoc/codecs/sia81xx/built-in.o
+2026-08-18T12:43:46.9906843Z 58016 out-pchm30-a16-bpf/drivers/staging/qcacld-3.0/built-in.o
+2026-08-18T12:43:46.9907552Z 140 out-pchm30-a16-bpf/drivers/platform/msm/msm_11ad/built-in.o
+2026-08-18T12:43:46.9908170Z ===== key vmlinux symbols =====
+2026-08-18T12:43:47.1762908Z ffffff80093fee28 t apr_probe
+2026-08-18T12:43:47.1763462Z ffffff80093ebbc0 t q6core_probe
+2026-08-18T12:43:47.1765482Z ffffff80094767e0 t sia81xx_afe_callback
+2026-08-18T12:43:47.1766048Z ffffff80094764a8 T sia81xx_afe_close
+2026-08-18T12:43:47.1766615Z ffffff80094767a8 T sia81xx_afe_exit
+2026-08-18T12:43:47.1767081Z ffffff800a676878 T sia81xx_afe_init
+2026-08-18T12:43:47.1767549Z ffffff800ae07ad8 d sia81xx_afe_list
+2026-08-18T12:43:47.1768099Z ffffff800ae07ab0 d sia81xx_afe_list_mutex
+2026-08-18T12:43:47.1768665Z ffffff8009476250 T sia81xx_afe_open
+2026-08-18T12:43:47.1769208Z ffffff800bb69930 b sia81xx_afe_open.__key
+2026-08-18T12:43:47.1769826Z ffffff800bb69931 b sia81xx_afe_open.__key.9
+2026-08-18T12:43:47.1770401Z ffffff8009475d48 T sia81xx_afe_read
+2026-08-18T12:43:47.1770927Z ffffff80094757a8 T sia81xx_afe_send
+2026-08-18T12:43:47.1771436Z ffffff8009475c08 t sia81xx_apr_send
+2026-08-18T12:43:47.1771993Z ffffff8009dbabe8 d sia81xx_audio_map
+2026-08-18T12:43:47.1772562Z ffffff8009472a00 t sia81xx_audio_scene_get
+2026-08-18T12:43:47.1773265Z ffffff8009472a08 t sia81xx_audio_scene_set
+2026-08-18T12:43:47.1773735Z ffffff80094742a0 t sia81xx_auto_set_task
+2026-08-18T12:43:47.1774244Z ffffff800bb68808 b sia81xx_auto_set_task.entry_cnt
+2026-08-18T12:43:47.1774812Z ffffff800bb6880c b sia81xx_auto_set_task.entry_max
+2026-08-18T12:43:47.1775360Z ffffff8009474bb0 T sia81xx_close_sock_server
+2026-08-18T12:43:47.1775834Z ffffff8009472b70 t sia81xx_cmd_show
+2026-08-18T12:43:47.1776260Z ffffff8009472d10 t sia81xx_cmd_store
+2026-08-18T12:43:47.1776715Z ffffff80094728c8 t sia81xx_codec_get_regmap
+2026-08-18T12:43:47.1777091Z ffffff8009472858 t sia81xx_codec_probe
+2026-08-18T12:43:47.1777341Z ffffff8009472890 t sia81xx_codec_remove
+2026-08-18T12:43:47.1777591Z ffffff8009dbab48 d sia81xx_controls
+2026-08-18T12:43:47.1777845Z ffffff8009dbad18 d sia81xx_dapm_widgets
+2026-08-18T12:43:47.1778115Z ffffff8009474080 T sia81xx_disable_auto_set_vdd
+2026-08-18T12:43:47.1778649Z ffffff8009473d10 T sia81xx_enable_auto_set_vdd
+2026-08-18T12:43:47.1778921Z ffffff8009471b88 t sia81xx_i2c_probe
+2026-08-18T12:43:47.1779168Z ffffff8009471d70 t sia81xx_i2c_remove
+2026-08-18T12:43:47.1779409Z ffffff800ae07948 d sia81xx_list
+2026-08-18T12:43:47.1779642Z ffffff800ae07920 d sia81xx_list_mutex
+2026-08-18T12:43:47.1779899Z ffffff8009473c40 t sia81xx_open_auto_set_task
+2026-08-18T12:43:47.1780185Z ffffff8009473a48 T sia81xx_open_set_vdd_server
+2026-08-18T12:43:47.1780457Z ffffff8009474918 T sia81xx_open_sock_server
+2026-08-18T12:43:47.1780716Z ffffff800a69bf60 t sia81xx_pa_exit
+2026-08-18T12:43:47.1780950Z ffffff800a676770 t sia81xx_pa_init
+2026-08-18T12:43:47.1781183Z ffffff80094731b0 t sia81xx_pm_resume
+2026-08-18T12:43:47.1781425Z ffffff8009473178 t sia81xx_pm_suspend
+2026-08-18T12:43:47.1781662Z ffffff80094728d0 t sia81xx_power_get
+2026-08-18T12:43:47.1781896Z ffffff8009472938 t sia81xx_power_set
+2026-08-18T12:43:47.1782161Z ffffff80094734d8 T sia81xx_regmap_check_chip_id
+2026-08-18T12:43:47.1782447Z ffffff80094732d8 T sia81xx_regmap_defaults
+2026-08-18T12:43:47.1782707Z ffffff8009473440 T sia81xx_regmap_init
+2026-08-18T12:43:47.1783221Z ffffff80094731e8 T sia81xx_regmap_read
+2026-08-18T12:43:47.1783482Z ffffff80094734b0 T sia81xx_regmap_remove
+2026-08-18T12:43:47.1783910Z ffffff8009473550 T sia81xx_regmap_set_xfilter
+2026-08-18T12:43:47.1784183Z ffffff8009473260 T sia81xx_regmap_write
+2026-08-18T12:43:47.1784430Z ffffff80094741d0 T sia81xx_set_vdd_exit
+2026-08-18T12:43:47.1784670Z ffffff80094740d8 T sia81xx_set_vdd_init
+2026-08-18T12:43:47.1784930Z ffffff800bb68300 b sia81xx_set_vdd_init.__key
+2026-08-18T12:43:47.1785196Z ffffff8009474df8 T sia81xx_sock_exit
+2026-08-18T12:43:47.1785435Z ffffff800a676820 T sia81xx_sock_init
+2026-08-18T12:43:47.1785681Z ffffff8009474e50 t sia81xx_sock_server_task
+2026-08-18T12:43:47.1785977Z ffffff800bb68930 b sia81xx_sock_server_task.comm_buf
+2026-08-18T12:43:47.1786294Z ffffff800bb68928 b sia81xx_sock_server_task.sock_clt
+2026-08-18T12:43:47.1786587Z ffffff8009472a58 t sia81xx_spkr_pa_event
+2026-08-18T12:43:47.1786844Z ffffff8009401e00 T tavil_cdc_mclk_enable
+2026-08-18T12:43:47.1787098Z ffffff8008dceef0 t wlan_hdd_add_extra_ie
+2026-08-18T12:43:47.1787362Z ffffff8008dfdd28 T wlan_hdd_add_virtual_intf
+2026-08-18T12:43:47.1787649Z ffffff8009cb5af0 d wlan_hdd_adhoc_iface_limit
+2026-08-18T12:43:47.1787918Z ffffff8009cb5a70 d wlan_hdd_akm_suites
+2026-08-18T12:43:47.1788181Z ffffff8009cb5af8 d wlan_hdd_ap_iface_limit
+2026-08-18T12:43:47.1788458Z ffffff8009cbb1f8 d wlan_hdd_apf_offload_policy
+2026-08-18T12:43:47.1788734Z ffffff800ad81388 d wlan_hdd_band_2_4_ghz
+2026-08-18T12:43:47.1788988Z ffffff800ad81438 d wlan_hdd_band_5_ghz
+2026-08-18T12:43:47.1789235Z ffffff8008dc6e60 T wlan_hdd_bus_resume
+2026-08-18T12:43:47.1789510Z ffffff800b8cff10 b wlan_hdd_bus_resume.__last_ticks
+2026-08-18T12:43:47.1789812Z ffffff8008dc7150 T wlan_hdd_bus_resume_noirq
+2026-08-18T12:43:47.1790129Z ffffff800b8cff18 b wlan_hdd_bus_resume_noirq.__last_ticks
+2026-08-18T12:43:47.1790452Z ffffff8008dc67a8 T wlan_hdd_bus_suspend
+2026-08-18T12:43:47.1790728Z ffffff8008dc6c18 T wlan_hdd_bus_suspend_noirq
+2026-08-18T12:43:47.1791051Z ffffff800b8cff08 b wlan_hdd_bus_suspend_noirq.__last_ticks
+2026-08-18T12:43:47.1791427Z ffffff8008dfcf48 T wlan_hdd_cancel_existing_remain_on_channel
+2026-08-18T12:43:47.1791776Z ffffff8008e05d58 T wlan_hdd_cfg80211_abort_scan
+2026-08-18T12:43:47.1792091Z ffffff8008daafe8 T wlan_hdd_cfg80211_acs_ch_select_evt
+2026-08-18T12:43:47.1792412Z ffffff8008db5118 t wlan_hdd_cfg80211_acs_dfs_mode
+2026-08-18T12:43:47.1792701Z ffffff8008dbfa98 t wlan_hdd_cfg80211_add_key
+2026-08-18T12:43:47.1793242Z ffffff8008dc48f0 t wlan_hdd_cfg80211_add_nan_func
+2026-08-18T12:43:47.1793534Z ffffff8008dc0578 t wlan_hdd_cfg80211_add_station
+2026-08-18T12:43:47.1793837Z ffffff8008dd3488 t wlan_hdd_cfg80211_alloc_new_beacon
+2026-08-18T12:43:47.1794144Z ffffff8008e30618 T wlan_hdd_cfg80211_apf_offload
+2026-08-18T12:43:47.1794442Z ffffff8008db55d0 t wlan_hdd_cfg80211_avoid_freq
+2026-08-18T12:43:47.1794876Z ffffff8008e40780 T wlan_hdd_cfg80211_bcn_rcv_op
+2026-08-18T12:43:47.1795206Z ffffff8008dfd1f8 T wlan_hdd_cfg80211_cancel_remain_on_channel
+2026-08-18T12:43:47.1795552Z ffffff8008dd2210 T wlan_hdd_cfg80211_change_beacon
+2026-08-18T12:43:47.1795851Z ffffff8008dc09c0 t wlan_hdd_cfg80211_change_bss
+2026-08-18T12:43:47.1796141Z ffffff8008dbf600 t wlan_hdd_cfg80211_change_iface
+2026-08-18T12:43:47.1796440Z ffffff8008dc45c8 t wlan_hdd_cfg80211_channel_switch
+2026-08-18T12:43:47.1796781Z ffffff8008e3e468 T wlan_hdd_cfg80211_conditional_chan_switch
+2026-08-18T12:43:47.1797140Z ffffff8008e349e0 T wlan_hdd_cfg80211_configure_tdls_mode
+2026-08-18T12:43:47.1797450Z ffffff8008dc12b0 t wlan_hdd_cfg80211_connect
+2026-08-18T12:43:47.1797743Z ffffff8008db4cb0 t wlan_hdd_cfg80211_dcc_clear_stats
+2026-08-18T12:43:47.1798048Z ffffff8008db4ca8 t wlan_hdd_cfg80211_dcc_get_stats
+2026-08-18T12:43:47.1798349Z ffffff8008db4cb8 t wlan_hdd_cfg80211_dcc_update_ndl
+2026-08-18T12:43:47.1798632Z ffffff8008db9340 T wlan_hdd_cfg80211_deinit
+2026-08-18T12:43:47.1798907Z ffffff8008dc01e0 t wlan_hdd_cfg80211_del_key
+2026-08-18T12:43:47.1799182Z ffffff8008dc48f8 t wlan_hdd_cfg80211_del_nan_func
+2026-08-18T12:43:47.1799468Z ffffff8008dc38a8 t wlan_hdd_cfg80211_del_pmksa
+2026-08-18T12:43:47.1799750Z ffffff8008dbb1f0 T wlan_hdd_cfg80211_del_station
+2026-08-18T12:43:47.1800183Z ffffff8008db9f50 T wlan_hdd_cfg80211_deregister_frames
+2026-08-18T12:43:47.1800525Z ffffff8008dae6a0 t wlan_hdd_cfg80211_disable_dfs_chan_scan
+2026-08-18T12:43:47.1800845Z ffffff8008dc2ce0 t wlan_hdd_cfg80211_disconnect
+2026-08-18T12:43:47.1801120Z ffffff8008daeb50 t wlan_hdd_cfg80211_do_acs
+2026-08-18T12:43:47.1801396Z ffffff8009cb3f20 d wlan_hdd_cfg80211_do_acs_policy
+2026-08-18T12:43:47.1801690Z ffffff8008e10410 T wlan_hdd_cfg80211_dump_station
+2026-08-18T12:43:47.1801976Z ffffff8008e10560 T wlan_hdd_cfg80211_dump_survey
+2026-08-18T12:43:47.1802286Z ffffff8008e37518 T wlan_hdd_cfg80211_encrypt_decrypt_msg
+2026-08-18T12:43:47.1802602Z ffffff8008dc4908 t wlan_hdd_cfg80211_external_auth
+2026-08-18T12:43:47.1803172Z ffffff8008dad918 t wlan_hdd_cfg80211_extscan_get_valid_channels
+2026-08-18T12:43:47.1803532Z ffffff8008e34ce0 T wlan_hdd_cfg80211_exttdls_disable
+2026-08-18T12:43:47.1803836Z ffffff8008e34c60 T wlan_hdd_cfg80211_exttdls_enable
+2026-08-18T12:43:47.1804156Z ffffff8008e34be0 T wlan_hdd_cfg80211_exttdls_get_status
+2026-08-18T12:43:47.1804515Z ffffff8008e3a220 T wlan_hdd_cfg80211_fetch_bss_transition_status
+2026-08-18T12:43:47.1804863Z ffffff8008dc3b90 t wlan_hdd_cfg80211_flush_pmksa
+2026-08-18T12:43:47.1805154Z ffffff8008db5e40 t wlan_hdd_cfg80211_get_bus_size
+2026-08-18T12:43:47.1805446Z ffffff8008db8740 t wlan_hdd_cfg80211_get_chain_rssi
+2026-08-18T12:43:47.1805775Z ffffff8008e3da98 T wlan_hdd_cfg80211_get_concurrency_matrix
+2026-08-18T12:43:47.4038523Z 3dee1130d819c7b123bbf6e7608f6707779760c70d7ee49ec066417d059f5f26  out-pchm30-a16-bpf/arch/arm64/boot/Image
+2026-08-18T12:43:47.4070287Z [PASS] Run16 links WLAN + msm_11ad + complete Run15 audio closure into vmlinux/Image; no matching KSU driver module required
+2026-08-18T12:43:47.4110619Z ##[group]Run set -Eeuo pipefail
+2026-08-18T12:43:47.4110995Z [36;1mset -Eeuo pipefail[0m
+2026-08-18T12:43:47.4111270Z [36;1mIMAGE="$OUT_DIR/arch/arm64/boot/Image"[0m
+2026-08-18T12:43:47.4111593Z [36;1mVMLINUX="$OUT_DIR/vmlinux"[0m
+2026-08-18T12:43:47.4111857Z [36;1mCONFIG="$OUT_DIR/.config"[0m
+2026-08-18T12:43:47.4112108Z [36;1mtest -s "$IMAGE"[0m
+2026-08-18T12:43:47.4112337Z [36;1mtest -s "$VMLINUX"[0m
+2026-08-18T12:43:47.4112647Z [36;1mtest -s "$GITHUB_WORKSPACE/run16-builtin-proof.txt"[0m
+2026-08-18T12:43:47.4113372Z [36;1mtest -s "$GITHUB_WORKSPACE/run17-builtin-runtime-proof.txt"[0m
+2026-08-18T12:43:47.4113827Z [36;1mtest -s "$GITHUB_WORKSPACE/run17-bbg-zram-stage-proof.txt"[0m
+2026-08-18T12:43:47.4114324Z [36;1mtest -s "$GITHUB_WORKSPACE/run17-btf-kprobe-scene-stage-proof.txt"[0m
+2026-08-18T12:43:47.4114786Z [36;1mtest ! -s "$GITHUB_WORKSPACE/run16-unwanted-ko.txt"[0m
+2026-08-18T12:43:47.4115112Z [36;1m[0m
+2026-08-18T12:43:47.4115534Z [36;1mfor cfg in \[0m
+2026-08-18T12:43:47.4115755Z [36;1m  CONFIG_QCA_CLD_WLAN=y \[0m
+2026-08-18T12:43:47.4116014Z [36;1m  CONFIG_MSM_11AD=y \[0m
+2026-08-18T12:43:47.4116252Z [36;1m  CONFIG_KSU=y \[0m
+2026-08-18T12:43:47.4116492Z [36;1m  CONFIG_KSU_SUSFS=y \[0m
+2026-08-18T12:43:47.4116739Z [36;1m  CONFIG_BPF=y \[0m
+2026-08-18T12:43:47.4116972Z [36;1m  CONFIG_BPF_SYSCALL=y \[0m
+2026-08-18T12:43:47.4117208Z [36;1m  CONFIG_BPF_JIT=y \[0m
+2026-08-18T12:43:47.4117435Z [36;1m  CONFIG_CGROUP_BPF=y \[0m
+2026-08-18T12:43:47.4117692Z [36;1m  CONFIG_BPF_STREAM_PARSER=y \[0m
+2026-08-18T12:43:47.4117948Z [36;1m  CONFIG_DEBUG_INFO=y \[0m
+2026-08-18T12:43:47.4118186Z [36;1m  CONFIG_DEBUG_INFO_BTF=y \[0m
+2026-08-18T12:43:47.4118431Z [36;1m  CONFIG_KPROBES=y \[0m
+2026-08-18T12:43:47.4118657Z [36;1m  CONFIG_KRETPROBES=y \[0m
+2026-08-18T12:43:47.4118899Z [36;1m  CONFIG_KPROBE_EVENTS=y \[0m
+2026-08-18T12:43:47.4119144Z [36;1m  CONFIG_PERF_EVENTS=y \[0m
+2026-08-18T12:43:47.4119391Z [36;1m  CONFIG_BPF_EVENTS=y \[0m
+2026-08-18T12:43:47.4119622Z [36;1m  CONFIG_MODVERSIONS=y \[0m
+2026-08-18T12:43:47.4119852Z [36;1m  CONFIG_BBG=y \[0m
+2026-08-18T12:43:47.4120066Z [36;1m  CONFIG_CRYPTO_LZ4K=y \[0m
+2026-08-18T12:43:47.4120314Z [36;1m  CONFIG_CRYPTO_LZ4KD=y \[0m
+2026-08-18T12:43:47.4120558Z [36;1m  CONFIG_LZ4K_COMPRESS=y \[0m
+2026-08-18T12:43:47.4120804Z [36;1m  CONFIG_LZ4K_DECOMPRESS=y \[0m
+2026-08-18T12:43:47.4121059Z [36;1m  CONFIG_LZ4KD_COMPRESS=y \[0m
+2026-08-18T12:43:47.4121319Z [36;1m  CONFIG_LZ4KD_DECOMPRESS=y; do[0m
+2026-08-18T12:43:47.4121689Z [36;1m  grep -qx "$cfg" "$CONFIG" || { echo "[FATAL] missing $cfg"; exit 81; }[0m
+2026-08-18T12:43:47.4122045Z [36;1mdone[0m
+2026-08-18T12:43:47.4122254Z [36;1m! grep -q '^CONFIG_KPM=y$' "$CONFIG"[0m
+2026-08-18T12:43:47.4122520Z [36;1m[0m
+2026-08-18T12:43:47.4123713Z [36;1mecho '===== FINAL VMLINUX BTF SECTION =====' | tee "$GITHUB_WORKSPACE/run17-btf-runtime-proof.txt"[0m
+2026-08-18T12:43:47.4124440Z [36;1mreadelf -SW "$VMLINUX" | grep -E '[[:space:]]\.BTF[[:space:]]' | tee -a "$GITHUB_WORKSPACE/run17-btf-runtime-proof.txt"[0m
+2026-08-18T12:43:47.4125073Z [36;1mtest "$(readelf -SW "$VMLINUX" | grep -Ec '[[:space:]]\.BTF[[:space:]]')" -eq 1[0m
+2026-08-18T12:43:47.4125605Z [36;1mobjcopy --dump-section .BTF="$GITHUB_WORKSPACE/run17-vmlinux.btf" "$VMLINUX"[0m
+2026-08-18T12:43:47.4126053Z [36;1mtest -s "$GITHUB_WORKSPACE/run17-vmlinux.btf"[0m
+2026-08-18T12:43:47.4126613Z [36;1mstat -c 'BTF raw bytes=%s' "$GITHUB_WORKSPACE/run17-vmlinux.btf" | tee -a "$GITHUB_WORKSPACE/run17-btf-runtime-proof.txt"[0m
+2026-08-18T12:43:47.4127142Z [36;1m[0m
+2026-08-18T12:43:47.4127518Z [36;1mecho '===== LINKED BTF SYSFS SYMBOLS =====' | tee -a "$GITHUB_WORKSPACE/run17-btf-runtime-proof.txt"[0m
+2026-08-18T12:43:47.4128212Z [36;1mnm "$VMLINUX" | grep -E '_binary__btf_vmlinux_bin_(start|end)$' | tee -a "$GITHUB_WORKSPACE/run17-btf-runtime-proof.txt"[0m
+2026-08-18T12:43:47.4128816Z [36;1mnm "$VMLINUX" | grep -Eq '[[:space:]]_binary__btf_vmlinux_bin_start$'[0m
+2026-08-18T12:43:47.4129470Z [36;1mnm "$VMLINUX" | grep -Eq '[[:space:]]_binary__btf_vmlinux_bin_end$'[0m
+2026-08-18T12:43:47.4129818Z [36;1m[0m
+2026-08-18T12:43:47.4130188Z [36;1mecho '===== KPROBE/KRETPROBE SYMBOLS =====' | tee -a "$GITHUB_WORKSPACE/run17-btf-runtime-proof.txt"[0m
+2026-08-18T12:43:47.4130921Z [36;1mnm "$VMLINUX" | grep -E '[[:space:]](register_kprobe|register_kretprobe)$' | tee -a "$GITHUB_WORKSPACE/run17-btf-runtime-proof.txt"[0m
+2026-08-18T12:43:47.4131528Z [36;1mnm "$VMLINUX" | grep -Eq '[[:space:]]register_kprobe$'[0m
+2026-08-18T12:43:47.4131912Z [36;1mnm "$VMLINUX" | grep -Eq '[[:space:]]register_kretprobe$'[0m
+2026-08-18T12:43:47.4132219Z [36;1m[0m
+2026-08-18T12:43:47.4132587Z [36;1mecho '===== SCENE TARGET SYSCALL SYMBOLS =====' | tee -a "$GITHUB_WORKSPACE/run17-btf-runtime-proof.txt"[0m
+2026-08-18T12:43:47.4133701Z [36;1mnm "$VMLINUX" | grep -E '[[:space:]](sys_bind|SyS_bind|sys_getsockname|SyS_getsockname|sys_close|SyS_close)$' | tee -a "$GITHUB_WORKSPACE/run17-btf-runtime-proof.txt"[0m
+2026-08-18T12:43:47.4134574Z [36;1mfor sym in sys_bind sys_getsockname sys_close; do[0m
+2026-08-18T12:43:47.4135020Z [36;1m  nm "$VMLINUX" | grep -Eq "[[:space:]]${sym}$" || { echo "[FATAL] missing ${sym}"; exit 82; }[0m
+2026-08-18T12:43:47.4135411Z [36;1mdone[0m
+2026-08-18T12:43:47.4135584Z [36;1m[0m
+2026-08-18T12:43:47.4135753Z [36;1mfor sym in \[0m
+2026-08-18T12:43:47.4135991Z [36;1m  BPF_PROG_TYPE_CGROUP_SOCK_ADDR \[0m
+2026-08-18T12:43:47.4136267Z [36;1m  BPF_CGROUP_INET4_BIND \[0m
+2026-08-18T12:43:47.4136508Z [36;1m  BPF_CGROUP_INET6_BIND \[0m
+2026-08-18T12:43:47.4136747Z [36;1m  BPF_CGROUP_INET4_CONNECT \[0m
+2026-08-18T12:43:47.4137002Z [36;1m  BPF_CGROUP_INET6_CONNECT; do[0m
+2026-08-18T12:43:47.4137404Z [36;1m  grep -q "$sym" include/uapi/linux/bpf.h || { echo "[FATAL] missing $sym"; exit 83; }[0m
+2026-08-18T12:43:47.4137800Z [36;1mdone[0m
+2026-08-18T12:43:47.4137973Z [36;1m[0m
+2026-08-18T12:43:47.4138252Z [36;1mstrings -a "$IMAGE" > "$GITHUB_WORKSPACE/run17-image-strings.txt"[0m
+2026-08-18T12:43:47.4138826Z [36;1mgrep -Fq 'PCHM30 RUN17 built-in WLAN delayed start armed' "$GITHUB_WORKSPACE/run17-image-strings.txt"[0m
+2026-08-18T12:43:47.4139518Z [36;1mgrep -Fq 'PCHM30 RUN17 built-in WLAN delayed start succeeded' "$GITHUB_WORKSPACE/run17-image-strings.txt"[0m
+2026-08-18T12:43:47.4140187Z [36;1mgrep -Fq 'PCHM30 RUN17 q6core active reprobe armed' "$GITHUB_WORKSPACE/run17-image-strings.txt"[0m
+2026-08-18T12:43:47.4140849Z [36;1mgrep -Fq 'PCHM30 RUN17 q6core active reprobe succeeded' "$GITHUB_WORKSPACE/run17-image-strings.txt"[0m
+2026-08-18T12:43:47.4141449Z [36;1mgrep -Fq 'baseband_guard power by' "$GITHUB_WORKSPACE/run17-image-strings.txt"[0m
+2026-08-18T12:43:47.4141834Z [36;1m[0m
+2026-08-18T12:43:47.4142073Z [36;1mnm "$VMLINUX" > "$GITHUB_WORKSPACE/run17-vmlinux-nm.txt"[0m
+2026-08-18T12:43:47.4142518Z [36;1mgrep -Eq '[[:space:]]hdd_driver_load$' "$GITHUB_WORKSPACE/run17-vmlinux-nm.txt"[0m
+2026-08-18T12:43:47.4143527Z [36;1mgrep -Eq '[[:space:]]q6core_probe$' "$GITHUB_WORKSPACE/run17-vmlinux-nm.txt"[0m
+2026-08-18T12:43:47.4144063Z [36;1mgrep -Eq '[[:space:]]bbg_init$' "$GITHUB_WORKSPACE/run17-vmlinux-nm.txt"[0m
+2026-08-18T12:43:47.4144536Z [36;1mgrep -Eq '[[:space:]]lz4k_mod_init$' "$GITHUB_WORKSPACE/run17-vmlinux-nm.txt"[0m
+2026-08-18T12:43:47.4145037Z [36;1mgrep -Eq '[[:space:]]lz4kd_mod_init$' "$GITHUB_WORKSPACE/run17-vmlinux-nm.txt"[0m
+2026-08-18T12:43:47.4145401Z [36;1m[0m
+2026-08-18T12:43:47.4146057Z [36;1mecho '[PASS] Run17 fixed image contains embedded BTF, sysfs BTF exporter, KPROBES/KRETPROBES and keeps prior Run17 features' | tee -a "$GITHUB_WORKSPACE/run17-btf-runtime-proof.txt"[0m
+2026-08-18T12:43:47.4218396Z shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
+2026-08-18T12:43:47.4218717Z env:
+2026-08-18T12:43:47.4218971Z   TOOLCHAIN_RELEASE_TAG: pchm30-build-environment-20260810
+2026-08-18T12:43:47.4219314Z   TOOLCHAIN_ROOT: /opt/pchm30-toolchains
+2026-08-18T12:43:47.4219784Z   KERNEL_REL: source/android/kernel/msm-4.14
+2026-08-18T12:43:47.4220069Z   OUT_DIR: out-pchm30-a16-bpf
+2026-08-18T12:43:47.4220341Z   CONFIG_FILE: configs/PCHM30-stock-running.config
+2026-08-18T12:43:47.4220857Z   OPPO_VENDOR_REPO: https://github.com/oppo-source/android_kernel_modules_and_devicetree_oppo_sm6125.git
+2026-08-18T12:43:47.4221416Z   OPPO_VENDOR_COMMIT: 5e7bee452c72c948427b9131bec8cd5d92934f83
+2026-08-18T12:43:47.4221841Z   ARESIN_REPO: https://github.com/jsdizkcksv/android_kernel_aresin.git
+2026-08-18T12:43:47.4222247Z   ARESIN_PREREQ: 620d928acca50c8ba013554fc798dcf8b8910918
+2026-08-18T12:43:47.4222585Z   A15_FIRST: a2b662dced04902eb8f1778ec8e30259dc680ff4
+2026-08-18T12:43:47.4223159Z   A15_LAST: bd379f8140acc083fc386cc2600ee205b2a54e31
+2026-08-18T12:43:47.4223473Z   A16_FIRST: c2c621b5448adc69e105b1519b93dd637a581da5
+2026-08-18T12:43:47.4223776Z   A16_LAST: c74436291044381d4365d91afa0c8f4a574b22b4
+2026-08-18T12:43:47.4224089Z   ROOT_SNAPSHOT: b667ba359bf7da11b43c5d6403788d21c19facd7
+2026-08-18T12:43:47.4224645Z   RESUKISU_COMMIT: beaaea0eb895dc41e7b9bf5e3f39e57aa9635bab
+2026-08-18T12:43:47.4225001Z   ROOT_SUCCESS_BRANCH: pchm30-a16-resukisu-susfs220
+2026-08-18T12:43:47.4225421Z   ROOT_SUCCESS_WORKFLOW: .github/workflows/pchm30-a16-resukisu-susfs220-build.yml
+2026-08-18T12:43:47.4225836Z   EXP1_BRANCH: pchm30-a16-btf-sockmap-exp1
+2026-08-18T12:43:47.4226198Z   EXP1_WORKFLOW: .github/workflows/pchm30-a16-btf-sockmap-exp1-v2.yml
+2026-08-18T12:43:47.4226577Z   WIFI_SUCCESS_BRANCH: pchm30-a16-wifi-abi-exp1
+2026-08-18T12:43:47.4226968Z   WIFI_SUCCESS_WORKFLOW: .github/workflows/pchm30-a16-wifi-abi-exp1-build.yml
+2026-08-18T12:43:47.4227369Z   EXP2_BRANCH: pchm30-a16-btf-exp2-diagnose
+2026-08-18T12:43:47.4227721Z   EXP2_WORKFLOW: .github/workflows/pchm30-a16-btf-exp2-diagnose.yml
+2026-08-18T12:43:47.4228123Z   UPSTREAM_BTF_UAPI: f063c889c9458354a92b235a51cbb60d30321070
+2026-08-18T12:43:47.4228498Z   UPSTREAM_BTF_KERNEL: 1dc92851849cc2235a1efef8f8d5a9255efc5f13
+2026-08-18T12:43:47.4231551Z   GH_TOKEN: ***
+2026-08-18T12:43:47.4231836Z   ROOTLESS_BASE_SHA: 0789fcca2cbcb74143492a70afc6c3b5a59251b7
+2026-08-18T12:43:47.4232338Z   SDCLANG_DIR: /opt/pchm30-toolchains/Snapdragon-LLVM-ARM-Compiler-10.0.7-for-Android-NDK
+2026-08-18T12:43:47.4233096Z   GCC64_DIR: /opt/pchm30-toolchains/aarch64-linux-android-4.9
+2026-08-18T12:43:47.4233487Z   GCC32_DIR: /opt/pchm30-toolchains/arm-linux-androideabi-4.9
+2026-08-18T12:43:47.4233856Z   MPGEN_DIR: /opt/pchm30-toolchains/mpgen-2.1.1-py3
+2026-08-18T12:43:47.4234504Z   KERNEL_DIR: /home/runner/work/android_kernel_oppo_sm6125-resukisu-final/android_kernel_oppo_sm6125-resukisu-final/source/android/kernel/msm-4.14
+2026-08-18T12:43:47.4235112Z   ARCH: arm64
+2026-08-18T12:43:47.4235298Z   TARGET_PRODUCT: trinket
+2026-08-18T12:43:47.4235514Z   KCONFIG_NOTIMESTAMP: true
+2026-08-18T12:43:47.4235730Z   KBUILD_BUILD_USER: root
+2026-08-18T12:43:47.4235944Z   KBUILD_BUILD_HOST: ubuntu-8-196
+2026-08-18T12:43:47.4236176Z   KBUILD_BUILD_VERSION: 2
+2026-08-18T12:43:47.4236429Z   KBUILD_BUILD_TIMESTAMP: Mon May 16 17:39:41 CST 2022
+2026-08-18T12:43:47.4236743Z   SHIPPING_API_LEVEL: 28
+2026-08-18T12:43:47.4236963Z   CLANG_TRIPLE: aarch64-linux-gnu-
+2026-08-18T12:43:47.4237197Z   LOCALVERSION: +
+2026-08-18T12:43:47.4237572Z   CC: /opt/pchm30-toolchains/Snapdragon-LLVM-ARM-Compiler-10.0.7-for-Android-NDK/bin/clang
+2026-08-18T12:43:47.4238206Z   REAL_CC: /opt/pchm30-toolchains/Snapdragon-LLVM-ARM-Compiler-10.0.7-for-Android-NDK/bin/clang
+2026-08-18T12:43:47.4238857Z   CROSS_COMPILE: /opt/pchm30-toolchains/aarch64-linux-android-4.9/bin/aarch64-linux-android-
+2026-08-18T12:43:47.4239486Z   CROSS_COMPILE_ARM32: /opt/pchm30-toolchains/arm-linux-androideabi-4.9/bin/arm-linux-androideabi-
+2026-08-18T12:43:47.4240067Z   LD: /opt/pchm30-toolchains/aarch64-linux-android-4.9/bin/aarch64-linux-android-ld
+2026-08-18T12:43:47.4240553Z   RTIC_MPGEN: python3 /opt/pchm30-toolchains/mpgen-2.1.1-py3/mpgen.py
+2026-08-18T12:43:47.4241574Z   OPPO_STOCK_SIGNING_X509: /home/runner/work/android_kernel_oppo_sm6125-resukisu-final/android_kernel_oppo_sm6125-resukisu-final/source/android/kernel/msm-4.14/certs/pchm30-stock-signing-key.x509
+2026-08-18T12:43:47.4243990Z   PATH: /opt/pchm30-toolchains/Snapdragon-LLVM-ARM-Compiler-10.0.7-for-Android-NDK/bin:/opt/pchm30-toolchains/aarch64-linux-android-4.9/bin:/opt/pchm30-toolchains/arm-linux-androideabi-4.9/bin:/snap/bin:/home/runner/.local/bin:/opt/pipx_bin:/home/runner/.cargo/bin:/home/runner/.config/composer/vendor/bin:/usr/local/.ghcup/bin:/home/runner/.dotnet/tools:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin
+2026-08-18T12:43:47.4245667Z   PYTHONPATH: /opt/pchm30-toolchains/mpgen-2.1.1-py3
+2026-08-18T12:43:47.4245956Z   JOBS: 4
+2026-08-18T12:43:47.4246122Z ##[endgroup]
+2026-08-18T12:43:47.4735421Z ===== FINAL VMLINUX BTF SECTION =====
+2026-08-18T12:43:50.5110367Z   [28] .BTF              PROGBITS        ffffff800aea4730 2c94730 8261ef 00  WA  0   0  1
+2026-08-18T12:43:53.5254234Z objcopy: Unable to recognise the format of the input file `out-pchm30-a16-bpf/vmlinux'
+2026-08-18T12:43:53.5271838Z ##[error]Process completed with exit code 1.
+2026-08-18T12:43:53.5374034Z Node 20 is being deprecated. This workflow is running with Node 24 by default. If you need to temporarily use Node 20, you can set the ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION=true environment variable. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+2026-08-18T12:43:53.5375879Z ##[group]Run actions/upload-artifact@v4
+2026-08-18T12:43:53.5376141Z with:
+2026-08-18T12:43:53.5376349Z   name: PCHM30-A16-RUN17-BTF-KPROBE-FIX-2
+2026-08-18T12:43:53.5379035Z   path: run16-builtin-stage.log
+run16-builtin-manifest.txt
+run16-builtin-proof.txt
+run16-unwanted-ko.txt
+run17-builtin-runtime.log
+run17-builtin-runtime-proof.txt
+run17-bbg-zram.log
+run17-bbg-zram-stage-proof.txt
+run17-btf-kprobe-scene-fix.log
+run17-btf-kprobe-scene-stage-proof.txt
+run17-btf-runtime-proof.txt
+run17-vmlinux.btf
+run17-image-strings.txt
+run17-vmlinux-nm.txt
+Image-run16-builtin.sha256
+Module.symvers.run16-builtin
+PCHM30-A16-RUN17-BTF-KPROBE-FIX-Image-2
+PCHM30-A16-RUN17-BTF-KPROBE-FIX-AK3-2.zip
+PCHM30-A16-RUN17-BTF-KPROBE-FIX-AK3-2.zip.sha256
+source/android/kernel/msm-4.14/out-pchm30-a16-bpf/.config
+source/android/kernel/msm-4.14/out-pchm30-a16-bpf/arch/arm64/boot/Image
+
+2026-08-18T12:43:53.5381703Z   include-hidden-files: true
+2026-08-18T12:43:53.5381938Z   if-no-files-found: warn
+2026-08-18T12:43:53.5382154Z   compression-level: 6
+2026-08-18T12:43:53.5382357Z   overwrite: false
+2026-08-18T12:43:53.5382539Z env:
+2026-08-18T12:43:53.5383088Z   TOOLCHAIN_RELEASE_TAG: pchm30-build-environment-20260810
+2026-08-18T12:43:53.5383456Z   TOOLCHAIN_ROOT: /opt/pchm30-toolchains
+2026-08-18T12:43:53.5383738Z   KERNEL_REL: source/android/kernel/msm-4.14
+2026-08-18T12:43:53.5384012Z   OUT_DIR: out-pchm30-a16-bpf
+2026-08-18T12:43:53.5384286Z   CONFIG_FILE: configs/PCHM30-stock-running.config
+2026-08-18T12:43:53.5384805Z   OPPO_VENDOR_REPO: https://github.com/oppo-source/android_kernel_modules_and_devicetree_oppo_sm6125.git
+2026-08-18T12:43:53.5385362Z   OPPO_VENDOR_COMMIT: 5e7bee452c72c948427b9131bec8cd5d92934f83
+2026-08-18T12:43:53.5385775Z   ARESIN_REPO: https://github.com/jsdizkcksv/android_kernel_aresin.git
+2026-08-18T12:43:53.5386179Z   ARESIN_PREREQ: 620d928acca50c8ba013554fc798dcf8b8910918
+2026-08-18T12:43:53.5386517Z   A15_FIRST: a2b662dced04902eb8f1778ec8e30259dc680ff4
+2026-08-18T12:43:53.5386833Z   A15_LAST: bd379f8140acc083fc386cc2600ee205b2a54e31
+2026-08-18T12:43:53.5387141Z   A16_FIRST: c2c621b5448adc69e105b1519b93dd637a581da5
+2026-08-18T12:43:53.5387447Z   A16_LAST: c74436291044381d4365d91afa0c8f4a574b22b4
+2026-08-18T12:43:53.5387764Z   ROOT_SNAPSHOT: b667ba359bf7da11b43c5d6403788d21c19facd7
+2026-08-18T12:43:53.5388130Z   RESUKISU_COMMIT: beaaea0eb895dc41e7b9bf5e3f39e57aa9635bab
+2026-08-18T12:43:53.5388491Z   ROOT_SUCCESS_BRANCH: pchm30-a16-resukisu-susfs220
+2026-08-18T12:43:53.5388917Z   ROOT_SUCCESS_WORKFLOW: .github/workflows/pchm30-a16-resukisu-susfs220-build.yml
+2026-08-18T12:43:53.5389351Z   EXP1_BRANCH: pchm30-a16-btf-sockmap-exp1
+2026-08-18T12:43:53.5389722Z   EXP1_WORKFLOW: .github/workflows/pchm30-a16-btf-sockmap-exp1-v2.yml
+2026-08-18T12:43:53.5390105Z   WIFI_SUCCESS_BRANCH: pchm30-a16-wifi-abi-exp1
+2026-08-18T12:43:53.5390509Z   WIFI_SUCCESS_WORKFLOW: .github/workflows/pchm30-a16-wifi-abi-exp1-build.yml
+2026-08-18T12:43:53.5390921Z   EXP2_BRANCH: pchm30-a16-btf-exp2-diagnose
+2026-08-18T12:43:53.5391276Z   EXP2_WORKFLOW: .github/workflows/pchm30-a16-btf-exp2-diagnose.yml
+2026-08-18T12:43:53.5391677Z   UPSTREAM_BTF_UAPI: f063c889c9458354a92b235a51cbb60d30321070
+2026-08-18T12:43:53.5392061Z   UPSTREAM_BTF_KERNEL: 1dc92851849cc2235a1efef8f8d5a9255efc5f13
+2026-08-18T12:43:53.5395300Z   GH_TOKEN: ***
+2026-08-18T12:43:53.5395583Z   ROOTLESS_BASE_SHA: 0789fcca2cbcb74143492a70afc6c3b5a59251b7
+2026-08-18T12:43:53.5396097Z   SDCLANG_DIR: /opt/pchm30-toolchains/Snapdragon-LLVM-ARM-Compiler-10.0.7-for-Android-NDK
+2026-08-18T12:43:53.5396610Z   GCC64_DIR: /opt/pchm30-toolchains/aarch64-linux-android-4.9
+2026-08-18T12:43:53.5397367Z   GCC32_DIR: /opt/pchm30-toolchains/arm-linux-androideabi-4.9
+2026-08-18T12:43:53.5397731Z   MPGEN_DIR: /opt/pchm30-toolchains/mpgen-2.1.1-py3
+2026-08-18T12:43:53.5398380Z   KERNEL_DIR: /home/runner/work/android_kernel_oppo_sm6125-resukisu-final/android_kernel_oppo_sm6125-resukisu-final/source/android/kernel/msm-4.14
+2026-08-18T12:43:53.5398998Z   ARCH: arm64
+2026-08-18T12:43:53.5399189Z   TARGET_PRODUCT: trinket
+2026-08-18T12:43:53.5399409Z   KCONFIG_NOTIMESTAMP: true
+2026-08-18T12:43:53.5399631Z   KBUILD_BUILD_USER: root
+2026-08-18T12:43:53.5399851Z   KBUILD_BUILD_HOST: ubuntu-8-196
+2026-08-18T12:43:53.5400088Z   KBUILD_BUILD_VERSION: 2
+2026-08-18T12:43:53.5400338Z   KBUILD_BUILD_TIMESTAMP: Mon May 16 17:39:41 CST 2022
+2026-08-18T12:43:53.5400630Z   SHIPPING_API_LEVEL: 28
+2026-08-18T12:43:53.5400852Z   CLANG_TRIPLE: aarch64-linux-gnu-
+2026-08-18T12:43:53.5401090Z   LOCALVERSION: +
+2026-08-18T12:43:53.5401475Z   CC: /opt/pchm30-toolchains/Snapdragon-LLVM-ARM-Compiler-10.0.7-for-Android-NDK/bin/clang
+2026-08-18T12:43:53.5402128Z   REAL_CC: /opt/pchm30-toolchains/Snapdragon-LLVM-ARM-Compiler-10.0.7-for-Android-NDK/bin/clang
+2026-08-18T12:43:53.5402897Z   CROSS_COMPILE: /opt/pchm30-toolchains/aarch64-linux-android-4.9/bin/aarch64-linux-android-
+2026-08-18T12:43:53.5403526Z   CROSS_COMPILE_ARM32: /opt/pchm30-toolchains/arm-linux-androideabi-4.9/bin/arm-linux-androideabi-
+2026-08-18T12:43:53.5404118Z   LD: /opt/pchm30-toolchains/aarch64-linux-android-4.9/bin/aarch64-linux-android-ld
+2026-08-18T12:43:53.5404611Z   RTIC_MPGEN: python3 /opt/pchm30-toolchains/mpgen-2.1.1-py3/mpgen.py
+2026-08-18T12:43:53.5405498Z   OPPO_STOCK_SIGNING_X509: /home/runner/work/android_kernel_oppo_sm6125-resukisu-final/android_kernel_oppo_sm6125-resukisu-final/source/android/kernel/msm-4.14/certs/pchm30-stock-signing-key.x509
+2026-08-18T12:43:53.5407677Z   PATH: /opt/pchm30-toolchains/Snapdragon-LLVM-ARM-Compiler-10.0.7-for-Android-NDK/bin:/opt/pchm30-toolchains/aarch64-linux-android-4.9/bin:/opt/pchm30-toolchains/arm-linux-androideabi-4.9/bin:/snap/bin:/home/runner/.local/bin:/opt/pipx_bin:/home/runner/.cargo/bin:/home/runner/.config/composer/vendor/bin:/usr/local/.ghcup/bin:/home/runner/.dotnet/tools:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin
+2026-08-18T12:43:53.5409376Z   PYTHONPATH: /opt/pchm30-toolchains/mpgen-2.1.1-py3
+2026-08-18T12:43:53.5409663Z   JOBS: 4
+2026-08-18T12:43:53.5409834Z ##[endgroup]
+2026-08-18T12:43:53.7199879Z (node:94643) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+2026-08-18T12:43:53.7200586Z (Use `node --trace-deprecation ...` to show where the warning was created)
+2026-08-18T12:43:53.7404175Z Multiple search paths detected. Calculating the least common ancestor of all paths
+2026-08-18T12:43:53.7440727Z The least common ancestor is /home/runner/work/android_kernel_oppo_sm6125-resukisu-final/android_kernel_oppo_sm6125-resukisu-final. This will be the root directory of the artifact
+2026-08-18T12:43:53.7442344Z With the provided path, there will be 15 files uploaded
+2026-08-18T12:43:53.7454223Z Artifact name is valid!
+2026-08-18T12:43:53.7454616Z Root directory input is valid!
+2026-08-18T12:43:54.0765319Z Beginning upload of artifact content to blob storage
+2026-08-18T12:43:54.6043354Z (node:94643) [DEP0169] DeprecationWarning: `url.parse()` behavior is not standardized and prone to errors that have security implications. Use the WHATWG URL API instead. CVEs are not issued for `url.parse()` vulnerabilities.
+2026-08-18T12:43:55.5167442Z Uploaded bytes 8388608
+2026-08-18T12:43:56.0325606Z Uploaded bytes 16777216
+2026-08-18T12:43:56.2882452Z Uploaded bytes 22618664
+2026-08-18T12:43:56.3690839Z Finished uploading artifact content to blob storage!
+2026-08-18T12:43:56.3691762Z SHA256 digest of uploaded artifact zip is c9358bc74b374aceec21227a36b08e78a8176ab87051f7cdaa99625db9904e18
+2026-08-18T12:43:56.3694620Z Finalizing artifact upload
+2026-08-18T12:43:56.6043396Z Artifact PCHM30-A16-RUN17-BTF-KPROBE-FIX-2.zip successfully finalized. Artifact ID 9324869269
+2026-08-18T12:43:56.6045040Z Artifact PCHM30-A16-RUN17-BTF-KPROBE-FIX-2 has been successfully uploaded! Final size is 22618664 bytes. Artifact ID is 9324869269
+2026-08-18T12:43:56.6050039Z Artifact download URL: https://github.com/hhsbjbsj/android_kernel_oppo_sm6125-resukisu-final/actions/runs/32135934011/artifacts/9324869269
+2026-08-18T12:43:56.6308090Z Node 20 is being deprecated. This workflow is running with Node 24 by default. If you need to temporarily use Node 20, you can set the ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION=true environment variable. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+2026-08-18T12:43:56.6309343Z Post job cleanup.
+2026-08-18T12:43:56.7223482Z [command]/usr/bin/git version
+2026-08-18T12:43:56.7268361Z git version 2.54.0
+2026-08-18T12:43:56.7310949Z Temporarily overriding HOME='/home/runner/work/_temp/a8484544-ea59-4984-9755-1185367a826b' before making global git config changes
+2026-08-18T12:43:56.7312713Z Adding repository directory to the temporary git global config as a safe directory
+2026-08-18T12:43:56.7319233Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/android_kernel_oppo_sm6125-resukisu-final/android_kernel_oppo_sm6125-resukisu-final/source/android/kernel/msm-4.14
+2026-08-18T12:43:56.7362978Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+2026-08-18T12:43:56.7404353Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2026-08-18T12:43:56.7827481Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-08-18T12:43:56.7859994Z http.https://github.com/.extraheader
+2026-08-18T12:43:56.7872611Z [command]/usr/bin/git config --local --unset-all http.https://github.com/.extraheader
+2026-08-18T12:43:56.7915958Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2026-08-18T12:43:56.8313254Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-08-18T12:43:56.8363849Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+2026-08-18T12:43:56.8899814Z Cleaning up orphan processes
+2026-08-18T12:43:56.9273301Z ##[warning]Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/checkout@v4, actions/upload-artifact@v4. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/

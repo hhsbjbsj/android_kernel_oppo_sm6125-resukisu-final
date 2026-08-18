@@ -1,0 +1,3 @@
+run_id=32149982815 status=in_progress conclusion= head_sha=e99d1e2fe7a9e8c04cf307aaab0f0a3a1cff4517 event=workflow_dispatch created_at=2026-08-18T14:42:28Z url=https://github.com/hhsbjbsj/android_kernel_oppo_sm6125-resukisu-final/actions/runs/32149982815
+run_id=32142243102 status=completed conclusion=failure head_sha=f6047cf49036d36f9eee60387bbb382dbd21c590 event=workflow_dispatch created_at=2026-08-18T13:25:10Z url=https://github.com/hhsbjbsj/android_kernel_oppo_sm6125-resukisu-final/actions/runs/32142243102
+run_id=32142140340 status=completed conclusion=failure head_sha=c44c2029debcdf2263eef24c323330fbd516bc28 event=push created_at=2026-08-18T13:24:08Z url=https://github.com/hhsbjbsj/android_kernel_oppo_sm6125-resukisu-final/actions/runs/32142140340

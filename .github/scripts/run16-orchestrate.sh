@@ -118,12 +118,12 @@ test -s "$OUT_DIR/techpack/audio/asoc/codecs/sia81xx/built-in.o"
 test -s "$OUT_DIR/drivers/staging/qcacld-3.0/built-in.o"
 test -s "$OUT_DIR/drivers/platform/msm/msm_11ad/built-in.o"
 
-if find "$OUT_DIR/techpack/audio" -type f -name '*.ko' -print -quit | grep -q .; then
+if [ -n "$(find "$OUT_DIR/techpack/audio" -type f -name '*.ko' -print -quit)" ]; then
   echo '[FATAL] audio .ko still produced in built-in experiment'
   find "$OUT_DIR/techpack/audio" -type f -name '*.ko' -print
   exit 91
 fi
-if find "$OUT_DIR/drivers/staging/qcacld-3.0" -type f -name '*.ko' -print -quit | grep -q .; then
+if [ -n "$(find "$OUT_DIR/drivers/staging/qcacld-3.0" -type f -name '*.ko' -print -quit)" ]; then
   echo '[FATAL] wlan.ko still produced in built-in experiment'
   find "$OUT_DIR/drivers/staging/qcacld-3.0" -type f -name '*.ko' -print
   exit 92
@@ -136,16 +136,24 @@ grep -q '^CONFIG_KSU_SUSFS=y$' "$OUT_DIR/.config"
 grep -q '^CONFIG_BPF_STREAM_PARSER=y$' "$OUT_DIR/.config"
 grep -q '^CONFIG_MODVERSIONS=y$' "$OUT_DIR/.config"
 
-nm "$VMLINUX" | grep -Eq '[[:space:]]apr_probe$'
-nm "$VMLINUX" | grep -Eq '[[:space:]]q6core_probe$'
-nm "$VMLINUX" | grep -Eq '[[:space:]]tavil_cdc_mclk_enable$'
-nm "$VMLINUX" | grep -Eq '[[:space:]]sia81xx_'
-nm "$VMLINUX" | grep -Eq '[[:space:]]wlan_hdd_'
-strings -a "$IMAGE" | grep -Fq 'PCHM30 A16 late-DLKM: schedule APR child population from probe'
-strings -a "$IMAGE" | grep -Fq 'PCHM30 A16 late-DLKM: AVS not ready, defer q6core probe'
-strings -a "$IMAGE" | grep -Fq 'A16-BPF compat uname:'
-nm "$VMLINUX" | grep -q ' sock_map_ops$'
-nm "$VMLINUX" | grep -q ' sock_hash_ops$'
+# Avoid false exit 141 under `set -o pipefail`: grep -q may exit as soon as it
+# finds a match, which can SIGPIPE a still-writing nm/strings producer. Materialize
+# the complete streams once, then validate the files.
+RUN16_NM_ALL="$GITHUB_WORKSPACE/run16-vmlinux-nm-all.txt"
+RUN16_STRINGS_ALL="$GITHUB_WORKSPACE/run16-image-strings-all.txt"
+nm "$VMLINUX" > "$RUN16_NM_ALL"
+strings -a "$IMAGE" > "$RUN16_STRINGS_ALL"
+
+grep -Eq '[[:space:]]apr_probe$' "$RUN16_NM_ALL"
+grep -Eq '[[:space:]]q6core_probe$' "$RUN16_NM_ALL"
+grep -Eq '[[:space:]]tavil_cdc_mclk_enable$' "$RUN16_NM_ALL"
+grep -Eq '[[:space:]]sia81xx_' "$RUN16_NM_ALL"
+grep -Eq '[[:space:]]wlan_hdd_' "$RUN16_NM_ALL"
+grep -Fq 'PCHM30 A16 late-DLKM: schedule APR child population from probe' "$RUN16_STRINGS_ALL"
+grep -Fq 'PCHM30 A16 late-DLKM: AVS not ready, defer q6core probe' "$RUN16_STRINGS_ALL"
+grep -Fq 'A16-BPF compat uname:' "$RUN16_STRINGS_ALL"
+grep -q ' sock_map_ops$' "$RUN16_NM_ALL"
+grep -q ' sock_hash_ops$' "$RUN16_NM_ALL"
 
 {
   echo '===== built-in object sizes ====='
@@ -159,7 +167,7 @@ nm "$VMLINUX" | grep -q ' sock_hash_ops$'
     "$OUT_DIR/drivers/staging/qcacld-3.0/built-in.o" \
     "$OUT_DIR/drivers/platform/msm/msm_11ad/built-in.o"
   echo '===== key vmlinux symbols ====='
-  nm "$VMLINUX" | grep -E ' apr_probe$| q6core_probe$| tavil_cdc_mclk_enable$| sia81xx_| wlan_hdd_' > "$GITHUB_WORKSPACE/run16-key-vmlinux-symbols.txt"
+  grep -E ' apr_probe$| q6core_probe$| tavil_cdc_mclk_enable$| sia81xx_| wlan_hdd_' "$RUN16_NM_ALL" > "$GITHUB_WORKSPACE/run16-key-vmlinux-symbols.txt"
   head -n 120 "$GITHUB_WORKSPACE/run16-key-vmlinux-symbols.txt"
 } | tee "$GITHUB_WORKSPACE/run16-builtin-proof.txt"
 

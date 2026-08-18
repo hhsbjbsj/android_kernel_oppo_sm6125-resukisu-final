@@ -60,12 +60,54 @@ jobs:
           fetch-depth: 1
           submodules: false
 
-      - name: Install BTF host tooling
+      - name: Install BTF host tooling without Azure mirror hang
         shell: bash
         run: |
           set -Eeuo pipefail
-          sudo apt-get update
-          sudo apt-get install -y dwarves binutils
+
+          echo '===== APT MIRROR BEFORE ====='
+          cat /etc/apt/apt-mirrors.txt 2>/dev/null || true
+          grep -R "azure.archive.ubuntu.com\|mirror+file" /etc/apt/sources.list /etc/apt/sources.list.d 2>/dev/null || true
+
+          # GitHub hosted Ubuntu runners may point Ubuntu suites at the Azure mirrorlist.
+          # The Azure mirror occasionally hangs for tens of minutes while archive.ubuntu.com
+          # is healthy, so pin this build to the working public archive mirror.
+          if [ -f /etc/apt/apt-mirrors.txt ]; then
+            printf '%s\n' 'https://archive.ubuntu.com/ubuntu/' | sudo tee /etc/apt/apt-mirrors.txt >/dev/null
+          fi
+          sudo sed -i \
+            -e 's#http://azure.archive.ubuntu.com/ubuntu#https://archive.ubuntu.com/ubuntu#g' \
+            -e 's#https://azure.archive.ubuntu.com/ubuntu#https://archive.ubuntu.com/ubuntu#g' \
+            /etc/apt/sources.list 2>/dev/null || true
+          sudo find /etc/apt/sources.list.d -maxdepth 1 -type f -print0 2>/dev/null | \
+            sudo xargs -0 -r sed -i \
+              -e 's#http://azure.archive.ubuntu.com/ubuntu#https://archive.ubuntu.com/ubuntu#g' \
+              -e 's#https://azure.archive.ubuntu.com/ubuntu#https://archive.ubuntu.com/ubuntu#g' || true
+
+          APT_OPTS=(
+            -o Acquire::Retries=2
+            -o Acquire::ForceIPv4=true
+            -o Acquire::http::Timeout=20
+            -o Acquire::https::Timeout=20
+          )
+
+          apt_retry() {
+            local attempt
+            for attempt in 1 2 3; do
+              echo "===== apt attempt ${attempt}/3: $* ====="
+              if sudo timeout 240s apt-get "${APT_OPTS[@]}" "$@"; then
+                return 0
+              fi
+              rc=$?
+              echo "[WARN] apt attempt ${attempt} failed/timed out rc=${rc}"
+              sudo rm -rf /var/lib/apt/lists/partial/* || true
+              sleep $((attempt * 5))
+            done
+            return 1
+          }
+
+          apt_retry update
+          DEBIAN_FRONTEND=noninteractive apt_retry install -y --no-install-recommends dwarves binutils
           pahole --version
 
       - name: Hard gate proven KPM runtime-fix ancestry

@@ -1,0 +1,47 @@
+name: PCHM30 A16 Run19 BTF Failure Dump
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  dump:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: pchm30-a16-run19-btf-kprobe-fix
+          fetch-depth: 0
+
+      - name: Capture failed Run19 BTF log
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -Eeuo pipefail
+          curl -L --fail \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/jobs/95727438421/logs" \
+            -o /tmp/job.log
+
+          mkdir -p ci-diagnostics
+          {
+            echo "run_id=32142243102"
+            echo "job_id=95727438421"
+            echo "=== error matches ==="
+            grep -nEi '(^|[^a-z])(error:|fatal:|failed|failure|command not found|No such file|Traceback|syntax error|exit code)' /tmp/job.log | tail -n 250 || true
+            echo "=== tail ==="
+            tail -n 500 /tmp/job.log
+          } > ci-diagnostics/run19-btf-failure-32142243102.txt
+
+      - name: Commit diagnostic
+        run: |
+          set -Eeuo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add ci-diagnostics/run19-btf-failure-32142243102.txt
+          git commit -m "ci: capture Run19 BTF failure 32142243102" || exit 0
+          git push origin HEAD:pchm30-a16-run19-btf-kprobe-fix

@@ -105,6 +105,8 @@ jobs:
           IMAGE="$OUT_DIR/arch/arm64/boot/Image"
           VMLINUX="$OUT_DIR/vmlinux"
           CONFIG="$OUT_DIR/.config"
+          OBJCOPY_BIN="${CROSS_COMPILE}objcopy"
+          test -x "$OBJCOPY_BIN"
           test -s "$IMAGE"
           test -s "$VMLINUX"
           test -s "$GITHUB_WORKSPACE/run16-builtin-proof.txt"
@@ -145,7 +147,7 @@ jobs:
           echo '===== FINAL VMLINUX BTF SECTION =====' | tee "$GITHUB_WORKSPACE/run17-btf-runtime-proof.txt"
           readelf -SW "$VMLINUX" | grep -E '[[:space:]]\.BTF[[:space:]]' | tee -a "$GITHUB_WORKSPACE/run17-btf-runtime-proof.txt"
           test "$(readelf -SW "$VMLINUX" | grep -Ec '[[:space:]]\.BTF[[:space:]]')" -eq 1
-          objcopy --dump-section .BTF="$GITHUB_WORKSPACE/run17-vmlinux.btf" "$VMLINUX"
+          "$OBJCOPY_BIN" --dump-section .BTF="$GITHUB_WORKSPACE/run17-vmlinux.btf" "$VMLINUX"
           test -s "$GITHUB_WORKSPACE/run17-vmlinux.btf"
           stat -c 'BTF raw bytes=%s' "$GITHUB_WORKSPACE/run17-vmlinux.btf" | tee -a "$GITHUB_WORKSPACE/run17-btf-runtime-proof.txt"
 

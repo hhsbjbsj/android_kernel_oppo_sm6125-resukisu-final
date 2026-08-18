@@ -1,0 +1,16 @@
+PCHM30 A16 ReSukiSU Run17 AK3
+source_branch=pchm30-a16-run17-btf-kprobe-fix
+source_workflow=PCHM30 A16 Run17 BTF Kprobe Fix
+source_run_id=32139126636
+source_run_number=3
+source_job_id=95717334294
+source_head_sha=bc983ae72d5795d0ec2a5b5dd4292dfab1417e57
+github_artifact_id=9325893576
+github_artifact_name=PCHM30-A16-RUN17-BTF-KPROBE-FIX-3
+github_artifact_digest=sha256:a977b4f359a4cd83dd8d5a861fc5c6286a360741f6607792d69c136746285b11
+original_ak3_name=PCHM30-A16-RUN17-BTF-KPROBE-FIX-AK3-3.zip
+ak3_size_bytes=24851250
+ak3_sha256=5de8bcf35e7efec057d72f044fc6718b70e5ad4bc838a9a6c83940c7f716ee5d
+root_method=ReSukiSU + SUSFS 2.2.0
+kpm=disabled
+features=BTF,KPROBES,KRETPROBES,Scene prerequisites,BBG,LZ4K,LZ4KD,built-in WiFi,built-in Audio

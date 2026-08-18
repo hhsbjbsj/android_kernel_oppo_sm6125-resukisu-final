@@ -30,3 +30,5 @@ jobs:
             "https://api.github.com/repos/$REPO/actions/workflows/pchm30-a16-run19-btf-kprobe-fix.yml/dispatches" \
             -d "{\"ref\":\"$REF\"}"
           echo '[PASS] dispatched Run19 BTF/Kprobe build'
+
+# trigger after SIGPIPE verifier fix 9116acbfb16da8e6aeb544941e40f62f25b63bc6

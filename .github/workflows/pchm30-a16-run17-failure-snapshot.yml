@@ -1,0 +1,91 @@
+name: PCHM30 Run17 Failure Snapshot
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [pchm30-a16-run17-btf-kprobe-fix]
+    paths:
+      - '.github/workflows/pchm30-a16-run17-failure-snapshot.yml'
+
+permissions:
+  actions: read
+  contents: write
+
+jobs:
+  snapshot:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout fix branch
+        uses: actions/checkout@v4
+        with:
+          ref: pchm30-a16-run17-btf-kprobe-fix
+          fetch-depth: 1
+
+      - name: Capture latest failed Run17 BTF Kprobe job log
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          BRANCH: pchm30-a16-run17-btf-kprobe-fix
+          WORKFLOW: pchm30-a16-run17-btf-kprobe-fix.yml
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          mkdir -p ci-diagnostics
+          API="https://api.github.com/repos/$REPO"
+          H1='Accept: application/vnd.github+json'
+          H2="Authorization: Bearer $GH_TOKEN"
+          H3='X-GitHub-Api-Version: 2022-11-28'
+
+          runs_json="$(curl --fail-with-body -sSL -H "$H1" -H "$H2" -H "$H3" \
+            "$API/actions/workflows/$WORKFLOW/runs?branch=$BRANCH&status=failure&per_page=10")"
+          run_id="$(jq -r '.workflow_runs[0].id // empty' <<<"$runs_json")"
+          if [ -z "$run_id" ]; then
+            {
+              echo 'No failed main Run17 BTF/Kprobe workflow run was found.'
+              echo "captured_at=$(date -u +%FT%TZ)"
+            } > ci-diagnostics/run17-latest-failure.txt
+          else
+            run_url="$(jq -r '.workflow_runs[0].html_url' <<<"$runs_json")"
+            run_sha="$(jq -r '.workflow_runs[0].head_sha' <<<"$runs_json")"
+            run_created="$(jq -r '.workflow_runs[0].created_at' <<<"$runs_json")"
+            run_updated="$(jq -r '.workflow_runs[0].updated_at' <<<"$runs_json")"
+            jobs_json="$(curl --fail-with-body -sSL -H "$H1" -H "$H2" -H "$H3" \
+              "$API/actions/runs/$run_id/jobs?filter=latest&per_page=100")"
+            job_id="$(jq -r '[.jobs[] | select(.conclusion == "failure")][0].id // empty' <<<"$jobs_json")"
+            job_name="$(jq -r '[.jobs[] | select(.conclusion == "failure")][0].name // empty' <<<"$jobs_json")"
+            {
+              echo "run_id=$run_id"
+              echo "run_url=$run_url"
+              echo "head_sha=$run_sha"
+              echo "created_at=$run_created"
+              echo "updated_at=$run_updated"
+              echo "failed_job_id=$job_id"
+              echo "failed_job_name=$job_name"
+              echo
+              echo '===== JOB/STEP SUMMARY ====='
+              jq -r '.jobs[] | "job=" + .name + " status=" + .status + " conclusion=" + (.conclusion // "") + " id=" + (.id|tostring), (.steps[]? | "  step=" + .name + " status=" + .status + " conclusion=" + (.conclusion // ""))' <<<"$jobs_json"
+            } > ci-diagnostics/run17-latest-failure.txt
+
+            if [ -n "$job_id" ]; then
+              curl --fail-with-body -sSL -H "$H1" -H "$H2" -H "$H3" \
+                "$API/actions/jobs/$job_id/logs" > /tmp/run17-failed-job.log
+              {
+                echo
+                echo '===== FIRST ERROR/FATAL WINDOW ====='
+                grep -nEi -m 80 '(^|[^[:alpha:]])(fatal|error:|\[fatal\]|failed|failure|undefined reference|undefined symbol|No rule to make target|not found|No such file|Traceback|SystemExit|returned non-zero|exit code)' /tmp/run17-failed-job.log || true
+                echo
+                echo '===== LAST 500 LOG LINES ====='
+                tail -n 500 /tmp/run17-failed-job.log
+              } >> ci-diagnostics/run17-latest-failure.txt
+            fi
+          fi
+
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add ci-diagnostics/run17-latest-failure.txt
+          if git diff --cached --quiet; then
+            echo '[INFO] failure snapshot unchanged'
+            exit 0
+          fi
+          git commit -m 'ci: snapshot latest Run17 BTF Kprobe failure'
+          git push origin HEAD:pchm30-a16-run17-btf-kprobe-fix

@@ -1,0 +1,684 @@
+===== RUN23 RECENT MAIN RUNS =====
+run_id=32163061210 run_number=4 event=push status=completed conclusion=failure head_sha=7803eb33da69018221b0fcc98a0ed09cf311abd9 created=2026-08-18T16:57:34Z updated=2026-08-18T17:21:44Z
+run_id=32162132679 run_number=3 event=push status=in_progress conclusion=None head_sha=a0983eeb8acdf3cb9383678c2a74305412754ccf created=2026-08-18T16:47:02Z updated=2026-08-18T16:47:05Z
+run_id=32158954072 run_number=2 event=workflow_dispatch status=completed conclusion=failure head_sha=054e5a23524a590d424dfe411e4a8d941ca2e5c7 created=2026-08-18T16:11:37Z updated=2026-08-18T16:41:07Z
+run_id=32158317289 run_number=1 event=push status=in_progress conclusion=None head_sha=f46e771bf1130acbead0b44966fbd14396b32efb created=2026-08-18T16:05:04Z updated=2026-08-18T16:05:07Z
+
+===== ACTIVE RUN23 =====
+run_id=32162132679 run_number=3 status=in_progress head_sha=a0983eeb8acdf3cb9383678c2a74305412754ccf updated=2026-08-18T16:47:05Z
+  job_id=95793236623 name=Run23 proven KPM runtimefix + SukiSU/BBG/LZ4KD + BTF/KPROBES status=in_progress conclusion=None started=2026-08-18T16:47:04Z completed=None
+    STEP #3 Install BTF host tooling status=in_progress conclusion=None
+    STEP #4 Hard gate proven KPM runtime-fix ancestry status=pending conclusion=None
+    STEP #5 Prepare proven KPM step runner from Run23 ref status=pending conclusion=None
+    STEP #6 Build KPM runtimefixed SukiSU BBG LZ4KD stack status=pending conclusion=None
+    STEP #7 Verify KPM runtime fix reached generated source status=pending conclusion=None
+    STEP #8 Apply successful Run17 BTF Kprobe fix and relink status=pending conclusion=None
+    STEP #9 Verify original KPM and Run18 features still survive status=pending conclusion=None
+    STEP #10 Hard verify BTF Kprobes Scene and KPM runtimefix together status=pending conclusion=None
+    STEP #11 Patch final Image with proven SukiSU KPM patcher status=pending conclusion=None
+    STEP #12 Package reusable flash ZIP status=pending conclusion=None
+    STEP #13 Upload Run23 corrected artifact status=pending conclusion=None
+    STEP #26 Post Checkout exact successful A16 rootless baseline status=pending conclusion=None
+run_id=32158317289 run_number=1 status=in_progress head_sha=f46e771bf1130acbead0b44966fbd14396b32efb updated=2026-08-18T16:05:07Z
+  job_id=95780799876 name=Run23 proven KPM runtimefix + SukiSU/BBG/LZ4KD + BTF/KPROBES status=in_progress conclusion=None started=2026-08-18T16:05:06Z completed=None
+    STEP #3 Install BTF host tooling status=in_progress conclusion=None
+    STEP #4 Hard gate proven KPM runtime-fix ancestry status=pending conclusion=None
+    STEP #5 Prepare proven KPM step runner from Run23 ref status=pending conclusion=None
+    STEP #6 Build KPM runtimefixed SukiSU BBG LZ4KD stack status=pending conclusion=None
+    STEP #7 Verify KPM runtime fix reached generated source status=pending conclusion=None
+    STEP #8 Apply successful Run17 BTF Kprobe fix and relink status=pending conclusion=None
+    STEP #9 Verify original KPM and Run18 features still survive status=pending conclusion=None
+    STEP #10 Hard verify BTF Kprobes Scene and KPM runtimefix together status=pending conclusion=None
+    STEP #11 Patch final Image with proven SukiSU KPM patcher status=pending conclusion=None
+    STEP #12 Package reusable flash ZIP status=pending conclusion=None
+    STEP #13 Upload Run23 corrected artifact status=pending conclusion=None
+    STEP #26 Post Checkout exact successful A16 rootless baseline status=pending conclusion=None
+
+===== LATEST FAILED RUN23 =====
+run_id=32163061210 run_number=4 head_sha=7803eb33da69018221b0fcc98a0ed09cf311abd9 created=2026-08-18T16:57:34Z updated=2026-08-18T17:21:44Z
+job_id=95796186998 name=Run23 proven KPM runtimefix + SukiSU/BBG/LZ4KD + BTF/KPROBES status=completed conclusion=failure
+  STEP #1 Set up job status=completed conclusion=success
+  STEP #2 Checkout exact successful A16 rootless baseline status=completed conclusion=success
+  STEP #3 Install BTF host tooling without Azure mirror hang status=completed conclusion=success
+  STEP #4 Hard gate proven KPM runtime-fix ancestry status=completed conclusion=success
+  STEP #5 Prepare proven KPM step runner from Run23 ref status=completed conclusion=success
+  STEP #6 Build KPM runtimefixed SukiSU BBG LZ4KD stack status=completed conclusion=failure
+  STEP #7 Verify KPM runtime fix reached generated source status=completed conclusion=skipped
+  STEP #8 Apply successful Run17 BTF Kprobe fix and relink status=completed conclusion=skipped
+  STEP #9 Verify original KPM and Run18 features still survive status=completed conclusion=skipped
+  STEP #10 Hard verify BTF Kprobes Scene and KPM runtimefix together status=completed conclusion=skipped
+  STEP #11 Patch final Image with proven SukiSU KPM patcher status=completed conclusion=skipped
+  STEP #12 Package reusable flash ZIP status=completed conclusion=skipped
+  STEP #13 Upload Run23 corrected artifact status=completed conclusion=success
+  STEP #26 Post Checkout exact successful A16 rootless baseline status=completed conclusion=success
+  STEP #27 Complete job status=completed conclusion=success
+
+----- FIRST ERROR/FATAL CANDIDATES -----
+--- context line 264 ---
+2026-08-18T16:57:52.2995055Z [36;1m      return 0[0m
+2026-08-18T16:57:52.2995272Z [36;1m    fi[0m
+2026-08-18T16:57:52.2995473Z [36;1m    rc=$?[0m
+2026-08-18T16:57:52.2995777Z [36;1m    echo "[WARN] apt attempt ${attempt} failed/timed out rc=${rc}"[0m
+2026-08-18T16:57:52.2996216Z [36;1m    sudo rm -rf /var/lib/apt/lists/partial/* || true[0m
+2026-08-18T16:57:52.2996550Z [36;1m    sleep $((attempt * 5))[0m
+2026-08-18T16:57:52.2997013Z [36;1m  done[0m
+2026-08-18T16:57:52.2997211Z [36;1m  return 1[0m
+--- context line 922 ---
+2026-08-18T16:59:50.5113947Z Auto-merging net/core/dev.c
+2026-08-18T16:59:50.5114397Z CONFLICT (content): Merge conflict in net/core/dev.c
+2026-08-18T16:59:50.5114891Z Auto-merging net/core/rtnetlink.c
+2026-08-18T16:59:50.5407304Z error: could not apply d0780629b... BACKPORT: net: bpf: rename ndo_xdp to ndo_bpf
+2026-08-18T16:59:50.5408047Z hint: After resolving the conflicts, mark them with
+2026-08-18T16:59:50.5408550Z hint: "git add/rm <pathspec>", then run
+2026-08-18T16:59:50.5408969Z hint: "git cherry-pick --continue".
+2026-08-18T16:59:50.5409503Z hint: You can instead skip this commit with "git cherry-pick --skip".
+--- context line 1086 ---
+2026-08-18T16:59:53.9134265Z Auto-merging include/linux/bpf.h
+2026-08-18T16:59:53.9134742Z Auto-merging kernel/bpf/hashtab.c
+2026-08-18T16:59:53.9135243Z CONFLICT (content): Merge conflict in kernel/bpf/hashtab.c
+2026-08-18T16:59:53.9452350Z error: could not apply 7ec2cf6eb... bpf: Add map and need_defer parameters to .map_fd_put_ptr()
+2026-08-18T16:59:53.9453165Z hint: After resolving the conflicts, mark them with
+2026-08-18T16:59:53.9453498Z hint: "git add/rm <pathspec>", then run
+2026-08-18T16:59:53.9453800Z hint: "git cherry-pick --continue".
+2026-08-18T16:59:53.9454207Z hint: You can instead skip this commit with "git cherry-pick --skip".
+--- context line 1238 ---
+2026-08-18T17:00:37.7280642Z 4539bd294 bpf: btf: support proper non-jit func info
+2026-08-18T17:00:37.7304649Z f20d52a5c bpf: don't leave partial mangled prog in jit_subprogs error path
+2026-08-18T17:00:37.7346643Z 3b623692a bpf: Add bpf_line_info support
+2026-08-18T17:00:37.7385088Z 565968144 bpf: reject any prog that failed read-only lock
+2026-08-18T17:00:37.7422584Z 0549ebc2d bpf: Create a new btf_name_by_offset() for non type name use case
+2026-08-18T17:00:37.7460305Z 6be8e2d10 bpf: fix a compilation error when CONFIG_BPF_SYSCALL is not defined
+2026-08-18T17:00:37.7499289Z 0258195c3 bpf: btf: Rename btf_key_id and btf_value_id in bpf_map_info
+2026-08-18T17:00:37.7538588Z 1ca0d8b99 bpf: introduce per-cpu cgroup local storage
+--- context line 1457 ---
+2026-08-18T17:00:43.4435445Z CONFLICT (content): Merge conflict in fs/proc/proc_sysctl.c
+2026-08-18T17:00:43.4436008Z Auto-merging include/linux/filter.h
+2026-08-18T17:00:43.4436444Z Auto-merging kernel/bpf/syscall.c
+2026-08-18T17:00:43.4745884Z error: could not apply 855f570c3... BACKPORT: bpf: Sysctl hook
+2026-08-18T17:00:43.4746534Z hint: After resolving the conflicts, mark them with
+2026-08-18T17:00:43.4747015Z hint: "git add/rm <pathspec>", then run
+2026-08-18T17:00:43.4747320Z hint: "git cherry-pick --continue".
+2026-08-18T17:00:43.4747688Z hint: You can instead skip this commit with "git cherry-pick --skip".
+--- context line 1736 ---
+2026-08-18T17:00:50.9050927Z Auto-merging include/linux/bpf_verifier.h
+2026-08-18T17:00:50.9051574Z Auto-merging kernel/bpf/verifier.c
+2026-08-18T17:00:50.9052164Z CONFLICT (content): Merge conflict in kernel/bpf/verifier.c
+2026-08-18T17:00:50.9360740Z error: could not apply 79362c5a0... bpf: squash of log related commits
+2026-08-18T17:00:50.9361434Z hint: After resolving the conflicts, mark them with
+2026-08-18T17:00:50.9362924Z hint: "git add/rm <pathspec>", then run
+2026-08-18T17:00:50.9363464Z hint: "git cherry-pick --continue".
+2026-08-18T17:00:50.9364068Z hint: You can instead skip this commit with "git cherry-pick --skip".
+--- context line 1807 ---
+2026-08-18T17:00:52.5669563Z Auto-merging kernel/bpf/core.c
+2026-08-18T17:00:52.5670161Z CONFLICT (content): Merge conflict in kernel/bpf/core.c
+2026-08-18T17:00:52.5670508Z Auto-merging kernel/bpf/verifier.c
+2026-08-18T17:00:52.5963955Z error: could not apply 4793e2890... bpf: add support for bpf_call to interpreter
+2026-08-18T17:00:52.5964716Z hint: After resolving the conflicts, mark them with
+2026-08-18T17:00:52.5965105Z hint: "git add/rm <pathspec>", then run
+2026-08-18T17:00:52.5965415Z hint: "git cherry-pick --continue".
+2026-08-18T17:00:52.5965792Z hint: You can instead skip this commit with "git cherry-pick --skip".
+--- context line 2052 ---
+2026-08-18T17:00:58.7637575Z  Author: Martin KaFai Lau <kafai@fb.com>
+2026-08-18T17:00:58.7638042Z  Date: Fri Dec 7 16:42:25 2018 -0800
+2026-08-18T17:00:58.7638538Z  10 files changed, 393 insertions(+), 29 deletions(-)
+2026-08-18T17:00:58.7710037Z >>> 565968144 bpf: reject any prog that failed read-only lock
+2026-08-18T17:00:58.8833127Z Auto-merging include/linux/filter.h
+2026-08-18T17:00:58.8833671Z Auto-merging kernel/bpf/core.c
+2026-08-18T17:00:58.8834049Z Auto-merging kernel/bpf/syscall.c
+2026-08-18T17:00:58.9487626Z [pchm30-a16-bpf-only b61fbb4f2] bpf: reject any prog that failed read-only lock
+--- context line 2056 ---
+2026-08-18T17:00:58.8833127Z Auto-merging include/linux/filter.h
+2026-08-18T17:00:58.8833671Z Auto-merging kernel/bpf/core.c
+2026-08-18T17:00:58.8834049Z Auto-merging kernel/bpf/syscall.c
+2026-08-18T17:00:58.9487626Z [pchm30-a16-bpf-only b61fbb4f2] bpf: reject any prog that failed read-only lock
+2026-08-18T17:00:58.9488393Z  Author: Daniel Borkmann <daniel@iogearbox.net>
+2026-08-18T17:00:58.9488903Z  Date: Fri Jun 15 02:30:48 2018 +0200
+2026-08-18T17:00:58.9489691Z  3 files changed, 81 insertions(+), 28 deletions(-)
+2026-08-18T17:00:58.9557140Z >>> 0549ebc2d bpf: Create a new btf_name_by_offset() for non type name use case
+--- context line 2125 ---
+2026-08-18T17:01:00.6880118Z Auto-merging kernel/bpf/verifier.c
+2026-08-18T17:01:00.6880393Z Auto-merging net/core/filter.c
+2026-08-18T17:01:00.6880693Z CONFLICT (content): Merge conflict in net/core/filter.c
+2026-08-18T17:01:00.7173739Z error: could not apply b4eac9a69... bpf: introduce bpf_spin_lock
+2026-08-18T17:01:00.7174421Z hint: After resolving the conflicts, mark them with
+2026-08-18T17:01:00.7174820Z hint: "git add/rm <pathspec>", then run
+2026-08-18T17:01:00.7175134Z hint: "git cherry-pick --continue".
+2026-08-18T17:01:00.7175501Z hint: You can instead skip this commit with "git cherry-pick --skip".
+--- context line 2145 ---
+2026-08-18T17:01:01.2430596Z Auto-merging kernel/bpf/verifier.c
+2026-08-18T17:01:01.2430948Z CONFLICT (content): Merge conflict in kernel/bpf/verifier.c
+2026-08-18T17:01:01.2431300Z Auto-merging net/core/filter.c
+2026-08-18T17:01:01.2725280Z error: could not apply a2ef751de... SQUASH! bpf: Add a bpf_sock pointer to __sk_buff and a bpf_sk_fullsock helpe
+2026-08-18T17:01:01.2726053Z hint: After resolving the conflicts, mark them with
+2026-08-18T17:01:01.2726384Z hint: "git add/rm <pathspec>", then run
+2026-08-18T17:01:01.2726686Z hint: "git cherry-pick --continue".
+2026-08-18T17:01:01.2727064Z hint: You can instead skip this commit with "git cherry-pick --skip".
+--- context line 9417 ---
+2026-08-18T17:20:53.4358294Z   AR      built-in.o
+2026-08-18T17:20:53.8589921Z   LD      vmlinux.o
+2026-08-18T17:20:58.0781702Z   MODPOST vmlinux.o
+2026-08-18T17:20:58.1072610Z WARNING: EXPORT symbol "gsi_write_channel_scratch" [vmlinux] version generation failed, symbol will not be versioned.
+2026-08-18T17:21:02.5188224Z WARNING:  report is not trusted due to kprobes or tracing
+2026-08-18T17:21:02.7928448Z WARNING:  No sym. `selinux_ops`
+2026-08-18T17:21:02.7928980Z WARNING: could not find symbol: `selinux_ops`
+2026-08-18T17:21:02.8094803Z WARNING:  No sym. `ss_initialized`
+--- context line 9963 ---
+2026-08-18T17:21:32.9407451Z   OBJCOPY arch/arm64/boot/Image
+2026-08-18T17:21:32.9466286Z   Building modules, stage 2.
+2026-08-18T17:21:32.9603657Z   MODPOST 9 modules
+2026-08-18T17:21:32.9848566Z WARNING: EXPORT symbol "gsi_write_channel_scratch" [vmlinux] version generation failed, symbol will not be versioned.
+2026-08-18T17:21:32.9981782Z   CC      drivers/char/rdbg.mod.o
+2026-08-18T17:21:33.0001624Z   CC      drivers/media/platform/msm/dvb/adapter/mpq-adapter.mod.o
+2026-08-18T17:21:33.0030419Z   CC      drivers/media/platform/msm/dvb/demux/mpq-dmx-hw-plugin.mod.o
+2026-08-18T17:21:33.0906187Z   GZIP    arch/arm64/boot/Image.gz
+--- context line 10320 ---
+2026-08-18T17:21:39.7408368Z   File "/usr/lib/python3.10/subprocess.py", line 526, in run
+2026-08-18T17:21:39.7408998Z     raise CalledProcessError(retcode, process.args,
+2026-08-18T17:21:39.7422849Z subprocess.CalledProcessError: Command '['bash', '-c', 'set -Eeuo pipefail\nset -Eeuo pipefail\ngit fetch --no-tags --depth=1 origin "$GITHUB_SHA"\ngit show "$GITHUB_SHA:.github/scripts/run16-orchestrate.sh" > "$GITHUB_WORKSPACE/run19-orchestrate.sh"\ngit show "$GITHUB_SHA:.github/scripts/run17-builtin-runtime-retry.sh" > "$GITHUB_WORKSPACE/run17-builtin-runtime-retry.sh"\ngit show "$GITHUB_SHA:.github/scripts/run17-bbg-lz4kd.sh" > "$GITHUB_WORKSPACE/run17-bbg-lz4kd.sh"\ngit show "$GITHUB_SHA:.github/scripts/run18-sukisu-swap.sh" > "$GITHUB_WORKSPACE/run18-sukisu-swap.sh"\ngit show "$GITHUB_SHA:.github/scripts/run19-kpm-enable.sh" > "$GITHUB_WORKSPACE/run19-kpm-enable.sh"\nchmod +x \\\n  "$GITHUB_WORKSPACE/run19-orchestrate.sh" \\\n  "$GITHUB_WORKSPACE/run17-builtin-runtime-retry.sh" \\\n  "$GITHUB_WORKSPACE/run17-bbg-lz4kd.sh" \\\n  "$GITHUB_WORKSPACE/run18-sukisu-swap.sh" \\\n  "$GITHUB_WORKSPACE/run19-kpm-enable.sh"\n\npython3 - <<\'PY\'\nfrom pathlib import Path\nimport os\n\np = Path(os.environ[\'GITHUB_WORKSPACE\']) / \'run19-orchestrate.sh\'\ns = p.read_text()\n\nold_root = (\n    "run_step \'Prepare proven A16 root config\'\\n"\n    "run_step \'Enable BPF stream parser for sockmap sockhash\'\\n"\n)\nnew_root = (\n    "run_step \'Prepare proven A16 root config\'\\n"\n    \'"$GITHUB_WORKSPACE/run18-sukisu-swap.sh"\\n\'\n    \'"$GITHUB_WORKSPACE/run19-kpm-enable.sh"\\n\'\n    "run_step \'Enable BPF stream parser for sockmap sockhash\'\\n"\n)\nif s.count(old_root) != 1:\n    raise SystemExit(f\'cannot locate root-config insertion point: {s.count(old_root)}\')\ns = s.replace(old_root, new_root, 1)\n\nold_runtime = (\n    \'"$GITHUB_WORKSPACE/run16-builtin-wifi-audio.sh"\\n\\n\'\n    "run_step \'Instrument exact BTF rejection path\'"\n)\nnew_runtime = (\n    \'"$GITHUB_WORKSPACE/run16-builtin-wifi-audio.sh"\\n\'\n    \'"$GITHUB_WORKSPACE/run17-builtin-runtime-retry.sh"\\n\'\n    \'"$GITHUB_WORKSPACE/run17-bbg-lz4kd.sh"\\n\\n\'\n    "run_step \'Instrument exact BTF rejection path\'"\n)\nif s.count(old_runtime) != 1:\n    raise SystemExit(f\'cannot locate Run16 staging call: {s.count(old_runtime)}\')\ns = s.replace(old_runtime, new_runtime, 1)\np.write_text(s)\nPY\n\ngrep -n \'run18-sukisu-swap\' "$GITHUB_WORKSPACE/run19-orchestrate.sh"\ngrep -n \'run19-kpm-enable\' "$GITHUB_WORKSPACE/run19-orchestrate.sh"\ngrep -n \'run17-bbg-lz4kd\' "$GITHUB_WORKSPACE/run19-orchestrate.sh"\n"$GITHUB_WORKSPACE/run19-orchestrate.sh"\n\n']' returned non-zero exit status 141.
+2026-08-18T17:21:39.7525872Z ##[error]Process completed with exit code 1.
+2026-08-18T17:21:39.7645060Z Node 20 is being deprecated. This workflow is running with Node 24 by default. If you need to temporarily use Node 20, you can set the ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION=true environment variable. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+2026-08-18T17:21:39.7646785Z ##[group]Run actions/upload-artifact@v4
+2026-08-18T17:21:39.7647061Z with:
+2026-08-18T17:21:39.7647306Z   name: PCHM30-A16-RUN23-KPM-RUNTIMEFIX-BTF-4
+
+----- FAILED JOB LOG TAIL -----
+2026-08-18T17:21:32.8818896Z 	size:	584
+2026-08-18T17:21:32.8819170Z WRITE XML
+2026-08-18T17:21:32.8819325Z 
+2026-08-18T17:21:32.8819462Z ======================================
+2026-08-18T17:21:32.8820016Z             MPGEN PROTO RUN COMPLETE
+2026-08-18T17:21:32.8820406Z ======================================
+2026-08-18T17:21:32.8820807Z Complete in 0 minutes (1 sec.).
+2026-08-18T17:21:32.8821184Z COMPLETE: GREAT SUCCESSS
+2026-08-18T17:21:32.9407451Z   OBJCOPY arch/arm64/boot/Image
+2026-08-18T17:21:32.9466286Z   Building modules, stage 2.
+2026-08-18T17:21:32.9603657Z   MODPOST 9 modules
+2026-08-18T17:21:32.9848566Z WARNING: EXPORT symbol "gsi_write_channel_scratch" [vmlinux] version generation failed, symbol will not be versioned.
+2026-08-18T17:21:32.9981782Z   CC      drivers/char/rdbg.mod.o
+2026-08-18T17:21:33.0001624Z   CC      drivers/media/platform/msm/dvb/adapter/mpq-adapter.mod.o
+2026-08-18T17:21:33.0030419Z   CC      drivers/media/platform/msm/dvb/demux/mpq-dmx-hw-plugin.mod.o
+2026-08-18T17:21:33.0906187Z   GZIP    arch/arm64/boot/Image.gz
+2026-08-18T17:21:33.2547587Z   CC      drivers/media/rc/msm-geni-ir.mod.o
+2026-08-18T17:21:33.2753826Z   CC      drivers/net/wireless/ath/wil6210/wil6210.mod.o
+2026-08-18T17:21:33.2872213Z   CC      drivers/ommc/core/mmc_test.mod.o
+2026-08-18T17:21:33.5020672Z   CC      drivers/video/backlight/lcd.mod.o
+2026-08-18T17:21:33.5580975Z   CC      fs/efivarfs/efivarfs.mod.o
+2026-08-18T17:21:33.5620329Z   CC      net/bridge/br_netfilter.mod.o
+2026-08-18T17:21:33.7482917Z   LD [M]  drivers/char/rdbg.ko
+2026-08-18T17:21:33.7560566Z   LD [M]  drivers/media/platform/msm/dvb/adapter/mpq-adapter.ko
+2026-08-18T17:21:33.7620500Z   LD [M]  drivers/media/platform/msm/dvb/demux/mpq-dmx-hw-plugin.ko
+2026-08-18T17:21:33.7710365Z   LD [M]  drivers/media/rc/msm-geni-ir.ko
+2026-08-18T17:21:33.7770454Z   LD [M]  drivers/net/wireless/ath/wil6210/wil6210.ko
+2026-08-18T17:21:33.8368537Z   LD [M]  drivers/ommc/core/mmc_test.ko
+2026-08-18T17:21:33.8390771Z   LD [M]  drivers/video/backlight/lcd.ko
+2026-08-18T17:21:33.8413354Z   LD [M]  fs/efivarfs/efivarfs.ko
+2026-08-18T17:21:33.8431300Z   LD [M]  net/bridge/br_netfilter.ko
+2026-08-18T17:21:37.0611559Z   DTC     arch/arm64/boot/dts/19571/trinket-idp.dtb
+2026-08-18T17:21:37.0620167Z   DTC     arch/arm64/boot/dts/19021/trinket-usbc-idp.dtb
+2026-08-18T17:21:37.0650310Z   DTC     arch/arm64/boot/dts/19021/trinket-idp.dtb
+2026-08-18T17:21:37.0670999Z   DTC     arch/arm64/boot/dts/19021/trinket-qrd.dtb
+2026-08-18T17:21:37.1861768Z arch/arm64/boot/dts/19021/trinket-qrd.dtb: Warning (reg_format): "reg" property in /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l1@4000 has invalid length (2 bytes) (#address-cells == 2, #size-cells == 1)
+2026-08-18T17:21:37.1878439Z arch/arm64/boot/dts/19021/trinket-qrd.dtb: Warning (reg_format): "reg" property in /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l2@4100 has invalid length (2 bytes) (#address-cells == 2, #size-cells == 1)
+2026-08-18T17:21:37.1911717Z arch/arm64/boot/dts/19021/trinket-qrd.dtb: Warning (reg_format): "reg" property in /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l3@4200 has invalid length (2 bytes) (#address-cells == 2, #size-cells == 1)
+2026-08-18T17:21:37.1951175Z arch/arm64/boot/dts/19021/trinket-qrd.dtb: Warning (reg_format): "reg" property in /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l4@4300 has invalid length (2 bytes) (#address-cells == 2, #size-cells == 1)
+2026-08-18T17:21:37.1971169Z arch/arm64/boot/dts/19021/trinket-qrd.dtb: Warning (reg_format): "reg" property in /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l5@4400 has invalid length (2 bytes) (#address-cells == 2, #size-cells == 1)
+2026-08-18T17:21:37.1973836Z arch/arm64/boot/dts/19021/trinket-qrd.dtb: Warning (reg_format): "reg" property in /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l6@4400 has invalid length (2 bytes) (#address-cells == 2, #size-cells == 1)
+2026-08-18T17:21:37.1976124Z arch/arm64/boot/dts/19021/trinket-qrd.dtb: Warning (reg_format): "reg" property in /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l7@4400 has invalid length (2 bytes) (#address-cells == 2, #size-cells == 1)
+2026-08-18T17:21:37.1978545Z arch/arm64/boot/dts/19021/trinket-qrd.dtb: Warning (reg_format): "reg" property in /soc/qcom,msm-audio-apr/qcom,q6core-audio/bolero-cdc/tx-macro@0a460000 has invalid length (8 bytes) (#address-cells == 2, #size-cells == 1)
+2026-08-18T17:21:37.1981190Z arch/arm64/boot/dts/19021/trinket-qrd.dtb: Warning (reg_format): "reg" property in /soc/qcom,msm-audio-apr/qcom,q6core-audio/bolero-cdc/rx-macro@0a440000 has invalid length (8 bytes) (#address-cells == 2, #size-cells == 1)
+2026-08-18T17:21:37.1983625Z arch/arm64/boot/dts/19021/trinket-qrd.dtb: Warning (reg_format): "reg" property in /soc/qcom,msm-audio-apr/qcom,q6core-audio/bolero-cdc/wsa-macro@0a480000 has invalid length (8 bytes) (#address-cells == 2, #size-cells == 1)
+2026-08-18T17:21:37.1986073Z arch/arm64/boot/dts/19021/trinket-qrd.dtb: Warning (reg_format): "reg" property in /soc/qcom,msm-audio-apr/qcom,q6core-audio/bolero-cdc/va-macro@0a4a0000 has invalid length (8 bytes) (#address-cells == 2, #size-cells == 1)
+2026-08-18T17:21:37.1988392Z arch/arm64/boot/dts/19021/trinket-qrd.dtb: Warning (avoid_default_addr_size): Relying on default #address-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l1@4000
+2026-08-18T17:21:37.1990631Z arch/arm64/boot/dts/19021/trinket-qrd.dtb: Warning (avoid_default_addr_size): Relying on default #size-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l1@4000
+2026-08-18T17:21:37.1992749Z arch/arm64/boot/dts/19021/trinket-qrd.dtb: Warning (avoid_default_addr_size): Relying on default #address-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l2@4100
+2026-08-18T17:21:37.1994849Z arch/arm64/boot/dts/19021/trinket-qrd.dtb: Warning (avoid_default_addr_size): Relying on default #size-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l2@4100
+2026-08-18T17:21:37.1996937Z arch/arm64/boot/dts/19021/trinket-qrd.dtb: Warning (avoid_default_addr_size): Relying on default #address-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l3@4200
+2026-08-18T17:21:37.1999022Z arch/arm64/boot/dts/19021/trinket-qrd.dtb: Warning (avoid_default_addr_size): Relying on default #size-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l3@4200
+2026-08-18T17:21:37.2031383Z arch/arm64/boot/dts/19021/trinket-qrd.dtb: Warning (avoid_default_addr_size): Relying on default #address-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l4@4300
+2026-08-18T17:21:37.2033751Z arch/arm64/boot/dts/19021/trinket-qrd.dtb: Warning (avoid_default_addr_size): Relying on default #size-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l4@4300
+2026-08-18T17:21:37.2035854Z arch/arm64/boot/dts/19021/trinket-qrd.dtb: Warning (avoid_default_addr_size): Relying on default #address-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l5@4400
+2026-08-18T17:21:37.2037988Z arch/arm64/boot/dts/19021/trinket-qrd.dtb: Warning (avoid_default_addr_size): Relying on default #size-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l5@4400
+2026-08-18T17:21:37.2040211Z arch/arm64/boot/dts/19021/trinket-qrd.dtb: Warning (avoid_default_addr_size): Relying on default #address-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l6@4400
+2026-08-18T17:21:37.2042304Z arch/arm64/boot/dts/19021/trinket-qrd.dtb: Warning (avoid_default_addr_size): Relying on default #size-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l6@4400
+2026-08-18T17:21:37.2044563Z arch/arm64/boot/dts/19021/trinket-qrd.dtb: Warning (avoid_default_addr_size): Relying on default #address-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l7@4400
+2026-08-18T17:21:37.2046648Z arch/arm64/boot/dts/19021/trinket-qrd.dtb: Warning (avoid_default_addr_size): Relying on default #size-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l7@4400
+2026-08-18T17:21:37.2048757Z arch/arm64/boot/dts/19021/trinket-qrd.dtb: Warning (avoid_default_addr_size): Relying on default #address-cells value for /soc/qcom,msm-audio-apr/qcom,q6core-audio/bolero-cdc/tx-macro@0a460000
+2026-08-18T17:21:37.2051032Z arch/arm64/boot/dts/19021/trinket-qrd.dtb: Warning (avoid_default_addr_size): Relying on default #size-cells value for /soc/qcom,msm-audio-apr/qcom,q6core-audio/bolero-cdc/tx-macro@0a460000
+2026-08-18T17:21:37.2053141Z arch/arm64/boot/dts/19021/trinket-qrd.dtb: Warning (avoid_default_addr_size): Relying on default #address-cells value for /soc/qcom,msm-audio-apr/qcom,q6core-audio/bolero-cdc/rx-macro@0a440000
+2026-08-18T17:21:37.2055234Z arch/arm64/boot/dts/19021/trinket-qrd.dtb: Warning (avoid_default_addr_size): Relying on default #size-cells value for /soc/qcom,msm-audio-apr/qcom,q6core-audio/bolero-cdc/rx-macro@0a440000
+2026-08-18T17:21:37.2057335Z arch/arm64/boot/dts/19021/trinket-qrd.dtb: Warning (avoid_default_addr_size): Relying on default #address-cells value for /soc/qcom,msm-audio-apr/qcom,q6core-audio/bolero-cdc/wsa-macro@0a480000
+2026-08-18T17:21:37.2059441Z arch/arm64/boot/dts/19021/trinket-qrd.dtb: Warning (avoid_default_addr_size): Relying on default #size-cells value for /soc/qcom,msm-audio-apr/qcom,q6core-audio/bolero-cdc/wsa-macro@0a480000
+2026-08-18T17:21:37.2091829Z arch/arm64/boot/dts/19021/trinket-qrd.dtb: Warning (avoid_default_addr_size): Relying on default #address-cells value for /soc/qcom,msm-audio-apr/qcom,q6core-audio/bolero-cdc/va-macro@0a4a0000
+2026-08-18T17:21:37.2093971Z arch/arm64/boot/dts/19021/trinket-qrd.dtb: Warning (avoid_default_addr_size): Relying on default #size-cells value for /soc/qcom,msm-audio-apr/qcom,q6core-audio/bolero-cdc/va-macro@0a4a0000
+2026-08-18T17:21:37.2096282Z arch/arm64/boot/dts/19571/trinket-idp.dtb: Warning (reg_format): "reg" property in /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l1@4000 has invalid length (2 bytes) (#address-cells == 2, #size-cells == 1)
+2026-08-18T17:21:37.2098716Z arch/arm64/boot/dts/19571/trinket-idp.dtb: Warning (reg_format): "reg" property in /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l2@4100 has invalid length (2 bytes) (#address-cells == 2, #size-cells == 1)
+2026-08-18T17:21:37.2101224Z arch/arm64/boot/dts/19571/trinket-idp.dtb: Warning (reg_format): "reg" property in /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l3@4200 has invalid length (2 bytes) (#address-cells == 2, #size-cells == 1)
+2026-08-18T17:21:37.2103821Z arch/arm64/boot/dts/19571/trinket-idp.dtb: Warning (reg_format): "reg" property in /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l4@4300 has invalid length (2 bytes) (#address-cells == 2, #size-cells == 1)
+2026-08-18T17:21:37.2106221Z arch/arm64/boot/dts/19571/trinket-idp.dtb: Warning (reg_format): "reg" property in /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l5@4400 has invalid length (2 bytes) (#address-cells == 2, #size-cells == 1)
+2026-08-18T17:21:37.2108608Z arch/arm64/boot/dts/19571/trinket-idp.dtb: Warning (reg_format): "reg" property in /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l6@4400 has invalid length (2 bytes) (#address-cells == 2, #size-cells == 1)
+2026-08-18T17:21:37.2111164Z arch/arm64/boot/dts/19571/trinket-idp.dtb: Warning (reg_format): "reg" property in /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l7@4400 has invalid length (2 bytes) (#address-cells == 2, #size-cells == 1)
+2026-08-18T17:21:37.2113605Z arch/arm64/boot/dts/19571/trinket-idp.dtb: Warning (avoid_default_addr_size): Relying on default #address-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l1@4000
+2026-08-18T17:21:37.2115704Z arch/arm64/boot/dts/19571/trinket-idp.dtb: Warning (avoid_default_addr_size): Relying on default #size-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l1@4000
+2026-08-18T17:21:37.2117805Z arch/arm64/boot/dts/19571/trinket-idp.dtb: Warning (avoid_default_addr_size): Relying on default #address-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l2@4100
+2026-08-18T17:21:37.2150075Z arch/arm64/boot/dts/19571/trinket-idp.dtb: Warning (avoid_default_addr_size): Relying on default #size-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l2@4100
+2026-08-18T17:21:37.2152230Z arch/arm64/boot/dts/19571/trinket-idp.dtb: Warning (avoid_default_addr_size): Relying on default #address-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l3@4200
+2026-08-18T17:21:37.2154329Z arch/arm64/boot/dts/19571/trinket-idp.dtb: Warning (avoid_default_addr_size): Relying on default #size-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l3@4200
+2026-08-18T17:21:37.2156415Z arch/arm64/boot/dts/19571/trinket-idp.dtb: Warning (avoid_default_addr_size): Relying on default #address-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l4@4300
+2026-08-18T17:21:37.2158501Z arch/arm64/boot/dts/19571/trinket-idp.dtb: Warning (avoid_default_addr_size): Relying on default #size-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l4@4300
+2026-08-18T17:21:37.2160728Z arch/arm64/boot/dts/19571/trinket-idp.dtb: Warning (avoid_default_addr_size): Relying on default #address-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l5@4400
+2026-08-18T17:21:37.2162822Z arch/arm64/boot/dts/19571/trinket-idp.dtb: Warning (avoid_default_addr_size): Relying on default #size-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l5@4400
+2026-08-18T17:21:37.2164916Z arch/arm64/boot/dts/19571/trinket-idp.dtb: Warning (avoid_default_addr_size): Relying on default #address-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l6@4400
+2026-08-18T17:21:37.2166993Z arch/arm64/boot/dts/19571/trinket-idp.dtb: Warning (avoid_default_addr_size): Relying on default #size-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l6@4400
+2026-08-18T17:21:37.2169066Z arch/arm64/boot/dts/19571/trinket-idp.dtb: Warning (avoid_default_addr_size): Relying on default #address-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l7@4400
+2026-08-18T17:21:37.2171300Z arch/arm64/boot/dts/19571/trinket-idp.dtb: Warning (avoid_default_addr_size): Relying on default #size-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l7@4400
+2026-08-18T17:21:37.2173804Z arch/arm64/boot/dts/19021/trinket-idp.dtb: Warning (reg_format): "reg" property in /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l1@4000 has invalid length (2 bytes) (#address-cells == 2, #size-cells == 1)
+2026-08-18T17:21:37.2176229Z arch/arm64/boot/dts/19021/trinket-idp.dtb: Warning (reg_format): "reg" property in /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l2@4100 has invalid length (2 bytes) (#address-cells == 2, #size-cells == 1)
+2026-08-18T17:21:37.2178624Z arch/arm64/boot/dts/19021/trinket-idp.dtb: Warning (reg_format): "reg" property in /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l3@4200 has invalid length (2 bytes) (#address-cells == 2, #size-cells == 1)
+2026-08-18T17:21:37.2211260Z arch/arm64/boot/dts/19021/trinket-idp.dtb: Warning (reg_format): "reg" property in /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l4@4300 has invalid length (2 bytes) (#address-cells == 2, #size-cells == 1)
+2026-08-18T17:21:37.2213886Z arch/arm64/boot/dts/19021/trinket-idp.dtb: Warning (reg_format): "reg" property in /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l5@4400 has invalid length (2 bytes) (#address-cells == 2, #size-cells == 1)
+2026-08-18T17:21:37.2216286Z arch/arm64/boot/dts/19021/trinket-idp.dtb: Warning (reg_format): "reg" property in /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l6@4400 has invalid length (2 bytes) (#address-cells == 2, #size-cells == 1)
+2026-08-18T17:21:37.2218698Z arch/arm64/boot/dts/19021/trinket-idp.dtb: Warning (reg_format): "reg" property in /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l7@4400 has invalid length (2 bytes) (#address-cells == 2, #size-cells == 1)
+2026-08-18T17:21:37.2221117Z arch/arm64/boot/dts/19021/trinket-idp.dtb: Warning (avoid_default_addr_size): Relying on default #address-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l1@4000
+2026-08-18T17:21:37.2223322Z arch/arm64/boot/dts/19021/trinket-idp.dtb: Warning (avoid_default_addr_size): Relying on default #size-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l1@4000
+2026-08-18T17:21:37.2225409Z arch/arm64/boot/dts/19021/trinket-idp.dtb: Warning (avoid_default_addr_size): Relying on default #address-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l2@4100
+2026-08-18T17:21:37.2227499Z arch/arm64/boot/dts/19021/trinket-idp.dtb: Warning (avoid_default_addr_size): Relying on default #size-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l2@4100
+2026-08-18T17:21:37.2263405Z arch/arm64/boot/dts/19021/trinket-idp.dtb: Warning (avoid_default_addr_size): Relying on default #address-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l3@4200
+2026-08-18T17:21:37.2265687Z arch/arm64/boot/dts/19021/trinket-idp.dtb: Warning (avoid_default_addr_size): Relying on default #size-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l3@4200
+2026-08-18T17:21:37.2267861Z arch/arm64/boot/dts/19021/trinket-idp.dtb: Warning (avoid_default_addr_size): Relying on default #address-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l4@4300
+2026-08-18T17:21:37.2270169Z arch/arm64/boot/dts/19021/trinket-idp.dtb: Warning (avoid_default_addr_size): Relying on default #size-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l4@4300
+2026-08-18T17:21:37.2272261Z arch/arm64/boot/dts/19021/trinket-idp.dtb: Warning (avoid_default_addr_size): Relying on default #address-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l5@4400
+2026-08-18T17:21:37.2274343Z arch/arm64/boot/dts/19021/trinket-idp.dtb: Warning (avoid_default_addr_size): Relying on default #size-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l5@4400
+2026-08-18T17:21:37.2276752Z arch/arm64/boot/dts/19021/trinket-idp.dtb: Warning (avoid_default_addr_size): Relying on default #address-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l6@4400
+2026-08-18T17:21:37.2278835Z arch/arm64/boot/dts/19021/trinket-idp.dtb: Warning (avoid_default_addr_size): Relying on default #size-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l6@4400
+2026-08-18T17:21:37.2281073Z arch/arm64/boot/dts/19021/trinket-idp.dtb: Warning (avoid_default_addr_size): Relying on default #address-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l7@4400
+2026-08-18T17:21:37.2283154Z arch/arm64/boot/dts/19021/trinket-idp.dtb: Warning (avoid_default_addr_size): Relying on default #size-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l7@4400
+2026-08-18T17:21:37.2285457Z arch/arm64/boot/dts/19021/trinket-usbc-idp.dtb: Warning (reg_format): "reg" property in /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l1@4000 has invalid length (2 bytes) (#address-cells == 2, #size-cells == 1)
+2026-08-18T17:21:37.2288145Z arch/arm64/boot/dts/19021/trinket-usbc-idp.dtb: Warning (reg_format): "reg" property in /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l2@4100 has invalid length (2 bytes) (#address-cells == 2, #size-cells == 1)
+2026-08-18T17:21:37.2320934Z arch/arm64/boot/dts/19021/trinket-usbc-idp.dtb: Warning (reg_format): "reg" property in /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l3@4200 has invalid length (2 bytes) (#address-cells == 2, #size-cells == 1)
+2026-08-18T17:21:37.2323549Z arch/arm64/boot/dts/19021/trinket-usbc-idp.dtb: Warning (reg_format): "reg" property in /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l4@4300 has invalid length (2 bytes) (#address-cells == 2, #size-cells == 1)
+2026-08-18T17:21:37.2326030Z arch/arm64/boot/dts/19021/trinket-usbc-idp.dtb: Warning (reg_format): "reg" property in /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l5@4400 has invalid length (2 bytes) (#address-cells == 2, #size-cells == 1)
+2026-08-18T17:21:37.2328508Z arch/arm64/boot/dts/19021/trinket-usbc-idp.dtb: Warning (reg_format): "reg" property in /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l6@4400 has invalid length (2 bytes) (#address-cells == 2, #size-cells == 1)
+2026-08-18T17:21:37.2331075Z arch/arm64/boot/dts/19021/trinket-usbc-idp.dtb: Warning (reg_format): "reg" property in /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l7@4400 has invalid length (2 bytes) (#address-cells == 2, #size-cells == 1)
+2026-08-18T17:21:37.2333561Z arch/arm64/boot/dts/19021/trinket-usbc-idp.dtb: Warning (reg_format): "reg" property in /soc/qcom,msm-audio-apr/qcom,q6core-audio/bolero-cdc/tx-macro@0a460000 has invalid length (8 bytes) (#address-cells == 2, #size-cells == 1)
+2026-08-18T17:21:37.2336075Z arch/arm64/boot/dts/19021/trinket-usbc-idp.dtb: Warning (reg_format): "reg" property in /soc/qcom,msm-audio-apr/qcom,q6core-audio/bolero-cdc/rx-macro@0a440000 has invalid length (8 bytes) (#address-cells == 2, #size-cells == 1)
+2026-08-18T17:21:37.2338602Z arch/arm64/boot/dts/19021/trinket-usbc-idp.dtb: Warning (reg_format): "reg" property in /soc/qcom,msm-audio-apr/qcom,q6core-audio/bolero-cdc/wsa-macro@0a480000 has invalid length (8 bytes) (#address-cells == 2, #size-cells == 1)
+2026-08-18T17:21:37.2371391Z arch/arm64/boot/dts/19021/trinket-usbc-idp.dtb: Warning (reg_format): "reg" property in /soc/qcom,msm-audio-apr/qcom,q6core-audio/bolero-cdc/va-macro@0a4a0000 has invalid length (8 bytes) (#address-cells == 2, #size-cells == 1)
+2026-08-18T17:21:37.2373786Z arch/arm64/boot/dts/19021/trinket-usbc-idp.dtb: Warning (avoid_default_addr_size): Relying on default #address-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l1@4000
+2026-08-18T17:21:37.2375969Z arch/arm64/boot/dts/19021/trinket-usbc-idp.dtb: Warning (avoid_default_addr_size): Relying on default #size-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l1@4000
+2026-08-18T17:21:37.2378408Z arch/arm64/boot/dts/19021/trinket-usbc-idp.dtb: Warning (avoid_default_addr_size): Relying on default #address-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l2@4100
+2026-08-18T17:21:37.2380715Z arch/arm64/boot/dts/19021/trinket-usbc-idp.dtb: Warning (avoid_default_addr_size): Relying on default #size-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l2@4100
+2026-08-18T17:21:37.2382887Z arch/arm64/boot/dts/19021/trinket-usbc-idp.dtb: Warning (avoid_default_addr_size): Relying on default #address-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l3@4200
+2026-08-18T17:21:37.2385045Z arch/arm64/boot/dts/19021/trinket-usbc-idp.dtb: Warning (avoid_default_addr_size): Relying on default #size-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l3@4200
+2026-08-18T17:21:37.2387207Z arch/arm64/boot/dts/19021/trinket-usbc-idp.dtb: Warning (avoid_default_addr_size): Relying on default #address-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l4@4300
+2026-08-18T17:21:37.2389531Z arch/arm64/boot/dts/19021/trinket-usbc-idp.dtb: Warning (avoid_default_addr_size): Relying on default #size-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l4@4300
+2026-08-18T17:21:37.2391820Z arch/arm64/boot/dts/19021/trinket-usbc-idp.dtb: Warning (avoid_default_addr_size): Relying on default #address-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l5@4400
+2026-08-18T17:21:37.2393983Z arch/arm64/boot/dts/19021/trinket-usbc-idp.dtb: Warning (avoid_default_addr_size): Relying on default #size-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l5@4400
+2026-08-18T17:21:37.2396132Z arch/arm64/boot/dts/19021/trinket-usbc-idp.dtb: Warning (avoid_default_addr_size): Relying on default #address-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l6@4400
+2026-08-18T17:21:37.2398302Z arch/arm64/boot/dts/19021/trinket-usbc-idp.dtb: Warning (avoid_default_addr_size): Relying on default #size-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l6@4400
+2026-08-18T17:21:37.2430676Z arch/arm64/boot/dts/19021/trinket-usbc-idp.dtb: Warning (avoid_default_addr_size): Relying on default #address-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l7@4400
+2026-08-18T17:21:37.2432843Z arch/arm64/boot/dts/19021/trinket-usbc-idp.dtb: Warning (avoid_default_addr_size): Relying on default #size-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l7@4400
+2026-08-18T17:21:37.2435002Z arch/arm64/boot/dts/19021/trinket-usbc-idp.dtb: Warning (avoid_default_addr_size): Relying on default #address-cells value for /soc/qcom,msm-audio-apr/qcom,q6core-audio/bolero-cdc/tx-macro@0a460000
+2026-08-18T17:21:37.2437220Z arch/arm64/boot/dts/19021/trinket-usbc-idp.dtb: Warning (avoid_default_addr_size): Relying on default #size-cells value for /soc/qcom,msm-audio-apr/qcom,q6core-audio/bolero-cdc/tx-macro@0a460000
+2026-08-18T17:21:37.2439376Z arch/arm64/boot/dts/19021/trinket-usbc-idp.dtb: Warning (avoid_default_addr_size): Relying on default #address-cells value for /soc/qcom,msm-audio-apr/qcom,q6core-audio/bolero-cdc/rx-macro@0a440000
+2026-08-18T17:21:37.2442700Z arch/arm64/boot/dts/19021/trinket-usbc-idp.dtb: Warning (avoid_default_addr_size): Relying on default #size-cells value for /soc/qcom,msm-audio-apr/qcom,q6core-audio/bolero-cdc/rx-macro@0a440000
+2026-08-18T17:21:37.2444886Z arch/arm64/boot/dts/19021/trinket-usbc-idp.dtb: Warning (avoid_default_addr_size): Relying on default #address-cells value for /soc/qcom,msm-audio-apr/qcom,q6core-audio/bolero-cdc/wsa-macro@0a480000
+2026-08-18T17:21:37.2447056Z arch/arm64/boot/dts/19021/trinket-usbc-idp.dtb: Warning (avoid_default_addr_size): Relying on default #size-cells value for /soc/qcom,msm-audio-apr/qcom,q6core-audio/bolero-cdc/wsa-macro@0a480000
+2026-08-18T17:21:37.2449476Z arch/arm64/boot/dts/19021/trinket-usbc-idp.dtb: Warning (avoid_default_addr_size): Relying on default #address-cells value for /soc/qcom,msm-audio-apr/qcom,q6core-audio/bolero-cdc/va-macro@0a4a0000
+2026-08-18T17:21:37.2451817Z arch/arm64/boot/dts/19021/trinket-usbc-idp.dtb: Warning (avoid_default_addr_size): Relying on default #size-cells value for /soc/qcom,msm-audio-apr/qcom,q6core-audio/bolero-cdc/va-macro@0a4a0000
+2026-08-18T17:21:37.6137708Z   DTC     arch/arm64/boot/dts/19021/trinket-idp-19026.dtb
+2026-08-18T17:21:37.6387050Z   DTC     arch/arm64/boot/dts/19021/trinket-dp-idp.dtb
+2026-08-18T17:21:37.6730865Z   DTC     arch/arm64/boot/dts/19021/trinket-external-codec-idp.dtb
+2026-08-18T17:21:37.6760354Z   DTC     arch/arm64/boot/dts/19021/trinket-idp-19021.dtb
+2026-08-18T17:21:37.7291707Z arch/arm64/boot/dts/19021/trinket-idp-19026.dtb: Warning (reg_format): "reg" property in /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l1@4000 has invalid length (2 bytes) (#address-cells == 2, #size-cells == 1)
+2026-08-18T17:21:37.7294870Z arch/arm64/boot/dts/19021/trinket-idp-19026.dtb: Warning (reg_format): "reg" property in /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l2@4100 has invalid length (2 bytes) (#address-cells == 2, #size-cells == 1)
+2026-08-18T17:21:37.7321261Z arch/arm64/boot/dts/19021/trinket-idp-19026.dtb: Warning (reg_format): "reg" property in /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l3@4200 has invalid length (2 bytes) (#address-cells == 2, #size-cells == 1)
+2026-08-18T17:21:37.7351240Z arch/arm64/boot/dts/19021/trinket-idp-19026.dtb: Warning (reg_format): "reg" property in /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l4@4300 has invalid length (2 bytes) (#address-cells == 2, #size-cells == 1)
+2026-08-18T17:21:37.7353755Z arch/arm64/boot/dts/19021/trinket-idp-19026.dtb: Warning (reg_format): "reg" property in /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l5@4400 has invalid length (2 bytes) (#address-cells == 2, #size-cells == 1)
+2026-08-18T17:21:37.7356236Z arch/arm64/boot/dts/19021/trinket-idp-19026.dtb: Warning (reg_format): "reg" property in /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l6@4400 has invalid length (2 bytes) (#address-cells == 2, #size-cells == 1)
+2026-08-18T17:21:37.7358679Z arch/arm64/boot/dts/19021/trinket-idp-19026.dtb: Warning (reg_format): "reg" property in /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l7@4400 has invalid length (2 bytes) (#address-cells == 2, #size-cells == 1)
+2026-08-18T17:21:37.7361208Z arch/arm64/boot/dts/19021/trinket-idp-19026.dtb: Warning (avoid_default_addr_size): Relying on default #address-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l1@4000
+2026-08-18T17:21:37.7363421Z arch/arm64/boot/dts/19021/trinket-idp-19026.dtb: Warning (avoid_default_addr_size): Relying on default #size-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l1@4000
+2026-08-18T17:21:37.7365647Z arch/arm64/boot/dts/19021/trinket-idp-19026.dtb: Warning (avoid_default_addr_size): Relying on default #address-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l2@4100
+2026-08-18T17:21:37.7367823Z arch/arm64/boot/dts/19021/trinket-idp-19026.dtb: Warning (avoid_default_addr_size): Relying on default #size-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l2@4100
+2026-08-18T17:21:37.7370150Z arch/arm64/boot/dts/19021/trinket-idp-19026.dtb: Warning (avoid_default_addr_size): Relying on default #address-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l3@4200
+2026-08-18T17:21:37.7372327Z arch/arm64/boot/dts/19021/trinket-idp-19026.dtb: Warning (avoid_default_addr_size): Relying on default #size-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l3@4200
+2026-08-18T17:21:37.7374784Z arch/arm64/boot/dts/19021/trinket-idp-19026.dtb: Warning (avoid_default_addr_size): Relying on default #address-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l4@4300
+2026-08-18T17:21:37.7377003Z arch/arm64/boot/dts/19021/trinket-idp-19026.dtb: Warning (avoid_default_addr_size): Relying on default #size-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l4@4300
+2026-08-18T17:21:37.7401214Z arch/arm64/boot/dts/19021/trinket-idp-19026.dtb: Warning (avoid_default_addr_size): Relying on default #address-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l5@4400
+2026-08-18T17:21:37.7431076Z arch/arm64/boot/dts/19021/trinket-idp-19026.dtb: Warning (avoid_default_addr_size): Relying on default #size-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l5@4400
+2026-08-18T17:21:37.7451124Z arch/arm64/boot/dts/19021/trinket-idp-19026.dtb: Warning (avoid_default_addr_size): Relying on default #address-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l6@4400
+2026-08-18T17:21:37.7481261Z arch/arm64/boot/dts/19021/trinket-idp-19026.dtb: Warning (avoid_default_addr_size): Relying on default #size-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l6@4400
+2026-08-18T17:21:37.7511021Z arch/arm64/boot/dts/19021/trinket-idp-19026.dtb: Warning (avoid_default_addr_size): Relying on default #address-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l7@4400
+2026-08-18T17:21:37.7540947Z arch/arm64/boot/dts/19021/trinket-idp-19026.dtb: Warning (avoid_default_addr_size): Relying on default #size-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l7@4400
+2026-08-18T17:21:37.7581211Z arch/arm64/boot/dts/19021/trinket-dp-idp.dtb: Warning (reg_format): "reg" property in /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l1@4000 has invalid length (2 bytes) (#address-cells == 2, #size-cells == 1)
+2026-08-18T17:21:37.7631271Z arch/arm64/boot/dts/19021/trinket-dp-idp.dtb: Warning (reg_format): "reg" property in /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l2@4100 has invalid length (2 bytes) (#address-cells == 2, #size-cells == 1)
+2026-08-18T17:21:37.7661145Z arch/arm64/boot/dts/19021/trinket-dp-idp.dtb: Warning (reg_format): "reg" property in /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l3@4200 has invalid length (2 bytes) (#address-cells == 2, #size-cells == 1)
+2026-08-18T17:21:37.7691098Z arch/arm64/boot/dts/19021/trinket-dp-idp.dtb: Warning (reg_format): "reg" property in /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l4@4300 has invalid length (2 bytes) (#address-cells == 2, #size-cells == 1)
+2026-08-18T17:21:37.7721125Z arch/arm64/boot/dts/19021/trinket-dp-idp.dtb: Warning (reg_format): "reg" property in /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l5@4400 has invalid length (2 bytes) (#address-cells == 2, #size-cells == 1)
+2026-08-18T17:21:37.7751134Z arch/arm64/boot/dts/19021/trinket-dp-idp.dtb: Warning (reg_format): "reg" property in /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l6@4400 has invalid length (2 bytes) (#address-cells == 2, #size-cells == 1)
+2026-08-18T17:21:37.7780992Z arch/arm64/boot/dts/19021/trinket-dp-idp.dtb: Warning (reg_format): "reg" property in /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l7@4400 has invalid length (2 bytes) (#address-cells == 2, #size-cells == 1)
+2026-08-18T17:21:37.7810987Z arch/arm64/boot/dts/19021/trinket-dp-idp.dtb: Warning (avoid_default_addr_size): Relying on default #address-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l1@4000
+2026-08-18T17:21:37.7840945Z arch/arm64/boot/dts/19021/trinket-dp-idp.dtb: Warning (avoid_default_addr_size): Relying on default #size-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l1@4000
+2026-08-18T17:21:37.7870979Z arch/arm64/boot/dts/19021/trinket-dp-idp.dtb: Warning (avoid_default_addr_size): Relying on default #address-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l2@4100
+2026-08-18T17:21:37.7900980Z arch/arm64/boot/dts/19021/trinket-dp-idp.dtb: Warning (avoid_default_addr_size): Relying on default #size-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l2@4100
+2026-08-18T17:21:37.7921980Z arch/arm64/boot/dts/19021/trinket-dp-idp.dtb: Warning (avoid_default_addr_size): Relying on default #address-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l3@4200
+2026-08-18T17:21:37.7951204Z arch/arm64/boot/dts/19021/trinket-dp-idp.dtb: Warning (avoid_default_addr_size): Relying on default #size-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l3@4200
+2026-08-18T17:21:37.7980932Z arch/arm64/boot/dts/19021/trinket-dp-idp.dtb: Warning (avoid_default_addr_size): Relying on default #address-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l4@4300
+2026-08-18T17:21:37.8021276Z arch/arm64/boot/dts/19021/trinket-dp-idp.dtb: Warning (avoid_default_addr_size): Relying on default #size-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l4@4300
+2026-08-18T17:21:37.8061135Z arch/arm64/boot/dts/19021/trinket-dp-idp.dtb: Warning (avoid_default_addr_size): Relying on default #address-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l5@4400
+2026-08-18T17:21:37.8067928Z arch/arm64/boot/dts/19021/trinket-dp-idp.dtb: Warning (avoid_default_addr_size): Relying on default #size-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l5@4400
+2026-08-18T17:21:37.8091240Z arch/arm64/boot/dts/19021/trinket-dp-idp.dtb: Warning (avoid_default_addr_size): Relying on default #address-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l6@4400
+2026-08-18T17:21:37.8100889Z arch/arm64/boot/dts/19021/trinket-dp-idp.dtb: Warning (avoid_default_addr_size): Relying on default #size-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l6@4400
+2026-08-18T17:21:37.8130879Z arch/arm64/boot/dts/19021/trinket-dp-idp.dtb: Warning (avoid_default_addr_size): Relying on default #address-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l7@4400
+2026-08-18T17:21:37.8151995Z arch/arm64/boot/dts/19021/trinket-dp-idp.dtb: Warning (avoid_default_addr_size): Relying on default #size-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l7@4400
+2026-08-18T17:21:37.8181186Z arch/arm64/boot/dts/19021/trinket-idp-19021.dtb: Warning (reg_format): "reg" property in /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l1@4000 has invalid length (2 bytes) (#address-cells == 2, #size-cells == 1)
+2026-08-18T17:21:37.8191283Z arch/arm64/boot/dts/19021/trinket-idp-19021.dtb: Warning (reg_format): "reg" property in /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l2@4100 has invalid length (2 bytes) (#address-cells == 2, #size-cells == 1)
+2026-08-18T17:21:37.8211229Z arch/arm64/boot/dts/19021/trinket-idp-19021.dtb: Warning (reg_format): "reg" property in /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l3@4200 has invalid length (2 bytes) (#address-cells == 2, #size-cells == 1)
+2026-08-18T17:21:37.8241138Z arch/arm64/boot/dts/19021/trinket-idp-19021.dtb: Warning (reg_format): "reg" property in /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l4@4300 has invalid length (2 bytes) (#address-cells == 2, #size-cells == 1)
+2026-08-18T17:21:37.8271261Z arch/arm64/boot/dts/19021/trinket-idp-19021.dtb: Warning (reg_format): "reg" property in /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l5@4400 has invalid length (2 bytes) (#address-cells == 2, #size-cells == 1)
+2026-08-18T17:21:37.8273766Z arch/arm64/boot/dts/19021/trinket-idp-19021.dtb: Warning (reg_format): "reg" property in /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l6@4400 has invalid length (2 bytes) (#address-cells == 2, #size-cells == 1)
+2026-08-18T17:21:37.8311047Z arch/arm64/boot/dts/19021/trinket-idp-19021.dtb: Warning (reg_format): "reg" property in /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l7@4400 has invalid length (2 bytes) (#address-cells == 2, #size-cells == 1)
+2026-08-18T17:21:37.8330995Z arch/arm64/boot/dts/19021/trinket-idp-19021.dtb: Warning (avoid_default_addr_size): Relying on default #address-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l1@4000
+2026-08-18T17:21:37.8341005Z arch/arm64/boot/dts/19021/trinket-idp-19021.dtb: Warning (avoid_default_addr_size): Relying on default #size-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l1@4000
+2026-08-18T17:21:37.8370911Z arch/arm64/boot/dts/19021/trinket-idp-19021.dtb: Warning (avoid_default_addr_size): Relying on default #address-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l2@4100
+2026-08-18T17:21:37.8401147Z arch/arm64/boot/dts/19021/trinket-idp-19021.dtb: Warning (avoid_default_addr_size): Relying on default #size-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l2@4100
+2026-08-18T17:21:37.8421700Z arch/arm64/boot/dts/19021/trinket-idp-19021.dtb: Warning (avoid_default_addr_size): Relying on default #address-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l3@4200
+2026-08-18T17:21:37.8430907Z arch/arm64/boot/dts/19021/trinket-idp-19021.dtb: Warning (avoid_default_addr_size): Relying on default #size-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l3@4200
+2026-08-18T17:21:37.8452195Z arch/arm64/boot/dts/19021/trinket-idp-19021.dtb: Warning (avoid_default_addr_size): Relying on default #address-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l4@4300
+2026-08-18T17:21:37.8480973Z arch/arm64/boot/dts/19021/trinket-idp-19021.dtb: Warning (avoid_default_addr_size): Relying on default #size-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l4@4300
+2026-08-18T17:21:37.8511008Z arch/arm64/boot/dts/19021/trinket-idp-19021.dtb: Warning (avoid_default_addr_size): Relying on default #address-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l5@4400
+2026-08-18T17:21:37.8513214Z arch/arm64/boot/dts/19021/trinket-idp-19021.dtb: Warning (avoid_default_addr_size): Relying on default #size-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l5@4400
+2026-08-18T17:21:37.8515393Z arch/arm64/boot/dts/19021/trinket-idp-19021.dtb: Warning (avoid_default_addr_size): Relying on default #address-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l6@4400
+2026-08-18T17:21:37.8517575Z arch/arm64/boot/dts/19021/trinket-idp-19021.dtb: Warning (avoid_default_addr_size): Relying on default #size-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l6@4400
+2026-08-18T17:21:37.8519994Z arch/arm64/boot/dts/19021/trinket-idp-19021.dtb: Warning (avoid_default_addr_size): Relying on default #address-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l7@4400
+2026-08-18T17:21:37.8522170Z arch/arm64/boot/dts/19021/trinket-idp-19021.dtb: Warning (avoid_default_addr_size): Relying on default #size-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l7@4400
+2026-08-18T17:21:37.8524594Z arch/arm64/boot/dts/19021/trinket-external-codec-idp.dtb: Warning (reg_format): "reg" property in /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l1@4000 has invalid length (2 bytes) (#address-cells == 2, #size-cells == 1)
+2026-08-18T17:21:37.8527249Z arch/arm64/boot/dts/19021/trinket-external-codec-idp.dtb: Warning (reg_format): "reg" property in /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l2@4100 has invalid length (2 bytes) (#address-cells == 2, #size-cells == 1)
+2026-08-18T17:21:37.8530314Z arch/arm64/boot/dts/19021/trinket-external-codec-idp.dtb: Warning (reg_format): "reg" property in /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l3@4200 has invalid length (2 bytes) (#address-cells == 2, #size-cells == 1)
+2026-08-18T17:21:37.8532942Z arch/arm64/boot/dts/19021/trinket-external-codec-idp.dtb: Warning (reg_format): "reg" property in /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l4@4300 has invalid length (2 bytes) (#address-cells == 2, #size-cells == 1)
+2026-08-18T17:21:37.8535546Z arch/arm64/boot/dts/19021/trinket-external-codec-idp.dtb: Warning (reg_format): "reg" property in /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l5@4400 has invalid length (2 bytes) (#address-cells == 2, #size-cells == 1)
+2026-08-18T17:21:37.8538151Z arch/arm64/boot/dts/19021/trinket-external-codec-idp.dtb: Warning (reg_format): "reg" property in /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l6@4400 has invalid length (2 bytes) (#address-cells == 2, #size-cells == 1)
+2026-08-18T17:21:37.8571184Z arch/arm64/boot/dts/19021/trinket-external-codec-idp.dtb: Warning (reg_format): "reg" property in /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l7@4400 has invalid length (2 bytes) (#address-cells == 2, #size-cells == 1)
+2026-08-18T17:21:37.8573919Z arch/arm64/boot/dts/19021/trinket-external-codec-idp.dtb: Warning (reg_format): "reg" property in /soc/qcom,msm-audio-apr/qcom,q6core-audio/bolero-cdc/tx-macro@0a460000 has invalid length (8 bytes) (#address-cells == 2, #size-cells == 1)
+2026-08-18T17:21:37.8576588Z arch/arm64/boot/dts/19021/trinket-external-codec-idp.dtb: Warning (reg_format): "reg" property in /soc/qcom,msm-audio-apr/qcom,q6core-audio/bolero-cdc/rx-macro@0a440000 has invalid length (8 bytes) (#address-cells == 2, #size-cells == 1)
+2026-08-18T17:21:37.8579236Z arch/arm64/boot/dts/19021/trinket-external-codec-idp.dtb: Warning (reg_format): "reg" property in /soc/qcom,msm-audio-apr/qcom,q6core-audio/bolero-cdc/wsa-macro@0a480000 has invalid length (8 bytes) (#address-cells == 2, #size-cells == 1)
+2026-08-18T17:21:37.8582157Z arch/arm64/boot/dts/19021/trinket-external-codec-idp.dtb: Warning (reg_format): "reg" property in /soc/qcom,msm-audio-apr/qcom,q6core-audio/bolero-cdc/va-macro@0a4a0000 has invalid length (8 bytes) (#address-cells == 2, #size-cells == 1)
+2026-08-18T17:21:37.8584712Z arch/arm64/boot/dts/19021/trinket-external-codec-idp.dtb: Warning (avoid_default_addr_size): Relying on default #address-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l1@4000
+2026-08-18T17:21:37.8587068Z arch/arm64/boot/dts/19021/trinket-external-codec-idp.dtb: Warning (avoid_default_addr_size): Relying on default #size-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l1@4000
+2026-08-18T17:21:37.8589378Z arch/arm64/boot/dts/19021/trinket-external-codec-idp.dtb: Warning (avoid_default_addr_size): Relying on default #address-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l2@4100
+2026-08-18T17:21:37.8591974Z arch/arm64/boot/dts/19021/trinket-external-codec-idp.dtb: Warning (avoid_default_addr_size): Relying on default #size-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l2@4100
+2026-08-18T17:21:37.8594351Z arch/arm64/boot/dts/19021/trinket-external-codec-idp.dtb: Warning (avoid_default_addr_size): Relying on default #address-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l3@4200
+2026-08-18T17:21:37.8596677Z arch/arm64/boot/dts/19021/trinket-external-codec-idp.dtb: Warning (avoid_default_addr_size): Relying on default #size-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l3@4200
+2026-08-18T17:21:37.8598976Z arch/arm64/boot/dts/19021/trinket-external-codec-idp.dtb: Warning (avoid_default_addr_size): Relying on default #address-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l4@4300
+2026-08-18T17:21:37.8632498Z arch/arm64/boot/dts/19021/trinket-external-codec-idp.dtb: Warning (avoid_default_addr_size): Relying on default #size-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l4@4300
+2026-08-18T17:21:37.8634835Z arch/arm64/boot/dts/19021/trinket-external-codec-idp.dtb: Warning (avoid_default_addr_size): Relying on default #address-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l5@4400
+2026-08-18T17:21:37.8637149Z arch/arm64/boot/dts/19021/trinket-external-codec-idp.dtb: Warning (avoid_default_addr_size): Relying on default #size-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l5@4400
+2026-08-18T17:21:37.8639451Z arch/arm64/boot/dts/19021/trinket-external-codec-idp.dtb: Warning (avoid_default_addr_size): Relying on default #address-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l6@4400
+2026-08-18T17:21:37.8641890Z arch/arm64/boot/dts/19021/trinket-external-codec-idp.dtb: Warning (avoid_default_addr_size): Relying on default #size-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l6@4400
+2026-08-18T17:21:37.8644416Z arch/arm64/boot/dts/19021/trinket-external-codec-idp.dtb: Warning (avoid_default_addr_size): Relying on default #address-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l7@4400
+2026-08-18T17:21:37.8646731Z arch/arm64/boot/dts/19021/trinket-external-codec-idp.dtb: Warning (avoid_default_addr_size): Relying on default #size-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l7@4400
+2026-08-18T17:21:37.8649049Z arch/arm64/boot/dts/19021/trinket-external-codec-idp.dtb: Warning (avoid_default_addr_size): Relying on default #address-cells value for /soc/qcom,msm-audio-apr/qcom,q6core-audio/bolero-cdc/tx-macro@0a460000
+2026-08-18T17:21:37.8651498Z arch/arm64/boot/dts/19021/trinket-external-codec-idp.dtb: Warning (avoid_default_addr_size): Relying on default #size-cells value for /soc/qcom,msm-audio-apr/qcom,q6core-audio/bolero-cdc/tx-macro@0a460000
+2026-08-18T17:21:37.8653861Z arch/arm64/boot/dts/19021/trinket-external-codec-idp.dtb: Warning (avoid_default_addr_size): Relying on default #address-cells value for /soc/qcom,msm-audio-apr/qcom,q6core-audio/bolero-cdc/rx-macro@0a440000
+2026-08-18T17:21:37.8656173Z arch/arm64/boot/dts/19021/trinket-external-codec-idp.dtb: Warning (avoid_default_addr_size): Relying on default #size-cells value for /soc/qcom,msm-audio-apr/qcom,q6core-audio/bolero-cdc/rx-macro@0a440000
+2026-08-18T17:21:37.8658489Z arch/arm64/boot/dts/19021/trinket-external-codec-idp.dtb: Warning (avoid_default_addr_size): Relying on default #address-cells value for /soc/qcom,msm-audio-apr/qcom,q6core-audio/bolero-cdc/wsa-macro@0a480000
+2026-08-18T17:21:37.8691011Z arch/arm64/boot/dts/19021/trinket-external-codec-idp.dtb: Warning (avoid_default_addr_size): Relying on default #size-cells value for /soc/qcom,msm-audio-apr/qcom,q6core-audio/bolero-cdc/wsa-macro@0a480000
+2026-08-18T17:21:37.8693390Z arch/arm64/boot/dts/19021/trinket-external-codec-idp.dtb: Warning (avoid_default_addr_size): Relying on default #address-cells value for /soc/qcom,msm-audio-apr/qcom,q6core-audio/bolero-cdc/va-macro@0a4a0000
+2026-08-18T17:21:37.8695685Z arch/arm64/boot/dts/19021/trinket-external-codec-idp.dtb: Warning (avoid_default_addr_size): Relying on default #size-cells value for /soc/qcom,msm-audio-apr/qcom,q6core-audio/bolero-cdc/va-macro@0a4a0000
+2026-08-18T17:21:38.2039685Z   DTC     arch/arm64/boot/dts/19021/trinket-idp-19328.dtb
+2026-08-18T17:21:38.2121599Z   DTC     arch/arm64/boot/dts/19021/trinket-rumi.dtb
+2026-08-18T17:21:38.2428674Z   DTC     arch/arm64/boot/dts/19021/trinket-usbc-external-codec-idp.dtb
+2026-08-18T17:21:38.2784580Z   DTC     arch/arm64/boot/dts/19021/trinket-idp-19321.dtb
+2026-08-18T17:21:38.3021574Z arch/arm64/boot/dts/19021/trinket-rumi.dtb: Warning (reg_format): "reg" property in /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l1@4000 has invalid length (2 bytes) (#address-cells == 2, #size-cells == 1)
+2026-08-18T17:21:38.3051161Z arch/arm64/boot/dts/19021/trinket-rumi.dtb: Warning (reg_format): "reg" property in /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l2@4100 has invalid length (2 bytes) (#address-cells == 2, #size-cells == 1)
+2026-08-18T17:21:38.3086606Z arch/arm64/boot/dts/19021/trinket-rumi.dtb: Warning (reg_format): "reg" property in /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l3@4200 has invalid length (2 bytes) (#address-cells == 2, #size-cells == 1)
+2026-08-18T17:21:38.3089135Z arch/arm64/boot/dts/19021/trinket-rumi.dtb: Warning (reg_format): "reg" property in /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l4@4300 has invalid length (2 bytes) (#address-cells == 2, #size-cells == 1)
+2026-08-18T17:21:38.3133213Z arch/arm64/boot/dts/19021/trinket-rumi.dtb: Warning (reg_format): "reg" property in /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l5@4400 has invalid length (2 bytes) (#address-cells == 2, #size-cells == 1)
+2026-08-18T17:21:38.3181335Z arch/arm64/boot/dts/19021/trinket-rumi.dtb: Warning (reg_format): "reg" property in /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l6@4400 has invalid length (2 bytes) (#address-cells == 2, #size-cells == 1)
+2026-08-18T17:21:38.3211173Z arch/arm64/boot/dts/19021/trinket-rumi.dtb: Warning (reg_format): "reg" property in /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l7@4400 has invalid length (2 bytes) (#address-cells == 2, #size-cells == 1)
+2026-08-18T17:21:38.3241045Z arch/arm64/boot/dts/19021/trinket-rumi.dtb: Warning (avoid_default_addr_size): Relying on default #address-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l1@4000
+2026-08-18T17:21:38.3270982Z arch/arm64/boot/dts/19021/trinket-rumi.dtb: Warning (avoid_default_addr_size): Relying on default #size-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l1@4000
+2026-08-18T17:21:38.3301036Z arch/arm64/boot/dts/19021/trinket-rumi.dtb: Warning (avoid_default_addr_size): Relying on default #address-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l2@4100
+2026-08-18T17:21:38.3330954Z arch/arm64/boot/dts/19021/trinket-rumi.dtb: Warning (avoid_default_addr_size): Relying on default #size-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l2@4100
+2026-08-18T17:21:38.3361028Z arch/arm64/boot/dts/19021/trinket-rumi.dtb: Warning (avoid_default_addr_size): Relying on default #address-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l3@4200
+2026-08-18T17:21:38.3380075Z arch/arm64/boot/dts/19021/trinket-rumi.dtb: Warning (avoid_default_addr_size): Relying on default #size-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l3@4200
+2026-08-18T17:21:38.3420979Z arch/arm64/boot/dts/19021/trinket-rumi.dtb: Warning (avoid_default_addr_size): Relying on default #address-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l4@4300
+2026-08-18T17:21:38.3450974Z arch/arm64/boot/dts/19021/trinket-rumi.dtb: Warning (avoid_default_addr_size): Relying on default #size-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l4@4300
+2026-08-18T17:21:38.3480952Z arch/arm64/boot/dts/19021/trinket-rumi.dtb: Warning (avoid_default_addr_size): Relying on default #address-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l5@4400
+2026-08-18T17:21:38.3510946Z arch/arm64/boot/dts/19021/trinket-rumi.dtb: Warning (avoid_default_addr_size): Relying on default #size-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l5@4400
+2026-08-18T17:21:38.3540989Z arch/arm64/boot/dts/19021/trinket-rumi.dtb: Warning (avoid_default_addr_size): Relying on default #address-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l6@4400
+2026-08-18T17:21:38.3570921Z arch/arm64/boot/dts/19021/trinket-rumi.dtb: Warning (avoid_default_addr_size): Relying on default #size-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l6@4400
+2026-08-18T17:21:38.3600968Z arch/arm64/boot/dts/19021/trinket-rumi.dtb: Warning (avoid_default_addr_size): Relying on default #address-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l7@4400
+2026-08-18T17:21:38.3631052Z arch/arm64/boot/dts/19021/trinket-rumi.dtb: Warning (avoid_default_addr_size): Relying on default #size-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l7@4400
+2026-08-18T17:21:38.3633477Z arch/arm64/boot/dts/19021/trinket-idp-19328.dtb: Warning (reg_format): "reg" property in /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l1@4000 has invalid length (2 bytes) (#address-cells == 2, #size-cells == 1)
+2026-08-18T17:21:38.3661069Z arch/arm64/boot/dts/19021/trinket-idp-19328.dtb: Warning (reg_format): "reg" property in /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l2@4100 has invalid length (2 bytes) (#address-cells == 2, #size-cells == 1)
+2026-08-18T17:21:38.3663801Z arch/arm64/boot/dts/19021/trinket-idp-19328.dtb: Warning (reg_format): "reg" property in /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l3@4200 has invalid length (2 bytes) (#address-cells == 2, #size-cells == 1)
+2026-08-18T17:21:38.3712018Z arch/arm64/boot/dts/19021/trinket-idp-19328.dtb: Warning (reg_format): "reg" property in /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l4@4300 has invalid length (2 bytes) (#address-cells == 2, #size-cells == 1)
+2026-08-18T17:21:38.3751255Z arch/arm64/boot/dts/19021/trinket-idp-19328.dtb: Warning (reg_format): "reg" property in /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l5@4400 has invalid length (2 bytes) (#address-cells == 2, #size-cells == 1)
+2026-08-18T17:21:38.3753743Z arch/arm64/boot/dts/19021/trinket-idp-19328.dtb: Warning (reg_format): "reg" property in /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l6@4400 has invalid length (2 bytes) (#address-cells == 2, #size-cells == 1)
+2026-08-18T17:21:38.3811119Z arch/arm64/boot/dts/19021/trinket-idp-19328.dtb: Warning (reg_format): "reg" property in /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l7@4400 has invalid length (2 bytes) (#address-cells == 2, #size-cells == 1)
+2026-08-18T17:21:38.3813562Z arch/arm64/boot/dts/19021/trinket-idp-19328.dtb: Warning (avoid_default_addr_size): Relying on default #address-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l1@4000
+2026-08-18T17:21:38.3861539Z arch/arm64/boot/dts/19021/trinket-idp-19328.dtb: Warning (avoid_default_addr_size): Relying on default #size-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l1@4000
+2026-08-18T17:21:38.3901078Z arch/arm64/boot/dts/19021/trinket-idp-19328.dtb: Warning (avoid_default_addr_size): Relying on default #address-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l2@4100
+2026-08-18T17:21:38.3931100Z arch/arm64/boot/dts/19021/trinket-idp-19328.dtb: Warning (avoid_default_addr_size): Relying on default #size-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l2@4100
+2026-08-18T17:21:38.3941161Z arch/arm64/boot/dts/19021/trinket-idp-19328.dtb: Warning (avoid_default_addr_size): Relying on default #address-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l3@4200
+2026-08-18T17:21:38.3982070Z arch/arm64/boot/dts/19021/trinket-idp-19328.dtb: Warning (avoid_default_addr_size): Relying on default #size-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l3@4200
+2026-08-18T17:21:38.4020970Z arch/arm64/boot/dts/19021/trinket-idp-19328.dtb: Warning (avoid_default_addr_size): Relying on default #address-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l4@4300
+2026-08-18T17:21:38.4050902Z arch/arm64/boot/dts/19021/trinket-idp-19328.dtb: Warning (avoid_default_addr_size): Relying on default #size-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l4@4300
+2026-08-18T17:21:38.4061287Z arch/arm64/boot/dts/19021/trinket-idp-19328.dtb: Warning (avoid_default_addr_size): Relying on default #address-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l5@4400
+2026-08-18T17:21:38.4080902Z arch/arm64/boot/dts/19021/trinket-idp-19328.dtb: Warning (avoid_default_addr_size): Relying on default #size-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l5@4400
+2026-08-18T17:21:38.4101191Z arch/arm64/boot/dts/19021/trinket-idp-19328.dtb: Warning (avoid_default_addr_size): Relying on default #address-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l6@4400
+2026-08-18T17:21:38.4141319Z arch/arm64/boot/dts/19021/trinket-idp-19328.dtb: Warning (avoid_default_addr_size): Relying on default #size-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l6@4400
+2026-08-18T17:21:38.4161352Z arch/arm64/boot/dts/19021/trinket-idp-19328.dtb: Warning (avoid_default_addr_size): Relying on default #address-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l7@4400
+2026-08-18T17:21:38.4201087Z arch/arm64/boot/dts/19021/trinket-idp-19328.dtb: Warning (avoid_default_addr_size): Relying on default #size-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l7@4400
+2026-08-18T17:21:38.4211355Z arch/arm64/boot/dts/19021/trinket-usbc-external-codec-idp.dtb: Warning (reg_format): "reg" property in /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l1@4000 has invalid length (2 bytes) (#address-cells == 2, #size-cells == 1)
+2026-08-18T17:21:38.4231206Z arch/arm64/boot/dts/19021/trinket-usbc-external-codec-idp.dtb: Warning (reg_format): "reg" property in /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l2@4100 has invalid length (2 bytes) (#address-cells == 2, #size-cells == 1)
+2026-08-18T17:21:38.4241865Z arch/arm64/boot/dts/19021/trinket-usbc-external-codec-idp.dtb: Warning (reg_format): "reg" property in /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l3@4200 has invalid length (2 bytes) (#address-cells == 2, #size-cells == 1)
+2026-08-18T17:21:38.4291261Z arch/arm64/boot/dts/19021/trinket-usbc-external-codec-idp.dtb: Warning (reg_format): "reg" property in /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l4@4300 has invalid length (2 bytes) (#address-cells == 2, #size-cells == 1)
+2026-08-18T17:21:38.4321188Z arch/arm64/boot/dts/19021/trinket-usbc-external-codec-idp.dtb: Warning (reg_format): "reg" property in /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l5@4400 has invalid length (2 bytes) (#address-cells == 2, #size-cells == 1)
+2026-08-18T17:21:38.4331774Z arch/arm64/boot/dts/19021/trinket-usbc-external-codec-idp.dtb: Warning (reg_format): "reg" property in /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l6@4400 has invalid length (2 bytes) (#address-cells == 2, #size-cells == 1)
+2026-08-18T17:21:38.4381283Z arch/arm64/boot/dts/19021/trinket-usbc-external-codec-idp.dtb: Warning (reg_format): "reg" property in /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l7@4400 has invalid length (2 bytes) (#address-cells == 2, #size-cells == 1)
+2026-08-18T17:21:38.4391123Z arch/arm64/boot/dts/19021/trinket-usbc-external-codec-idp.dtb: Warning (avoid_default_addr_size): Relying on default #address-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l1@4000
+2026-08-18T17:21:38.4421155Z arch/arm64/boot/dts/19021/trinket-usbc-external-codec-idp.dtb: Warning (avoid_default_addr_size): Relying on default #size-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l1@4000
+2026-08-18T17:21:38.4471095Z arch/arm64/boot/dts/19021/trinket-usbc-external-codec-idp.dtb: Warning (avoid_default_addr_size): Relying on default #address-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l2@4100
+2026-08-18T17:21:38.4482396Z arch/arm64/boot/dts/19021/trinket-usbc-external-codec-idp.dtb: Warning (avoid_default_addr_size): Relying on default #size-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l2@4100
+2026-08-18T17:21:38.4531074Z arch/arm64/boot/dts/19021/trinket-usbc-external-codec-idp.dtb: Warning (avoid_default_addr_size): Relying on default #address-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l3@4200
+2026-08-18T17:21:38.4542179Z arch/arm64/boot/dts/19021/trinket-usbc-external-codec-idp.dtb: Warning (avoid_default_addr_size): Relying on default #size-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l3@4200
+2026-08-18T17:21:38.4581895Z arch/arm64/boot/dts/19021/trinket-usbc-external-codec-idp.dtb: Warning (avoid_default_addr_size): Relying on default #address-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l4@4300
+2026-08-18T17:21:38.4602266Z arch/arm64/boot/dts/19021/trinket-usbc-external-codec-idp.dtb: Warning (avoid_default_addr_size): Relying on default #size-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l4@4300
+2026-08-18T17:21:38.4632054Z arch/arm64/boot/dts/19021/trinket-usbc-external-codec-idp.dtb: Warning (avoid_default_addr_size): Relying on default #address-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l5@4400
+2026-08-18T17:21:38.4662124Z arch/arm64/boot/dts/19021/trinket-usbc-external-codec-idp.dtb: Warning (avoid_default_addr_size): Relying on default #size-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l5@4400
+2026-08-18T17:21:38.4701535Z arch/arm64/boot/dts/19021/trinket-usbc-external-codec-idp.dtb: Warning (avoid_default_addr_size): Relying on default #address-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l6@4400
+2026-08-18T17:21:38.4731301Z arch/arm64/boot/dts/19021/trinket-usbc-external-codec-idp.dtb: Warning (avoid_default_addr_size): Relying on default #size-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l6@4400
+2026-08-18T17:21:38.4751467Z arch/arm64/boot/dts/19021/trinket-usbc-external-codec-idp.dtb: Warning (avoid_default_addr_size): Relying on default #address-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l7@4400
+2026-08-18T17:21:38.4791397Z arch/arm64/boot/dts/19021/trinket-usbc-external-codec-idp.dtb: Warning (avoid_default_addr_size): Relying on default #size-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l7@4400
+2026-08-18T17:21:38.4821905Z arch/arm64/boot/dts/19021/trinket-idp-19321.dtb: Warning (reg_format): "reg" property in /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l1@4000 has invalid length (2 bytes) (#address-cells == 2, #size-cells == 1)
+2026-08-18T17:21:38.4861192Z arch/arm64/boot/dts/19021/trinket-idp-19321.dtb: Warning (reg_format): "reg" property in /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l2@4100 has invalid length (2 bytes) (#address-cells == 2, #size-cells == 1)
+2026-08-18T17:21:38.4881613Z arch/arm64/boot/dts/19021/trinket-idp-19321.dtb: Warning (reg_format): "reg" property in /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l3@4200 has invalid length (2 bytes) (#address-cells == 2, #size-cells == 1)
+2026-08-18T17:21:38.4911632Z arch/arm64/boot/dts/19021/trinket-idp-19321.dtb: Warning (reg_format): "reg" property in /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l4@4300 has invalid length (2 bytes) (#address-cells == 2, #size-cells == 1)
+2026-08-18T17:21:38.4921532Z arch/arm64/boot/dts/19021/trinket-idp-19321.dtb: Warning (reg_format): "reg" property in /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l5@4400 has invalid length (2 bytes) (#address-cells == 2, #size-cells == 1)
+2026-08-18T17:21:38.4981185Z arch/arm64/boot/dts/19021/trinket-idp-19321.dtb: Warning (reg_format): "reg" property in /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l6@4400 has invalid length (2 bytes) (#address-cells == 2, #size-cells == 1)
+2026-08-18T17:21:38.4983695Z arch/arm64/boot/dts/19021/trinket-idp-19321.dtb: Warning (reg_format): "reg" property in /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l7@4400 has invalid length (2 bytes) (#address-cells == 2, #size-cells == 1)
+2026-08-18T17:21:38.4986034Z arch/arm64/boot/dts/19021/trinket-idp-19321.dtb: Warning (avoid_default_addr_size): Relying on default #address-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l1@4000
+2026-08-18T17:21:38.4988238Z arch/arm64/boot/dts/19021/trinket-idp-19321.dtb: Warning (avoid_default_addr_size): Relying on default #size-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l1@4000
+2026-08-18T17:21:38.5020980Z arch/arm64/boot/dts/19021/trinket-idp-19321.dtb: Warning (avoid_default_addr_size): Relying on default #address-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l2@4100
+2026-08-18T17:21:38.5041232Z arch/arm64/boot/dts/19021/trinket-idp-19321.dtb: Warning (avoid_default_addr_size): Relying on default #size-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l2@4100
+2026-08-18T17:21:38.5071697Z arch/arm64/boot/dts/19021/trinket-idp-19321.dtb: Warning (avoid_default_addr_size): Relying on default #address-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l3@4200
+2026-08-18T17:21:38.5100928Z arch/arm64/boot/dts/19021/trinket-idp-19321.dtb: Warning (avoid_default_addr_size): Relying on default #size-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l3@4200
+2026-08-18T17:21:38.5130969Z arch/arm64/boot/dts/19021/trinket-idp-19321.dtb: Warning (avoid_default_addr_size): Relying on default #address-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l4@4300
+2026-08-18T17:21:38.5161345Z arch/arm64/boot/dts/19021/trinket-idp-19321.dtb: Warning (avoid_default_addr_size): Relying on default #size-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l4@4300
+2026-08-18T17:21:38.5190930Z arch/arm64/boot/dts/19021/trinket-idp-19321.dtb: Warning (avoid_default_addr_size): Relying on default #address-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l5@4400
+2026-08-18T17:21:38.5193160Z arch/arm64/boot/dts/19021/trinket-idp-19321.dtb: Warning (avoid_default_addr_size): Relying on default #size-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l5@4400
+2026-08-18T17:21:38.5231096Z arch/arm64/boot/dts/19021/trinket-idp-19321.dtb: Warning (avoid_default_addr_size): Relying on default #address-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l6@4400
+2026-08-18T17:21:38.5260862Z arch/arm64/boot/dts/19021/trinket-idp-19321.dtb: Warning (avoid_default_addr_size): Relying on default #size-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l6@4400
+2026-08-18T17:21:38.5281976Z arch/arm64/boot/dts/19021/trinket-idp-19321.dtb: Warning (avoid_default_addr_size): Relying on default #address-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l7@4400
+2026-08-18T17:21:38.5310906Z arch/arm64/boot/dts/19021/trinket-idp-19321.dtb: Warning (avoid_default_addr_size): Relying on default #size-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l7@4400
+2026-08-18T17:21:38.5720659Z   DTC     arch/arm64/boot/dts/19375/trinket-idp.dtb
+2026-08-18T17:21:38.6812109Z arch/arm64/boot/dts/19375/trinket-idp.dtb: Warning (reg_format): "reg" property in /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l1@4000 has invalid length (2 bytes) (#address-cells == 2, #size-cells == 1)
+2026-08-18T17:21:38.6861544Z arch/arm64/boot/dts/19375/trinket-idp.dtb: Warning (reg_format): "reg" property in /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l2@4100 has invalid length (2 bytes) (#address-cells == 2, #size-cells == 1)
+2026-08-18T17:21:38.6871458Z arch/arm64/boot/dts/19375/trinket-idp.dtb: Warning (reg_format): "reg" property in /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l3@4200 has invalid length (2 bytes) (#address-cells == 2, #size-cells == 1)
+2026-08-18T17:21:38.6921207Z arch/arm64/boot/dts/19375/trinket-idp.dtb: Warning (reg_format): "reg" property in /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l4@4300 has invalid length (2 bytes) (#address-cells == 2, #size-cells == 1)
+2026-08-18T17:21:38.6951043Z arch/arm64/boot/dts/19375/trinket-idp.dtb: Warning (reg_format): "reg" property in /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l5@4400 has invalid length (2 bytes) (#address-cells == 2, #size-cells == 1)
+2026-08-18T17:21:38.6961178Z arch/arm64/boot/dts/19375/trinket-idp.dtb: Warning (reg_format): "reg" property in /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l6@4400 has invalid length (2 bytes) (#address-cells == 2, #size-cells == 1)
+2026-08-18T17:21:38.6963944Z arch/arm64/boot/dts/19375/trinket-idp.dtb: Warning (reg_format): "reg" property in /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l7@4400 has invalid length (2 bytes) (#address-cells == 2, #size-cells == 1)
+2026-08-18T17:21:38.6991147Z arch/arm64/boot/dts/19375/trinket-idp.dtb: Warning (avoid_default_addr_size): Relying on default #address-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l1@4000
+2026-08-18T17:21:38.7021269Z arch/arm64/boot/dts/19375/trinket-idp.dtb: Warning (avoid_default_addr_size): Relying on default #size-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l1@4000
+2026-08-18T17:21:38.7040984Z arch/arm64/boot/dts/19375/trinket-idp.dtb: Warning (avoid_default_addr_size): Relying on default #address-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l2@4100
+2026-08-18T17:21:38.7071064Z arch/arm64/boot/dts/19375/trinket-idp.dtb: Warning (avoid_default_addr_size): Relying on default #size-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l2@4100
+2026-08-18T17:21:38.7081035Z arch/arm64/boot/dts/19375/trinket-idp.dtb: Warning (avoid_default_addr_size): Relying on default #address-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l3@4200
+2026-08-18T17:21:38.7110889Z arch/arm64/boot/dts/19375/trinket-idp.dtb: Warning (avoid_default_addr_size): Relying on default #size-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l3@4200
+2026-08-18T17:21:38.7113011Z arch/arm64/boot/dts/19375/trinket-idp.dtb: Warning (avoid_default_addr_size): Relying on default #address-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l4@4300
+2026-08-18T17:21:38.7115120Z arch/arm64/boot/dts/19375/trinket-idp.dtb: Warning (avoid_default_addr_size): Relying on default #size-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l4@4300
+2026-08-18T17:21:38.7117224Z arch/arm64/boot/dts/19375/trinket-idp.dtb: Warning (avoid_default_addr_size): Relying on default #address-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l5@4400
+2026-08-18T17:21:38.7119308Z arch/arm64/boot/dts/19375/trinket-idp.dtb: Warning (avoid_default_addr_size): Relying on default #size-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l5@4400
+2026-08-18T17:21:38.7121546Z arch/arm64/boot/dts/19375/trinket-idp.dtb: Warning (avoid_default_addr_size): Relying on default #address-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l6@4400
+2026-08-18T17:21:38.7123628Z arch/arm64/boot/dts/19375/trinket-idp.dtb: Warning (avoid_default_addr_size): Relying on default #size-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l6@4400
+2026-08-18T17:21:38.7125984Z arch/arm64/boot/dts/19375/trinket-idp.dtb: Warning (avoid_default_addr_size): Relying on default #address-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l7@4400
+2026-08-18T17:21:38.7128063Z arch/arm64/boot/dts/19375/trinket-idp.dtb: Warning (avoid_default_addr_size): Relying on default #size-cells value for /soc/i2c@4a84000/qcom,pm8008@9/qcom,pm8008-regulator/qcom,pm8008-l7@4400
+2026-08-18T17:21:38.7641244Z ./scripts/dtc/dtc -O dtb -o rtic_mp.dtb -b 0 -Wno-unit_address_vs_reg -Wno-simple_bus_reg -Wno-unit_address_format -Wno-pci_bridge -Wno-pci_device_bus_num -Wno-pci_device_reg  rtic_mp.dts
+2026-08-18T17:21:39.0502106Z   CAT     arch/arm64/boot/Image.gz-dtb
+2026-08-18T17:21:39.0722524Z make[1]: Leaving directory '/home/runner/work/android_kernel_oppo_sm6125-resukisu-final/android_kernel_oppo_sm6125-resukisu-final/source/android/kernel/msm-4.14/out-pchm30-a16-bpf'
+2026-08-18T17:21:39.0737038Z ===== REUSE PROVEN A15 STEP: Build rootless A15-BPF kernel =====
+2026-08-18T17:21:39.0738168Z cwd=/home/runner/work/android_kernel_oppo_sm6125-resukisu-final/android_kernel_oppo_sm6125-resukisu-final/source/android/kernel/msm-4.14
+2026-08-18T17:21:39.0783711Z ===== REUSE ROOT STEP: Build A16 BPF + ReSukiSU + SUSFS kernel =====
+2026-08-18T17:21:39.0826705Z ===== REUSE EXP1 STEP: Build EXP1 kernel =====
+2026-08-18T17:21:39.0869972Z ===== REUSE WIFI STEP: Build WiFi EXP1 kernel =====
+2026-08-18T17:21:39.0961621Z ===== RUN16 VERIFY TRUE BUILT-INS =====
+2026-08-18T17:21:39.7405162Z Traceback (most recent call last):
+2026-08-18T17:21:39.7406367Z   File "/home/runner/work/android_kernel_oppo_sm6125-resukisu-final/android_kernel_oppo_sm6125-resukisu-final/run-run19-step.py", line 41, in <module>
+2026-08-18T17:21:39.7407644Z     subprocess.run(['bash', '-c', 'set -Eeuo pipefail\n' + ''.join(script_lines)], cwd=cwd,
+2026-08-18T17:21:39.7408368Z   File "/usr/lib/python3.10/subprocess.py", line 526, in run
+2026-08-18T17:21:39.7408998Z     raise CalledProcessError(retcode, process.args,
+2026-08-18T17:21:39.7422849Z subprocess.CalledProcessError: Command '['bash', '-c', 'set -Eeuo pipefail\nset -Eeuo pipefail\ngit fetch --no-tags --depth=1 origin "$GITHUB_SHA"\ngit show "$GITHUB_SHA:.github/scripts/run16-orchestrate.sh" > "$GITHUB_WORKSPACE/run19-orchestrate.sh"\ngit show "$GITHUB_SHA:.github/scripts/run17-builtin-runtime-retry.sh" > "$GITHUB_WORKSPACE/run17-builtin-runtime-retry.sh"\ngit show "$GITHUB_SHA:.github/scripts/run17-bbg-lz4kd.sh" > "$GITHUB_WORKSPACE/run17-bbg-lz4kd.sh"\ngit show "$GITHUB_SHA:.github/scripts/run18-sukisu-swap.sh" > "$GITHUB_WORKSPACE/run18-sukisu-swap.sh"\ngit show "$GITHUB_SHA:.github/scripts/run19-kpm-enable.sh" > "$GITHUB_WORKSPACE/run19-kpm-enable.sh"\nchmod +x \\\n  "$GITHUB_WORKSPACE/run19-orchestrate.sh" \\\n  "$GITHUB_WORKSPACE/run17-builtin-runtime-retry.sh" \\\n  "$GITHUB_WORKSPACE/run17-bbg-lz4kd.sh" \\\n  "$GITHUB_WORKSPACE/run18-sukisu-swap.sh" \\\n  "$GITHUB_WORKSPACE/run19-kpm-enable.sh"\n\npython3 - <<\'PY\'\nfrom pathlib import Path\nimport os\n\np = Path(os.environ[\'GITHUB_WORKSPACE\']) / \'run19-orchestrate.sh\'\ns = p.read_text()\n\nold_root = (\n    "run_step \'Prepare proven A16 root config\'\\n"\n    "run_step \'Enable BPF stream parser for sockmap sockhash\'\\n"\n)\nnew_root = (\n    "run_step \'Prepare proven A16 root config\'\\n"\n    \'"$GITHUB_WORKSPACE/run18-sukisu-swap.sh"\\n\'\n    \'"$GITHUB_WORKSPACE/run19-kpm-enable.sh"\\n\'\n    "run_step \'Enable BPF stream parser for sockmap sockhash\'\\n"\n)\nif s.count(old_root) != 1:\n    raise SystemExit(f\'cannot locate root-config insertion point: {s.count(old_root)}\')\ns = s.replace(old_root, new_root, 1)\n\nold_runtime = (\n    \'"$GITHUB_WORKSPACE/run16-builtin-wifi-audio.sh"\\n\\n\'\n    "run_step \'Instrument exact BTF rejection path\'"\n)\nnew_runtime = (\n    \'"$GITHUB_WORKSPACE/run16-builtin-wifi-audio.sh"\\n\'\n    \'"$GITHUB_WORKSPACE/run17-builtin-runtime-retry.sh"\\n\'\n    \'"$GITHUB_WORKSPACE/run17-bbg-lz4kd.sh"\\n\\n\'\n    "run_step \'Instrument exact BTF rejection path\'"\n)\nif s.count(old_runtime) != 1:\n    raise SystemExit(f\'cannot locate Run16 staging call: {s.count(old_runtime)}\')\ns = s.replace(old_runtime, new_runtime, 1)\np.write_text(s)\nPY\n\ngrep -n \'run18-sukisu-swap\' "$GITHUB_WORKSPACE/run19-orchestrate.sh"\ngrep -n \'run19-kpm-enable\' "$GITHUB_WORKSPACE/run19-orchestrate.sh"\ngrep -n \'run17-bbg-lz4kd\' "$GITHUB_WORKSPACE/run19-orchestrate.sh"\n"$GITHUB_WORKSPACE/run19-orchestrate.sh"\n\n']' returned non-zero exit status 141.
+2026-08-18T17:21:39.7525872Z ##[error]Process completed with exit code 1.
+2026-08-18T17:21:39.7645060Z Node 20 is being deprecated. This workflow is running with Node 24 by default. If you need to temporarily use Node 20, you can set the ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION=true environment variable. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+2026-08-18T17:21:39.7646785Z ##[group]Run actions/upload-artifact@v4
+2026-08-18T17:21:39.7647061Z with:
+2026-08-18T17:21:39.7647306Z   name: PCHM30-A16-RUN23-KPM-RUNTIMEFIX-BTF-4
+2026-08-18T17:21:39.7650672Z   path: run23-kpm-runtimefix-base-proof.txt
+run23-kpm-runtimefix-source-proof.txt
+run18-sukisu-swap.log
+run18-sukisu-proof.txt
+run19-kpm-enable.log
+run19-kpm-config-proof.txt
+run19-kpm-patcher.log
+run19-kpm-final-proof.txt
+run16-builtin-proof.txt
+run17-builtin-runtime-proof.txt
+run17-bbg-zram-stage-proof.txt
+run17-btf-kprobe-scene-stage-proof.txt
+run19-btf-kprobe-scene-fix.log
+run23-btf-kprobe-proof.txt
+run23-vmlinux.btf
+run19-prepatch-image-strings.txt
+run19-patched-image-strings.txt
+run19-vmlinux-nm.txt
+PCHM30-A16-RUN19-KPM-PREPATCH-Image-4
+PCHM30-A16-RUN19-KPM-SUKISU-Image-4
+PCHM30-A16-RUN19-KPM-SUKISU-SUSFS220-AK3-4.zip
+PCHM30-A16-RUN19-KPM-SUKISU-SUSFS220-AK3-4.zip.sha256
+source/android/kernel/msm-4.14/out-pchm30-a16-bpf/.config
+source/android/kernel/msm-4.14/out-pchm30-a16-bpf/arch/arm64/boot/Image
+
+2026-08-18T17:21:39.7653665Z   include-hidden-files: true
+2026-08-18T17:21:39.7653919Z   if-no-files-found: warn
+2026-08-18T17:21:39.7654153Z   compression-level: 6
+2026-08-18T17:21:39.7654373Z   overwrite: false
+2026-08-18T17:21:39.7654576Z env:
+2026-08-18T17:21:39.7654837Z   TOOLCHAIN_RELEASE_TAG: pchm30-build-environment-20260810
+2026-08-18T17:21:39.7655183Z   TOOLCHAIN_ROOT: /opt/pchm30-toolchains
+2026-08-18T17:21:39.7655474Z   KERNEL_REL: source/android/kernel/msm-4.14
+2026-08-18T17:21:39.7655765Z   OUT_DIR: out-pchm30-a16-bpf
+2026-08-18T17:21:39.7656051Z   CONFIG_FILE: configs/PCHM30-stock-running.config
+2026-08-18T17:21:39.7656577Z   OPPO_VENDOR_REPO: https://github.com/oppo-source/android_kernel_modules_and_devicetree_oppo_sm6125.git
+2026-08-18T17:21:39.7657123Z   OPPO_VENDOR_COMMIT: 5e7bee452c72c948427b9131bec8cd5d92934f83
+2026-08-18T17:21:39.7657554Z   ARESIN_REPO: https://github.com/jsdizkcksv/android_kernel_aresin.git
+2026-08-18T17:21:39.7657966Z   ARESIN_PREREQ: 620d928acca50c8ba013554fc798dcf8b8910918
+2026-08-18T17:21:39.7658321Z   A15_FIRST: a2b662dced04902eb8f1778ec8e30259dc680ff4
+2026-08-18T17:21:39.7658650Z   A15_LAST: bd379f8140acc083fc386cc2600ee205b2a54e31
+2026-08-18T17:21:39.7658976Z   A16_FIRST: c2c621b5448adc69e105b1519b93dd637a581da5
+2026-08-18T17:21:39.7659293Z   A16_LAST: c74436291044381d4365d91afa0c8f4a574b22b4
+2026-08-18T17:21:39.7659632Z   ROOT_SNAPSHOT: b667ba359bf7da11b43c5d6403788d21c19facd7
+2026-08-18T17:21:39.7660134Z   RESUKISU_COMMIT: beaaea0eb895dc41e7b9bf5e3f39e57aa9635bab
+2026-08-18T17:21:39.7660504Z   ROOT_SUCCESS_BRANCH: pchm30-a16-resukisu-susfs220
+2026-08-18T17:21:39.7660947Z   ROOT_SUCCESS_WORKFLOW: .github/workflows/pchm30-a16-resukisu-susfs220-build.yml
+2026-08-18T17:21:39.7661374Z   EXP1_BRANCH: pchm30-a16-btf-sockmap-exp1
+2026-08-18T17:21:39.7661747Z   EXP1_WORKFLOW: .github/workflows/pchm30-a16-btf-sockmap-exp1-v2.yml
+2026-08-18T17:21:39.7662139Z   WIFI_SUCCESS_BRANCH: pchm30-a16-wifi-abi-exp1
+2026-08-18T17:21:39.7662544Z   WIFI_SUCCESS_WORKFLOW: .github/workflows/pchm30-a16-wifi-abi-exp1-build.yml
+2026-08-18T17:21:39.7663166Z   EXP2_BRANCH: pchm30-a16-btf-exp2-diagnose
+2026-08-18T17:21:39.7663535Z   EXP2_WORKFLOW: .github/workflows/pchm30-a16-btf-exp2-diagnose.yml
+2026-08-18T17:21:39.7663948Z   UPSTREAM_BTF_UAPI: f063c889c9458354a92b235a51cbb60d30321070
+2026-08-18T17:21:39.7664336Z   UPSTREAM_BTF_KERNEL: 1dc92851849cc2235a1efef8f8d5a9255efc5f13
+2026-08-18T17:21:39.7664737Z   SUKISU_REPO: https://github.com/SukiSU-Ultra/SukiSU-Ultra.git
+2026-08-18T17:21:39.7665111Z   SUKISU_COMMIT: b1d534bc41941b2c818d7a1a1dac341e4aabfc2d
+2026-08-18T17:21:39.7665507Z   SUKISU_COMPAT_SOURCE_COMMIT: a8f57213e7f1897914d5ec205741464342c6f0aa
+2026-08-18T17:21:39.7666115Z   SUKISU_PATCH_REPO: https://github.com/SukiSU-Ultra/SukiSU_patch.git
+2026-08-18T17:21:39.7666535Z   SUKISU_PATCH_COMMIT: 547ae94bcaec53d030398f857950c64662043a5d
+2026-08-18T17:21:39.7666915Z   RUN19_SOURCE_BRANCH: pchm30-a16-run23-kpm-runtimefix-btf
+2026-08-18T17:21:39.7667328Z   RUN19_SOURCE_WORKFLOW: .github/workflows/pchm30-a16-run19-kpm-exp1.yml
+2026-08-18T17:21:39.7667766Z   RUN17_BTF_FIX_COMMIT: bc983ae72d5795d0ec2a5b5dd4292dfab1417e57
+2026-08-18T17:21:39.7668170Z   KPM_RUNTIMEFIX_COMMIT: a82515ffbe2e02e9b2f34c0616be9d64c7daa417
+2026-08-18T17:21:39.7670997Z   GH_TOKEN: ***
+2026-08-18T17:21:39.7671295Z   ROOTLESS_BASE_SHA: 0789fcca2cbcb74143492a70afc6c3b5a59251b7
+2026-08-18T17:21:39.7671820Z   SDCLANG_DIR: /opt/pchm30-toolchains/Snapdragon-LLVM-ARM-Compiler-10.0.7-for-Android-NDK
+2026-08-18T17:21:39.7672335Z   GCC64_DIR: /opt/pchm30-toolchains/aarch64-linux-android-4.9
+2026-08-18T17:21:39.7672710Z   GCC32_DIR: /opt/pchm30-toolchains/arm-linux-androideabi-4.9
+2026-08-18T17:21:39.7673069Z   MPGEN_DIR: /opt/pchm30-toolchains/mpgen-2.1.1-py3
+2026-08-18T17:21:39.7673728Z   KERNEL_DIR: /home/runner/work/android_kernel_oppo_sm6125-resukisu-final/android_kernel_oppo_sm6125-resukisu-final/source/android/kernel/msm-4.14
+2026-08-18T17:21:39.7674330Z   ARCH: arm64
+2026-08-18T17:21:39.7674542Z   TARGET_PRODUCT: trinket
+2026-08-18T17:21:39.7674785Z   KCONFIG_NOTIMESTAMP: true
+2026-08-18T17:21:39.7675024Z   KBUILD_BUILD_USER: root
+2026-08-18T17:21:39.7675255Z   KBUILD_BUILD_HOST: ubuntu-8-196
+2026-08-18T17:21:39.7675506Z   KBUILD_BUILD_VERSION: 2
+2026-08-18T17:21:39.7675774Z   KBUILD_BUILD_TIMESTAMP: Mon May 16 17:39:41 CST 2022
+2026-08-18T17:21:39.7676075Z   SHIPPING_API_LEVEL: 28
+2026-08-18T17:21:39.7676316Z   CLANG_TRIPLE: aarch64-linux-gnu-
+2026-08-18T17:21:39.7676568Z   LOCALVERSION: +
+2026-08-18T17:21:39.7676962Z   CC: /opt/pchm30-toolchains/Snapdragon-LLVM-ARM-Compiler-10.0.7-for-Android-NDK/bin/clang
+2026-08-18T17:21:39.7677602Z   REAL_CC: /opt/pchm30-toolchains/Snapdragon-LLVM-ARM-Compiler-10.0.7-for-Android-NDK/bin/clang
+2026-08-18T17:21:39.7678228Z   CROSS_COMPILE: /opt/pchm30-toolchains/aarch64-linux-android-4.9/bin/aarch64-linux-android-
+2026-08-18T17:21:39.7678847Z   CROSS_COMPILE_ARM32: /opt/pchm30-toolchains/arm-linux-androideabi-4.9/bin/arm-linux-androideabi-
+2026-08-18T17:21:39.7679437Z   LD: /opt/pchm30-toolchains/aarch64-linux-android-4.9/bin/aarch64-linux-android-ld
+2026-08-18T17:21:39.7680176Z   RTIC_MPGEN: python3 /opt/pchm30-toolchains/mpgen-2.1.1-py3/mpgen.py
+2026-08-18T17:21:39.7681046Z   OPPO_STOCK_SIGNING_X509: /home/runner/work/android_kernel_oppo_sm6125-resukisu-final/android_kernel_oppo_sm6125-resukisu-final/source/android/kernel/msm-4.14/certs/pchm30-stock-signing-key.x509
+2026-08-18T17:21:39.7683165Z   PATH: /opt/pchm30-toolchains/Snapdragon-LLVM-ARM-Compiler-10.0.7-for-Android-NDK/bin:/opt/pchm30-toolchains/aarch64-linux-android-4.9/bin:/opt/pchm30-toolchains/arm-linux-androideabi-4.9/bin:/snap/bin:/home/runner/.local/bin:/opt/pipx_bin:/home/runner/.cargo/bin:/home/runner/.config/composer/vendor/bin:/usr/local/.ghcup/bin:/home/runner/.dotnet/tools:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin
+2026-08-18T17:21:39.7684768Z   PYTHONPATH: /opt/pchm30-toolchains/mpgen-2.1.1-py3
+2026-08-18T17:21:39.7685068Z   JOBS: 4
+2026-08-18T17:21:39.7685259Z ##[endgroup]
+2026-08-18T17:21:39.9530592Z (node:94103) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+2026-08-18T17:21:39.9531765Z (Use `node --trace-deprecation ...` to show where the warning was created)
+2026-08-18T17:21:39.9704830Z Multiple search paths detected. Calculating the least common ancestor of all paths
+2026-08-18T17:21:39.9727413Z The least common ancestor is /home/runner/work/android_kernel_oppo_sm6125-resukisu-final/android_kernel_oppo_sm6125-resukisu-final. This will be the root directory of the artifact
+2026-08-18T17:21:39.9728919Z With the provided path, there will be 9 files uploaded
+2026-08-18T17:21:39.9730499Z Artifact name is valid!
+2026-08-18T17:21:39.9730987Z Root directory input is valid!
+2026-08-18T17:21:40.1283294Z Beginning upload of artifact content to blob storage
+2026-08-18T17:21:40.7030602Z (node:94103) [DEP0169] DeprecationWarning: `url.parse()` behavior is not standardized and prone to errors that have security implications. Use the WHATWG URL API instead. CVEs are not issued for `url.parse()` vulnerabilities.
+2026-08-18T17:21:40.9796658Z Uploaded bytes 8388608
+2026-08-18T17:21:41.4401360Z Uploaded bytes 16777216
+2026-08-18T17:21:41.5483332Z Uploaded bytes 19655025
+2026-08-18T17:21:41.5729444Z Finished uploading artifact content to blob storage!
+2026-08-18T17:21:41.5731491Z SHA256 digest of uploaded artifact zip is f1c4c3f5328c0925ac23d9930162831cea3e70de5322561c7cf4b45c986775bb
+2026-08-18T17:21:41.5733202Z Finalizing artifact upload
+2026-08-18T17:21:41.7388584Z Artifact PCHM30-A16-RUN23-KPM-RUNTIMEFIX-BTF-4.zip successfully finalized. Artifact ID 9335114844
+2026-08-18T17:21:41.7390327Z Artifact PCHM30-A16-RUN23-KPM-RUNTIMEFIX-BTF-4 has been successfully uploaded! Final size is 19655025 bytes. Artifact ID is 9335114844
+2026-08-18T17:21:41.7397208Z Artifact download URL: https://github.com/hhsbjbsj/android_kernel_oppo_sm6125-resukisu-final/actions/runs/32163061210/artifacts/9335114844
+2026-08-18T17:21:41.7652823Z Node 20 is being deprecated. This workflow is running with Node 24 by default. If you need to temporarily use Node 20, you can set the ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION=true environment variable. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+2026-08-18T17:21:41.7654020Z Post job cleanup.
+2026-08-18T17:21:41.8601615Z [command]/usr/bin/git version
+2026-08-18T17:21:41.8645639Z git version 2.54.0
+2026-08-18T17:21:41.8697526Z Temporarily overriding HOME='/home/runner/work/_temp/dee634fa-efd8-49e7-9030-fa88817d28ae' before making global git config changes
+2026-08-18T17:21:41.8699080Z Adding repository directory to the temporary git global config as a safe directory
+2026-08-18T17:21:41.8701143Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/android_kernel_oppo_sm6125-resukisu-final/android_kernel_oppo_sm6125-resukisu-final/source/android/kernel/msm-4.14
+2026-08-18T17:21:41.8769622Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+2026-08-18T17:21:41.8818931Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2026-08-18T17:21:41.9359440Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-08-18T17:21:41.9379686Z http.https://github.com/.extraheader
+2026-08-18T17:21:41.9395594Z [command]/usr/bin/git config --local --unset-all http.https://github.com/.extraheader
+2026-08-18T17:21:41.9447368Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2026-08-18T17:21:42.0069005Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-08-18T17:21:42.0133072Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+2026-08-18T17:21:42.0782384Z Cleaning up orphan processes
+2026-08-18T17:21:42.1158519Z ##[warning]Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/checkout@v4, actions/upload-artifact@v4. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/

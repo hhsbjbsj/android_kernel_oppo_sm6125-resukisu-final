@@ -1,0 +1,42 @@
+===== RUN23 STATUS REFRESH =====
+run_id=32165962039 run_number=5 status=in_progress conclusion=None sha=64d77ea102b168372067d8e651e8d7178a198201 created=2026-08-18T17:30:27Z updated=2026-08-18T17:30:29Z
+  job_id=95805500229 status=in_progress conclusion=None
+    step#6 Build KPM runtimefixed SukiSU BBG LZ4KD stack status=in_progress conclusion=None
+    step#7 Verify KPM runtime fix reached generated source status=pending conclusion=None
+    step#8 Apply successful Run17 BTF Kprobe fix and relink status=pending conclusion=None
+    step#9 Verify original KPM and Run18 features still survive status=pending conclusion=None
+    step#10 Hard verify BTF Kprobes Scene and KPM runtimefix together status=pending conclusion=None
+    step#11 Patch final Image with proven SukiSU KPM patcher status=pending conclusion=None
+    step#12 Package reusable flash ZIP status=pending conclusion=None
+    step#13 Upload Run23 corrected artifact status=pending conclusion=None
+    step#26 Post Checkout exact successful A16 rootless baseline status=pending conclusion=None
+run_id=32163061210 run_number=4 status=completed conclusion=failure sha=7803eb33da69018221b0fcc98a0ed09cf311abd9 created=2026-08-18T16:57:34Z updated=2026-08-18T17:21:44Z
+run_id=32162132679 run_number=3 status=in_progress conclusion=None sha=a0983eeb8acdf3cb9383678c2a74305412754ccf created=2026-08-18T16:47:02Z updated=2026-08-18T16:47:05Z
+  job_id=95793236623 status=in_progress conclusion=None
+    step#3 Install BTF host tooling status=in_progress conclusion=None
+    step#4 Hard gate proven KPM runtime-fix ancestry status=pending conclusion=None
+    step#5 Prepare proven KPM step runner from Run23 ref status=pending conclusion=None
+    step#6 Build KPM runtimefixed SukiSU BBG LZ4KD stack status=pending conclusion=None
+    step#7 Verify KPM runtime fix reached generated source status=pending conclusion=None
+    step#8 Apply successful Run17 BTF Kprobe fix and relink status=pending conclusion=None
+    step#9 Verify original KPM and Run18 features still survive status=pending conclusion=None
+    step#10 Hard verify BTF Kprobes Scene and KPM runtimefix together status=pending conclusion=None
+    step#11 Patch final Image with proven SukiSU KPM patcher status=pending conclusion=None
+    step#12 Package reusable flash ZIP status=pending conclusion=None
+    step#13 Upload Run23 corrected artifact status=pending conclusion=None
+    step#26 Post Checkout exact successful A16 rootless baseline status=pending conclusion=None
+run_id=32158954072 run_number=2 status=completed conclusion=failure sha=054e5a23524a590d424dfe411e4a8d941ca2e5c7 created=2026-08-18T16:11:37Z updated=2026-08-18T16:41:07Z
+run_id=32158317289 run_number=1 status=in_progress conclusion=None sha=f46e771bf1130acbead0b44966fbd14396b32efb created=2026-08-18T16:05:04Z updated=2026-08-18T16:05:07Z
+  job_id=95780799876 status=in_progress conclusion=None
+    step#3 Install BTF host tooling status=in_progress conclusion=None
+    step#4 Hard gate proven KPM runtime-fix ancestry status=pending conclusion=None
+    step#5 Prepare proven KPM step runner from Run23 ref status=pending conclusion=None
+    step#6 Build KPM runtimefixed SukiSU BBG LZ4KD stack status=pending conclusion=None
+    step#7 Verify KPM runtime fix reached generated source status=pending conclusion=None
+    step#8 Apply successful Run17 BTF Kprobe fix and relink status=pending conclusion=None
+    step#9 Verify original KPM and Run18 features still survive status=pending conclusion=None
+    step#10 Hard verify BTF Kprobes Scene and KPM runtimefix together status=pending conclusion=None
+    step#11 Patch final Image with proven SukiSU KPM patcher status=pending conclusion=None
+    step#12 Package reusable flash ZIP status=pending conclusion=None
+    step#13 Upload Run23 corrected artifact status=pending conclusion=None
+    step#26 Post Checkout exact successful A16 rootless baseline status=pending conclusion=None

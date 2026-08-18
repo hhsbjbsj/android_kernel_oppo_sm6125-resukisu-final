@@ -2,6 +2,10 @@ name: PCHM30 A16 Run19 BTF Failure Dump
 
 on:
   workflow_dispatch:
+  push:
+    branches: [pchm30-a16-run19-btf-kprobe-fix]
+    paths:
+      - '.github/workflows/pchm30-a16-run19-btf-failure-dump.yml'
 
 permissions:
   contents: write

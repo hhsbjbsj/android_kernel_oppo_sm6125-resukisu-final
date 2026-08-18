@@ -1,0 +1,106 @@
+name: PCHM30 A16 Run22 LK2nd SM6125 Port
+
+on:
+  push:
+    branches:
+      - pchm30-a16-run22-lk2nd-sm6125
+    paths:
+      - '.github/workflows/pchm30-a16-run22-lk2nd-sm6125.yml'
+      - 'arch/arm64/boot/dts/qcom/trinket*'
+      - 'lk2nd-port/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  port-preflight:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Checkout Run22
+        uses: actions/checkout@v4
+
+      - name: Extract proven SM6125 TRINKET identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          DTS=arch/arm64/boot/dts/qcom/trinket.dtsi
+          test -f "$DTS"
+          mkdir -p out-lk2nd
+          {
+            echo '===== PCHM30 / SM6125 LK2nd PORT PREFLIGHT ====='
+            echo "kernel_commit=$(git rev-parse HEAD)"
+            echo
+            echo '--- TRINKET identity from proven kernel DTS ---'
+            grep -E 'model =|compatible =|qcom,msm-id|qcom,msm-name|qcom,pmic-name|serial0 =|sdhc1 =|sdhc2 =|ufshc1 =' "$DTS" || true
+            echo
+            echo '--- Reserved-memory / memory hints ---'
+            grep -nE 'reserved-memory|memory@|reg = <0x[0-9a-fA-F]+ 0x[0-9a-fA-F]+' "$DTS" | head -n 120 || true
+          } | tee out-lk2nd/PCHM30-SM6125-LK2ND-PREFLIGHT.txt
+
+          grep -q 'compatible = "qcom,trinket"' "$DTS"
+          grep -q 'qcom,msm-id = <394 0x10000>' "$DTS"
+          grep -q 'qcom,pmic-name = "pm6125 + pmi632"' "$DTS"
+
+      - name: Inspect upstream LK2nd support gap
+        shell: bash
+        run: |
+          set -euo pipefail
+          git clone --depth=1 https://github.com/msm8916-mainline/lk2nd.git upstream-lk2nd
+          {
+            echo
+            echo '===== UPSTREAM LK2ND AUDIT ====='
+            echo "lk2nd_commit=$(git -C upstream-lk2nd rev-parse HEAD)"
+            echo
+            echo '--- Existing msm8953 target ---'
+            sed -n '1,220p' upstream-lk2nd/target/msm8953/rules.mk
+            echo
+            echo '--- Existing Qualcomm targets near this generation ---'
+            find upstream-lk2nd/target -maxdepth 1 -mindepth 1 -type d -printf '%f\n' | grep -E 'msm895|msm899|sdm|sm6|trinket' | sort || true
+            echo
+            echo '--- Native SM6125/TRINKET support search ---'
+            grep -RniE 'sm6125|trinket|pm6125|pmi632' upstream-lk2nd/target upstream-lk2nd/platform upstream-lk2nd/project 2>/dev/null | head -n 200 || true
+          } | tee -a out-lk2nd/PCHM30-SM6125-LK2ND-PREFLIGHT.txt
+
+          if test -e upstream-lk2nd/project/lk2nd-sm6125.mk || test -d upstream-lk2nd/target/sm6125 || test -d upstream-lk2nd/platform/sm6125; then
+            echo 'native_sm6125_target=yes' | tee -a out-lk2nd/PCHM30-SM6125-LK2ND-PREFLIGHT.txt
+          else
+            echo 'native_sm6125_target=no' | tee -a out-lk2nd/PCHM30-SM6125-LK2ND-PREFLIGHT.txt
+          fi
+
+      - name: Generate Run22 port skeleton (NOT flashable)
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p out-lk2nd/port-skeleton/project out-lk2nd/port-skeleton/target/sm6125
+          cat > out-lk2nd/port-skeleton/project/lk2nd-sm6125.mk <<'EOF'
+          # Run22 experimental target selector.
+          # Do not flash until platform/sm6125 memory, USB, storage and clock init are implemented and validated.
+          TARGET := sm6125
+          include lk2nd/project/lk2nd.mk
+          EOF
+          cat > out-lk2nd/port-skeleton/target/sm6125/PORTING-NOTES.txt <<'EOF'
+          PCHM30 / OPPO A11x / Snapdragon 665 (SM6125/TRINKET)
+          qcom,msm-id: 394 / 0x10000
+          compatible: qcom,trinket
+          PMIC: pm6125 + pmi632
+
+          Phase 1 gates before producing any flashable lk2nd.img:
+          1. Confirm LK load/MEMBASE and scratch region from stock aboot + kernel reserved-memory map.
+          2. Implement SM6125 clock/timer/GIC/platform init; do not inherit msm8953 addresses blindly.
+          3. Implement UFS/eMMC path actually used by PCHM30.
+          4. Implement USB gadget/PHY sufficient for fastboot.
+          5. Bring display up only after serial/USB logging works.
+          6. Pack as secondary Android boot image and preserve a recovery path.
+          EOF
+          tar -C out-lk2nd -czf out-lk2nd/PCHM30-SM6125-LK2ND-PORT-SKELETON.tar.gz port-skeleton
+
+      - name: Upload Run22 audit artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: PCHM30-Run22-LK2nd-SM6125-Preflight
+          path: |
+            out-lk2nd/PCHM30-SM6125-LK2ND-PREFLIGHT.txt
+            out-lk2nd/PCHM30-SM6125-LK2ND-PORT-SKELETON.tar.gz
+          if-no-files-found: error

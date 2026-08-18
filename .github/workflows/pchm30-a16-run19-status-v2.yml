@@ -46,3 +46,5 @@ jobs:
           git add ci-diagnostics/run19-btf-status-v2.txt
           git commit -m 'ci: snapshot latest Run19 BTF status' || exit 0
           git push origin HEAD:pchm30-a16-run19-btf-kprobe-fix
+
+# trigger-2

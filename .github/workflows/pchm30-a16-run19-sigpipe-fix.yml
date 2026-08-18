@@ -1,0 +1,78 @@
+name: PCHM30 A16 Run19 SIGPIPE Fix
+
+on:
+  push:
+    branches: [pchm30-a16-run19-btf-kprobe-fix]
+    paths:
+      - '.github/workflows/pchm30-a16-run19-sigpipe-fix.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: pchm30-a16-run19-btf-kprobe-fix
+          fetch-depth: 0
+
+      - name: Remove pipefail SIGPIPE hazard and retrigger Run19
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          p = Path('.github/scripts/run16-orchestrate.sh')
+          s = p.read_text()
+          old = '''nm "$VMLINUX" | grep -Eq '[[:space:]]apr_probe$'
+nm "$VMLINUX" | grep -Eq '[[:space:]]q6core_probe$'
+nm "$VMLINUX" | grep -Eq '[[:space:]]tavil_cdc_mclk_enable$'
+nm "$VMLINUX" | grep -Eq '[[:space:]]sia81xx_'
+nm "$VMLINUX" | grep -Eq '[[:space:]]wlan_hdd_'
+strings -a "$IMAGE" | grep -Fq 'PCHM30 A16 late-DLKM: schedule APR child population from probe'
+strings -a "$IMAGE" | grep -Fq 'PCHM30 A16 late-DLKM: AVS not ready, defer q6core probe'
+strings -a "$IMAGE" | grep -Fq 'A16-BPF compat uname:'
+nm "$VMLINUX" | grep -q ' sock_map_ops$'
+nm "$VMLINUX" | grep -q ' sock_hash_ops$'
+'''
+          new = '''RUN16_NM="$GITHUB_WORKSPACE/run16-vmlinux-nm-full.txt"
+RUN16_STRINGS="$GITHUB_WORKSPACE/run16-image-strings-full.txt"
+nm "$VMLINUX" > "$RUN16_NM"
+strings -a "$IMAGE" > "$RUN16_STRINGS"
+
+grep -Eq '[[:space:]]apr_probe$' "$RUN16_NM"
+grep -Eq '[[:space:]]q6core_probe$' "$RUN16_NM"
+grep -Eq '[[:space:]]tavil_cdc_mclk_enable$' "$RUN16_NM"
+grep -Eq '[[:space:]]sia81xx_' "$RUN16_NM"
+grep -Eq '[[:space:]]wlan_hdd_' "$RUN16_NM"
+grep -Fq 'PCHM30 A16 late-DLKM: schedule APR child population from probe' "$RUN16_STRINGS"
+grep -Fq 'PCHM30 A16 late-DLKM: AVS not ready, defer q6core probe' "$RUN16_STRINGS"
+grep -Fq 'A16-BPF compat uname:' "$RUN16_STRINGS"
+grep -q ' sock_map_ops$' "$RUN16_NM"
+grep -q ' sock_hash_ops$' "$RUN16_NM"
+'''
+          if s.count(old) != 1:
+              raise SystemExit(f'unexpected SIGPIPE verification block count: {s.count(old)}')
+          p.write_text(s.replace(old, new, 1))
+
+          wf = Path('.github/workflows/pchm30-a16-run19-btf-kprobe-fix.yml')
+          w = wf.read_text()
+          marker = '# RUN19_SIGPIPE_VERIFY_FIX_V1\n'
+          if marker not in w:
+              w += '\n' + marker
+              wf.write_text(w)
+          PY
+
+          grep -n 'RUN16_NM=' .github/scripts/run16-orchestrate.sh
+          grep -n 'RUN19_SIGPIPE_VERIFY_FIX_V1' .github/workflows/pchm30-a16-run19-btf-kprobe-fix.yml
+          git diff --check
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .github/scripts/run16-orchestrate.sh .github/workflows/pchm30-a16-run19-btf-kprobe-fix.yml
+          git commit -m "fix(run19): avoid pipefail SIGPIPE in built-in verifier"
+          git push origin HEAD:pchm30-a16-run19-btf-kprobe-fix

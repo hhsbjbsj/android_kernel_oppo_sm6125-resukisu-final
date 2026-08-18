@@ -1,0 +1,42 @@
+name: PCHM30 Run17 Status Snapshot
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [pchm30-a16-run17-btf-kprobe-fix]
+    paths:
+      - '.github/workflows/pchm30-a16-run17-status-snapshot.yml'
+
+permissions:
+  actions: read
+  contents: write
+
+jobs:
+  snapshot:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: pchm30-a16-run17-btf-kprobe-fix
+          fetch-depth: 1
+      - name: Snapshot latest main Run17 status
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          BRANCH: pchm30-a16-run17-btf-kprobe-fix
+          WORKFLOW: pchm30-a16-run17-btf-kprobe-fix.yml
+        run: |
+          set -Eeuo pipefail
+          mkdir -p ci-diagnostics
+          json="$(curl --fail-with-body -sSL \
+            -H 'Accept: application/vnd.github+json' \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H 'X-GitHub-Api-Version: 2022-11-28' \
+            "https://api.github.com/repos/$REPO/actions/workflows/$WORKFLOW/runs?branch=$BRANCH&per_page=5")"
+          jq -r '.workflow_runs[0] | "run_id=" + (.id|tostring), "status=" + .status, "conclusion=" + (.conclusion // ""), "event=" + .event, "head_sha=" + .head_sha, "created_at=" + .created_at, "updated_at=" + .updated_at, "run_url=" + .html_url' <<<"$json" > ci-diagnostics/run17-latest-status.txt
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add ci-diagnostics/run17-latest-status.txt
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m 'ci: snapshot latest Run17 status'
+          git push origin HEAD:pchm30-a16-run17-btf-kprobe-fix

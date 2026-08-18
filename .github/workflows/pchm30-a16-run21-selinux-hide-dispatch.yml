@@ -1,6 +1,6 @@
 name: PCHM30 A16 Run21 SELinux Hide Dispatch
 
-# Manual trigger 2026-08-18 after confirming current Run21 hook fix is present.
+# Manual trigger 2026-08-18 after adding bounded apt mirror retries/timeouts.
 on:
   workflow_dispatch:
   push:

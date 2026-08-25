@@ -6,6 +6,7 @@ on:
     branches: [pchm30-a16-run17-builtin-runtime]
     paths:
       - '.github/workflows/pchm30-a16-run17-builtin-runtime.yml'
+      - '.github/scripts/run17-update-resukisu.sh'
       - '.github/scripts/run17-builtin-runtime-retry.sh'
       - '.github/scripts/run17-bbg-lz4kd.sh'
       - '.github/scripts/package-pchm30-run17-ak3.sh'
@@ -25,7 +26,9 @@ env:
   A16_FIRST: c2c621b5448adc69e105b1519b93dd637a581da5
   A16_LAST: c74436291044381d4365d91afa0c8f4a574b22b4
   ROOT_SNAPSHOT: b667ba359bf7da11b43c5d6403788d21c19facd7
-  RESUKISU_COMMIT: beaaea0eb895dc41e7b9bf5e3f39e57aa9635bab
+  # Newest ReSukiSU that still matches this tree's SUSFS 2.2.0 overlay.
+  # main@03b60f26 (2026-08-24) requires susfs_*_no_su / zygote_next APIs.
+  RESUKISU_COMMIT: b2ac2fc8703ce9f5226e2a38a59f8b72f8a3005c
   ROOT_SUCCESS_BRANCH: pchm30-a16-resukisu-susfs220
   ROOT_SUCCESS_WORKFLOW: .github/workflows/pchm30-a16-resukisu-susfs220-build.yml
   EXP1_BRANCH: pchm30-a16-btf-sockmap-exp1
@@ -60,10 +63,12 @@ jobs:
           set -Eeuo pipefail
           git fetch --no-tags --depth=1 origin "$GITHUB_SHA"
           git show "$GITHUB_SHA:.github/scripts/run16-orchestrate.sh" > "$GITHUB_WORKSPACE/run17-orchestrate.sh"
+          git show "$GITHUB_SHA:.github/scripts/run17-update-resukisu.sh" > "$GITHUB_WORKSPACE/run17-update-resukisu.sh"
           git show "$GITHUB_SHA:.github/scripts/run17-builtin-runtime-retry.sh" > "$GITHUB_WORKSPACE/run17-builtin-runtime-retry.sh"
           git show "$GITHUB_SHA:.github/scripts/run17-bbg-lz4kd.sh" > "$GITHUB_WORKSPACE/run17-bbg-lz4kd.sh"
           chmod +x \
             "$GITHUB_WORKSPACE/run17-orchestrate.sh" \
+            "$GITHUB_WORKSPACE/run17-update-resukisu.sh" \
             "$GITHUB_WORKSPACE/run17-builtin-runtime-retry.sh" \
             "$GITHUB_WORKSPACE/run17-bbg-lz4kd.sh"
 
@@ -74,6 +79,7 @@ jobs:
           s = p.read_text()
           old = '"$GITHUB_WORKSPACE/run16-builtin-wifi-audio.sh"\n\nrun_step \'Instrument exact BTF rejection path\''
           new = ('"$GITHUB_WORKSPACE/run16-builtin-wifi-audio.sh"\n'
+                 '"$GITHUB_WORKSPACE/run17-update-resukisu.sh"\n'
                  '"$GITHUB_WORKSPACE/run17-builtin-runtime-retry.sh"\n'
                  '"$GITHUB_WORKSPACE/run17-bbg-lz4kd.sh"\n\n'
                  'run_step \'Instrument exact BTF rejection path\'')
@@ -97,7 +103,12 @@ jobs:
           test -s "$GITHUB_WORKSPACE/run17-builtin-runtime-proof.txt"
           test -s "$GITHUB_WORKSPACE/run17-bbg-zram-stage-proof.txt"
           test -s "$GITHUB_WORKSPACE/run17-bbg-zram.log"
+          test -s "$GITHUB_WORKSPACE/run17-resukisu-pin.txt"
           test ! -s "$GITHUB_WORKSPACE/run16-unwanted-ko.txt"
+
+          test "$(git -C KernelSU rev-parse HEAD)" = "$RESUKISU_COMMIT"
+          test -L drivers/kernelsu
+          test "$(readlink drivers/kernelsu)" = '../KernelSU/kernel'
 
           grep -q '^CONFIG_QCA_CLD_WLAN=y$' "$OUT_DIR/.config"
           grep -q '^CONFIG_MSM_11AD=y$' "$OUT_DIR/.config"
@@ -161,6 +172,7 @@ jobs:
             run17-builtin-runtime-proof.txt
             run17-bbg-zram.log
             run17-bbg-zram-stage-proof.txt
+            run17-resukisu-pin.txt
             run17-image-strings.txt
             run17-vmlinux-nm.txt
             Image-run16-builtin.sha256

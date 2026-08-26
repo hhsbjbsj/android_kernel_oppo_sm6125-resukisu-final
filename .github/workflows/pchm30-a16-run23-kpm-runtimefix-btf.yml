@@ -1,6 +1,5 @@
 name: PCHM30 A16 Run23 KPM RuntimeFix + BTF Kprobe
 # Run23: bounded non-Azure APT + SIGPIPE-safe verification
-# SukiSU pin: builtin 5a2bb7e5813002ccaabe02fa864cfb2dde6b5109
 
 on:
   workflow_dispatch:
@@ -50,3 +49,18 @@ env:
   RUN17_BTF_FIX_COMMIT: bc983ae72d5795d0ec2a5b5dd4292dfab1417e57
   KPM_RUNTIMEFIX_COMMIT: a82515ffbe2e02e9b2f34c0616be9d64c7daa417
   GH_TOKEN: ${{ github.token }}
+
+jobs:
+  build:
+    name: Run23 proven KPM runtimefix + SukiSU/BBG/LZ4KD + BTF/KPROBES
+    runs-on: ubuntu-22.04
+    timeout-minutes: 360
+
+    steps:
+      - name: Checkout exact successful A16 rootless baseline
+        uses: actions/checkout@v4
+        with:
+          ref: pchm30-a16-bpf-only
+          path: source/android/kernel/msm-4.14
+          fetch-depth: 1
+          submodules: false

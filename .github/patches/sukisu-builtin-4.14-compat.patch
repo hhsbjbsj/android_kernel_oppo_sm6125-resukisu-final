@@ -1,0 +1,126 @@
+diff --git a/kernel/feature/sucompat.c b/kernel/feature/sucompat.c
+index f4083653..a1e3ac4f 100644
+--- a/kernel/feature/sucompat.c
++++ b/kernel/feature/sucompat.c
+@@ -1,7 +1,7 @@
+ #define SU_PATH "/system/bin/su"
+ #define SH_PATH "/system/bin/sh"
+ 
+-bool ksu_su_compat_enabled __read_mostly = true;
++DEFINE_STATIC_KEY_TRUE(ksu_su_compat_enabled);
+ 
+ static const char su_path[] = SU_PATH;
+ static const char sh_path[] = SH_PATH;
+@@ -9,14 +9,17 @@ static const char ksud_path[] = KSUD_PATH;
+ 
+ static int su_compat_feature_get(u64 *value)
+ {
+-    *value = ksu_su_compat_enabled ? 1 : 0;
++    *value = static_branch_likely(&ksu_su_compat_enabled) ? 1 : 0;
+     return 0;
+ }
+ 
+ static int su_compat_feature_set(u64 value)
+ {
+     bool enable = value != 0;
+-    ksu_su_compat_enabled = enable;
++    if (enable)
++        static_branch_enable(&ksu_su_compat_enabled);
++    else
++        static_branch_disable(&ksu_su_compat_enabled);
+     pr_info("su_compat: set to %d\n", enable);
+     return 0;
+ }
+diff --git a/kernel/feature/sucompat.h b/kernel/feature/sucompat.h
+index 2dcfe278..c85e61d6 100644
+--- a/kernel/feature/sucompat.h
++++ b/kernel/feature/sucompat.h
+@@ -1,9 +1,10 @@
+ #ifndef __KSU_H_SUCOMPAT
+ #define __KSU_H_SUCOMPAT
+ #include <asm/ptrace.h>
++#include <linux/jump_label.h>
+ #include <linux/types.h>
+ 
+-extern bool ksu_su_compat_enabled;
++extern struct static_key_true ksu_su_compat_enabled;
+ 
+ int ksu_handle_faccessat(int *dfd, const char __user **filename_user, int *mode, int *__unused_flags);
+ #if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 1, 0) && defined(CONFIG_KSU_SUSFS)
+diff --git a/kernel/hook/lsm_hook.c b/kernel/hook/lsm_hook.c
+index 00702832..39d16089 100644
+--- a/kernel/hook/lsm_hook.c
++++ b/kernel/hook/lsm_hook.c
+@@ -31,10 +31,20 @@ static inline void ksu_handle_extra_susfs_work(void)
+ 
+ int ksu_handle_setresuid(uid_t ruid, uid_t euid, uid_t suid)
+ {
++    bool from_zygote;
+ 
+-    // We only interest in process spwaned by zygote
+-    if (!susfs_is_sid_equal(current_cred(), susfs_zygote_sid))
+-        return 0;
++    from_zygote = susfs_is_sid_equal(current_cred(), susfs_zygote_sid);
++
++    // OPPO Android 11 can miss the cached zygote SID even though the caller
++    // is still the root zygote child.  Only relax the SID gate for the
++    // already-crowned SukiSU manager UID; all other apps keep the strict gate.
++    if (!from_zygote) {
++        if (!(likely(ksu_is_manager_appid_valid()) &&
++              unlikely(is_uid_manager(ruid)) && current_uid().val == 0))
++            return 0;
++
++        pr_warn("manager spawn zygote SID mismatch, root fallback for uid %d\n", ruid);
++    }
+ 
+     // Check if spawned process is isolated service first, and force to do umount if so
+     if (is_isolated_process(ruid))
+diff --git a/kernel/policy/allowlist.c b/kernel/policy/allowlist.c
+index fa32ac15..51613c9c 100644
+--- a/kernel/policy/allowlist.c
++++ b/kernel/policy/allowlist.c
+@@ -448,7 +448,7 @@ static void migrate_profile(u32 version, struct app_profile *profile)
+                 pr_info("migrated domain of profile: %s\n", profile->key);
+             }
+         }
+-        fallthrough;
++        /* fall through */
+     case 3:
+         if (profile->allow_su) {
+             profile->rp_config.profile.flags = FLAG_KSU_NO_NEW_PRIVS;
+diff --git a/kernel/runtime/ksud.c b/kernel/runtime/ksud.c
+index eed56f90..68ce68e9 100644
+--- a/kernel/runtime/ksud.c
++++ b/kernel/runtime/ksud.c
+@@ -54,7 +54,9 @@ void on_post_fs_data(void)
+     ksu_observer_init();
+     // sanity check, this may influence the performance
+     stop_input_hook();
++#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0)
+     ksu_selinux_hide_handle_post_fs_data();
++#endif
+ }
+ 
+ extern void ext4_unregister_sysfs(struct super_block *sb);
+@@ -216,7 +218,9 @@ int ksu_handle_execveat_ksud(int *fd, struct filename **filename_ptr,
+             char buf[16];
+             if (check_argv(*argv, 1, "second_stage", buf, sizeof(buf))) {
+                 pr_info("/system/bin/init second_stage executed\n");
++#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0)
+                 ksu_selinux_hide_handle_second_stage();
++#endif
+                 apply_kernelsu_rules();
+                 cache_sid();
+                 setup_ksu_cred();
+diff --git a/kernel/sulog/event.c b/kernel/sulog/event.c
+index e45f01fa..c9ba12fe 100644
+--- a/kernel/sulog/event.c
++++ b/kernel/sulog/event.c
+@@ -142,7 +142,7 @@ static __u32 ksu_sulog_flatten_argv(struct user_arg_ptr *argv_user, char *dst, _
+             return ksu_sulog_copy_empty_string(dst);
+ 
+         copied =
+-            strncpy_from_user_nofault(arg, (const void __user *)untagged_addr((unsigned long)arg_user), sizeof(arg));
++            ksu_strncpy_from_user_nofault(arg, (const void __user *)untagged_addr((unsigned long)arg_user), sizeof(arg));
+         if (copied <= 0)
+             return ksu_sulog_copy_empty_string(dst);

@@ -116,7 +116,7 @@ diff --git a/kernel/sulog/event.c b/kernel/sulog/event.c
 index e45f01fa..c9ba12fe 100644
 --- a/kernel/sulog/event.c
 +++ b/kernel/sulog/event.c
-@@ -142,7 +142,7 @@ static __u32 ksu_sulog_flatten_argv(struct user_arg_ptr *argv_user, char *dst, _
+@@ -142,6 +142,6 @@ static __u32 ksu_sulog_flatten_argv(struct user_arg_ptr *argv_user, char *dst, _
              return ksu_sulog_copy_empty_string(dst);
  
          copied =

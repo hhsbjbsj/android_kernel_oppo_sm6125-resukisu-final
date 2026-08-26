@@ -23,10 +23,18 @@ test -L drivers/kernelsu
 test "$(readlink drivers/kernelsu)" = '../KernelSU/kernel'
 grep -Fq 'obj-$(CONFIG_KSU_SUSFS) += susfs.o' fs/Makefile
 
-echo '===== Fetch previously validated PCHM30 SukiSU 4.14 compatibility patch ====='
-git fetch --no-tags origin "$SUKISU_COMPAT_SOURCE_COMMIT"
+echo '===== Fetch PCHM30 SukiSU 4.14 compatibility patch for current builtin pin ====='
 PATCH="$GITHUB_WORKSPACE/sukisu-builtin-4.14-compat.patch"
-git show "FETCH_HEAD:tools/pchm30/sukisu-builtin-4.14-compat.patch" > "$PATCH"
+if git fetch --no-tags --depth=1 origin "$GITHUB_SHA" && \
+   git show "$GITHUB_SHA:.github/patches/sukisu-builtin-4.14-compat.patch" > "$PATCH" && \
+   test -s "$PATCH"; then
+  echo "compat_patch_source=$GITHUB_SHA:.github/patches/sukisu-builtin-4.14-compat.patch"
+else
+  echo '[WARN] run23 local compat patch missing; falling back to proven sukisu-susfs220 patch'
+  git fetch --no-tags origin "$SUKISU_COMPAT_SOURCE_COMMIT"
+  git show "FETCH_HEAD:tools/pchm30/sukisu-builtin-4.14-compat.patch" > "$PATCH"
+  echo "compat_patch_source=$SUKISU_COMPAT_SOURCE_COMMIT:tools/pchm30/sukisu-builtin-4.14-compat.patch"
+fi
 test -s "$PATCH"
 sha256sum "$PATCH"
 

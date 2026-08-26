@@ -1,0 +1,279 @@
+name: PCHM30 A16 Run24 SELinux Hide + KPM RuntimeFix BTF
+# Run24: new line from Run23; enable silence hide on 4.14 without touching kernel source
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [pchm30-a16-run24-selinux-hide]
+    paths:
+      - '.github/workflows/pchm30-a16-run24-selinux-hide.yml'
+      - '.github/workflows/pchm30-a16-run19-kpm-exp1.yml'
+      - '.github/scripts/run16-orchestrate.sh'
+      - '.github/scripts/run18-sukisu-swap.sh'
+      - '.github/patches/sukisu-builtin-4.14-compat.patch'
+      - '.github/scripts/run19-kpm-enable.sh'
+      - '.github/scripts/run24-selinux-hide-compat.sh'
+
+env:
+  TOOLCHAIN_RELEASE_TAG: pchm30-build-environment-20260810
+  TOOLCHAIN_ROOT: /opt/pchm30-toolchains
+  KERNEL_REL: source/android/kernel/msm-4.14
+  OUT_DIR: out-pchm30-a16-bpf
+  CONFIG_FILE: configs/PCHM30-stock-running.config
+  OPPO_VENDOR_REPO: https://github.com/oppo-source/android_kernel_modules_and_devicetree_oppo_sm6125.git
+  OPPO_VENDOR_COMMIT: 5e7bee452c72c948427b9131bec8cd5d92934f83
+  ARESIN_REPO: https://github.com/jsdizkcksv/android_kernel_aresin.git
+  ARESIN_PREREQ: 620d928acca50c8ba013554fc798dcf8b8910918
+  A15_FIRST: a2b662dced04902eb8f1778ec8e30259dc680ff4
+  A15_LAST: bd379f8140acc083fc386cc2600ee205b2a54e31
+  A16_FIRST: c2c621b5448adc69e105b1519b93dd637a581da5
+  A16_LAST: c74436291044381d4365d91afa0c8f4a574b22b4
+  ROOT_SNAPSHOT: b667ba359bf7da11b43c5d6403788d21c19facd7
+  RESUKISU_COMMIT: beaaea0eb895dc41e7b9bf5e3f39e57aa9635bab
+  ROOT_SUCCESS_BRANCH: pchm30-a16-resukisu-susfs220
+  ROOT_SUCCESS_WORKFLOW: .github/workflows/pchm30-a16-resukisu-susfs220-build.yml
+  EXP1_BRANCH: pchm30-a16-btf-sockmap-exp1
+  EXP1_WORKFLOW: .github/workflows/pchm30-a16-btf-sockmap-exp1-v2.yml
+  WIFI_SUCCESS_BRANCH: pchm30-a16-wifi-abi-exp1
+  WIFI_SUCCESS_WORKFLOW: .github/workflows/pchm30-a16-wifi-abi-exp1-build.yml
+  EXP2_BRANCH: pchm30-a16-btf-exp2-diagnose
+  EXP2_WORKFLOW: .github/workflows/pchm30-a16-btf-exp2-diagnose.yml
+  UPSTREAM_BTF_UAPI: f063c889c9458354a92b235a51cbb60d30321070
+  UPSTREAM_BTF_KERNEL: 1dc92851849cc2235a1efef8f8d5a9255efc5f13
+  SUKISU_REPO: https://github.com/SukiSU-Ultra/SukiSU-Ultra.git
+  SUKISU_COMMIT: 5a2bb7e5813002ccaabe02fa864cfb2dde6b5109
+  SUKISU_BRANCH: builtin
+  SUKISU_COMPAT_SOURCE_COMMIT: a8f57213e7f1897914d5ec205741464342c6f0aa
+  SUKISU_PATCH_REPO: https://github.com/SukiSU-Ultra/SukiSU_patch.git
+  SUKISU_PATCH_COMMIT: 547ae94bcaec53d030398f857950c64662043a5d
+  RUN19_SOURCE_BRANCH: pchm30-a16-run24-selinux-hide
+  RUN19_SOURCE_WORKFLOW: .github/workflows/pchm30-a16-run19-kpm-exp1.yml
+  RUN17_BTF_FIX_COMMIT: bc983ae72d5795d0ec2a5b5dd4292dfab1417e57
+  KPM_RUNTIMEFIX_COMMIT: a82515ffbe2e02e9b2f34c0616be9d64c7daa417
+  GH_TOKEN: ${{ github.token }}
+
+jobs:
+  build:
+    name: Run24 silence-hide + proven KPM runtimefix + SukiSU/BBG/LZ4KD + BTF/KPROBES
+    runs-on: ubuntu-22.04
+    timeout-minutes: 360
+    steps:
+      - name: Checkout exact successful A16 rootless baseline
+        uses: actions/checkout@v4
+        with:
+          ref: pchm30-a16-bpf-only
+          path: source/android/kernel/msm-4.14
+          fetch-depth: 1
+          submodules: false
+      - name: Install BTF host tooling without Azure mirror hang
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          echo '===== APT MIRROR BEFORE ====='
+          cat /etc/apt/apt-mirrors.txt 2>/dev/null || true
+          if [ -f /etc/apt/apt-mirrors.txt ]; then
+            printf '%s\n' 'https://archive.ubuntu.com/ubuntu/' | sudo tee /etc/apt/apt-mirrors.txt >/dev/null
+          fi
+          sudo sed -i -e 's#http://azure.archive.ubuntu.com/ubuntu#https://archive.ubuntu.com/ubuntu#g' -e 's#https://azure.archive.ubuntu.com/ubuntu#https://archive.ubuntu.com/ubuntu#g' /etc/apt/sources.list 2>/dev/null || true
+          sudo find /etc/apt/sources.list.d -maxdepth 1 -type f -print0 2>/dev/null | sudo xargs -0 -r sed -i -e 's#http://azure.archive.ubuntu.com/ubuntu#https://archive.ubuntu.com/ubuntu#g' -e 's#https://azure.archive.ubuntu.com/ubuntu#https://archive.ubuntu.com/ubuntu#g' || true
+          APT_OPTS=(-o Acquire::Retries=2 -o Acquire::ForceIPv4=true -o Acquire::http::Timeout=20 -o Acquire::https::Timeout=20)
+          apt_retry() { local attempt rc; for attempt in 1 2 3; do echo "===== apt attempt ${attempt}/3: $* ====="; set +e; sudo timeout 240s apt-get "${APT_OPTS[@]}" "$@"; rc=$?; set -e; if [ "$rc" -eq 0 ]; then return 0; fi; echo "[WARN] apt attempt ${attempt} failed/timed out rc=${rc}"; sudo rm -rf /var/lib/apt/lists/partial/* || true; sleep $((attempt * 5)); done; return 1; }
+          apt_retry update
+          DEBIAN_FRONTEND=noninteractive apt_retry install -y --no-install-recommends dwarves binutils
+          pahole --version
+      - name: Hard gate proven KPM runtime-fix ancestry
+        working-directory: source/android/kernel/msm-4.14
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          git fetch --no-tags --depth=1 origin "$GITHUB_SHA"
+          git show "$GITHUB_SHA:.github/scripts/run19-kpm-enable.sh" > "$GITHUB_WORKSPACE/run23-kpm-enable-proof.sh"
+          grep -Fq 'pchm30_kpm_access_ok_write' "$GITHUB_WORKSPACE/run23-kpm-enable-proof.sh"
+          grep -Fq "new = 'if (!pchm30_kpm_access_ok_write(arg1, len)) {'" "$GITHUB_WORKSPACE/run23-kpm-enable-proof.sh"
+          grep -Fq 'PCHM30 RUN20 KPM load ENTER' "$GITHUB_WORKSPACE/run23-kpm-enable-proof.sh"
+          grep -Fq 'PCHM30 RUN20 KPM load EXIT' "$GITHUB_WORKSPACE/run23-kpm-enable-proof.sh"
+          grep -Fq 'PCHM30 RUN20 KPM list ENTER' "$GITHUB_WORKSPACE/run23-kpm-enable-proof.sh"
+          grep -Fq 'PCHM30 RUN20 KPM list EXIT' "$GITHUB_WORKSPACE/run23-kpm-enable-proof.sh"
+          echo 'kpm_runtimefix_base=a82515ffbe2e02e9b2f34c0616be9d64c7daa417' | tee "$GITHUB_WORKSPACE/run23-kpm-runtimefix-base-proof.txt"
+          echo '[PASS] Run23 is on the 4.14 KPM runtime-fix line; old run19-kpm-exp1-only base is forbidden' | tee -a "$GITHUB_WORKSPACE/run23-kpm-runtimefix-base-proof.txt"
+      - name: Prepare proven KPM step runner from Run23 ref
+        working-directory: source/android/kernel/msm-4.14
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          git fetch --no-tags --depth=1 origin "$RUN19_SOURCE_BRANCH"
+          git show "FETCH_HEAD:$RUN19_SOURCE_WORKFLOW" > "$GITHUB_WORKSPACE/run19-source.yml"
+          grep -Fq 'PCHM30 A16 Run19 KPM EXP1' "$GITHUB_WORKSPACE/run19-source.yml"
+          cat > "$GITHUB_WORKSPACE/run-run19-step.py" <<'PY'
+          import os, subprocess, sys
+          from pathlib import Path
+          if len(sys.argv) != 2:
+              raise SystemExit('usage: run-run19-step.py <step name>')
+          name = sys.argv[1]
+          workspace = Path(os.environ['GITHUB_WORKSPACE'])
+          lines = (workspace / 'run19-source.yml').read_text().splitlines(True)
+          marker = f'      - name: {name}\n'
+          try:
+              start = lines.index(marker)
+          except ValueError:
+              raise SystemExit(f'Run19 step not found: {name}')
+          end = len(lines)
+          for i in range(start + 1, len(lines)):
+              if lines[i].startswith('      - name: '):
+                  end = i
+                  break
+          block = lines[start:end]
+          workdir = None
+          run_index = None
+          for i, line in enumerate(block):
+              if line.startswith('        working-directory: '):
+                  workdir = line.split(': ', 1)[1].strip()
+              if line.startswith('        run: '):
+                  if line.split(': ', 1)[1].strip() not in ('|', '|-', '|+', '>', '>-', '>+'):
+                      raise SystemExit(f'unsupported inline run step: {name}')
+                  run_index = i + 1
+                  break
+          if run_index is None:
+              raise SystemExit(f'Run19 step is not shell: {name}')
+          script_lines = []
+          for line in block[run_index:]:
+              if line.startswith('          '):
+                  script_lines.append(line[10:])
+              elif line.strip() == '':
+                  script_lines.append('\n')
+              else:
+                  raise SystemExit(f'unexpected indentation: {line!r}')
+          cwd = workspace / workdir if workdir else workspace
+          print(f'===== REUSE KPM RUNTIMEFIX STEP: {name} =====', flush=True)
+          subprocess.run(['bash', '-c', 'set -Eeuo pipefail\n' + ''.join(script_lines)], cwd=cwd, check=True, env=os.environ.copy())
+          PY
+          python3 -m py_compile "$GITHUB_WORKSPACE/run-run19-step.py"
+      - name: Build KPM runtimefixed SukiSU BBG LZ4KD stack
+        shell: bash
+        run: python3 "$GITHUB_WORKSPACE/run-run19-step.py" 'Build Run19 from proven Run18 stack with KPM compiled in'
+      - name: Verify KPM runtime fix reached generated source
+        working-directory: source/android/kernel/msm-4.14
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          test -f KernelSU/kernel/kpm/kpm.c
+          grep -Fq 'pchm30_kpm_access_ok_write' KernelSU/kernel/kpm/kpm.c
+          grep -Fq 'if (!pchm30_kpm_access_ok_write(arg1, len)) {' KernelSU/kernel/kpm/kpm.c
+          grep -Fq 'PCHM30 RUN20 KPM load ENTER' KernelSU/kernel/kpm/kpm.c
+          grep -Fq 'PCHM30 RUN20 KPM load EXIT' KernelSU/kernel/kpm/kpm.c
+          grep -Fq 'PCHM30 RUN20 KPM list ENTER' KernelSU/kernel/kpm/kpm.c
+          grep -Fq 'PCHM30 RUN20 KPM list EXIT' KernelSU/kernel/kpm/kpm.c
+          test -s "$GITHUB_WORKSPACE/run24-selinux-hide-proof.txt"
+          grep -Fq 'PCHM30 RUN24 selinux_hide enable ENTER' KernelSU/kernel/feature/selinux_hide.c
+          grep -Fq '#include "hook/arm64/patch_memory.c"' KernelSU/kernel/ksu.c
+          echo '[PASS] generated KernelSU KPM source contains the proven 4.14 runtime fixes' | tee "$GITHUB_WORKSPACE/run23-kpm-runtimefix-source-proof.txt"
+      - name: Apply successful Run17 BTF Kprobe fix and relink
+        working-directory: source/android/kernel/msm-4.14
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          git fetch --no-tags --depth=1 origin "$RUN17_BTF_FIX_COMMIT"
+          git show "$RUN17_BTF_FIX_COMMIT:.github/scripts/run17-btf-kprobe-scene-fix.sh" > "$GITHUB_WORKSPACE/run19-btf-kprobe-scene-fix.sh"
+          chmod +x "$GITHUB_WORKSPACE/run19-btf-kprobe-scene-fix.sh"
+          "$GITHUB_WORKSPACE/run19-btf-kprobe-scene-fix.sh"
+          CC_BIN="${CC:-$TOOLCHAIN_ROOT/Snapdragon-LLVM-ARM-Compiler-10.0.7-for-Android-NDK/bin/clang}"
+          REAL_CC_BIN="${REAL_CC:-$CC_BIN}"
+          CROSS64="${CROSS_COMPILE:-$TOOLCHAIN_ROOT/aarch64-linux-android-4.9/bin/aarch64-linux-android-}"
+          CROSS32="${CROSS_COMPILE_ARM32:-$TOOLCHAIN_ROOT/arm-linux-androideabi-4.9/bin/arm-linux-androideabi-}"
+          LD_BIN="${LD:-${CROSS64}ld}"
+          CLANG_TRIPLE_BIN="${CLANG_TRIPLE:-aarch64-linux-gnu-}"
+          test -x "$CC_BIN"
+          test -x "$LD_BIN"
+          test -x "${CROSS64}objcopy"
+          unset LLVM LLVM_IAS KBUILD_COMPILER_STRING
+          make O="$OUT_DIR" ARCH=arm64 LOCALVERSION=+ CC="$CC_BIN" REAL_CC="$REAL_CC_BIN" LD="$LD_BIN" CROSS_COMPILE="$CROSS64" CROSS_COMPILE_ARM32="$CROSS32" CLANG_TRIPLE="$CLANG_TRIPLE_BIN" -j4
+      - name: Verify original KPM and Run18 features still survive
+        shell: bash
+        run: python3 "$GITHUB_WORKSPACE/run-run19-step.py" 'Verify compiled KPM and all proven Run18 features'
+      - name: Hard verify BTF Kprobes Scene and KPM runtimefix together
+        working-directory: source/android/kernel/msm-4.14
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          IMAGE="$OUT_DIR/arch/arm64/boot/Image"
+          VMLINUX="$OUT_DIR/vmlinux"
+          CONFIG="$OUT_DIR/.config"
+          CROSS64="${CROSS_COMPILE:-$TOOLCHAIN_ROOT/aarch64-linux-android-4.9/bin/aarch64-linux-android-}"
+          OBJCOPY_BIN="${CROSS64}objcopy"
+          RUN23_NM="$GITHUB_WORKSPACE/run23-vmlinux-nm.txt"
+          test -s "$IMAGE"
+          test -s "$VMLINUX"
+          test -x "$OBJCOPY_BIN"
+          test -s "$GITHUB_WORKSPACE/run18-sukisu-proof.txt"
+          test -s "$GITHUB_WORKSPACE/run19-kpm-config-proof.txt"
+          test -s "$GITHUB_WORKSPACE/run17-bbg-zram-stage-proof.txt"
+          test -s "$GITHUB_WORKSPACE/run17-btf-kprobe-scene-stage-proof.txt"
+          test -s "$GITHUB_WORKSPACE/run23-kpm-runtimefix-base-proof.txt"
+          test -s "$GITHUB_WORKSPACE/run23-kpm-runtimefix-source-proof.txt"
+          for cfg in CONFIG_KSU=y CONFIG_KSU_SUSFS=y CONFIG_KPM=y CONFIG_KALLSYMS=y CONFIG_KALLSYMS_ALL=y CONFIG_BBG=y CONFIG_CRYPTO_LZ4K=y CONFIG_CRYPTO_LZ4KD=y CONFIG_LZ4K_COMPRESS=y CONFIG_LZ4K_DECOMPRESS=y CONFIG_LZ4KD_COMPRESS=y CONFIG_LZ4KD_DECOMPRESS=y CONFIG_BPF=y CONFIG_BPF_SYSCALL=y CONFIG_BPF_JIT=y CONFIG_CGROUP_BPF=y CONFIG_BPF_STREAM_PARSER=y CONFIG_DEBUG_INFO=y CONFIG_DEBUG_INFO_BTF=y CONFIG_KPROBES=y CONFIG_KRETPROBES=y CONFIG_KPROBE_EVENTS=y CONFIG_PERF_EVENTS=y CONFIG_BPF_EVENTS=y; do
+            grep -qx "$cfg" "$CONFIG" || { echo "[FATAL] missing $cfg"; exit 91; }
+          done
+          readelf -SW "$VMLINUX" | grep -E '[[:space:]]\.BTF[[:space:]]' | tee "$GITHUB_WORKSPACE/run23-btf-kprobe-proof.txt"
+          test "$(readelf -SW "$VMLINUX" | grep -Ec '[[:space:]]\.BTF[[:space:]]')" -eq 1
+          "$OBJCOPY_BIN" --dump-section .BTF="$GITHUB_WORKSPACE/run23-vmlinux.btf" "$VMLINUX"
+          test -s "$GITHUB_WORKSPACE/run23-vmlinux.btf"
+          nm "$VMLINUX" > "$RUN23_NM"
+          grep -E '__start_BTF$|__stop_BTF$|btf_vmlinux|__btf_vmlinux' "$RUN23_NM" | head -n 20 | tee -a "$GITHUB_WORKSPACE/run23-btf-kprobe-proof.txt" || true
+          grep -Eq '[[:space:]]register_kprobe$' "$RUN23_NM"
+          grep -Eq '[[:space:]]register_kretprobe$' "$RUN23_NM"
+          for sym in sys_bind sys_getsockname sys_close; do
+            grep -Eq "[[:space:]]${sym}$" "$RUN23_NM" || { echo "[FATAL] missing ${sym}"; exit 92; }
+          done
+          grep -Fq 'default_compressor = "lz4kd"' drivers/block/zram/zram_drv.c
+          grep -Fq 'PCHM30 RUN20 KPM load ENTER' KernelSU/kernel/kpm/kpm.c
+          grep -Fq 'if (!pchm30_kpm_access_ok_write(arg1, len)) {' KernelSU/kernel/kpm/kpm.c
+          test -s "$GITHUB_WORKSPACE/run24-selinux-hide-proof.txt"
+          grep -Fxq 'selinux_hide_4_14=enabled' "$GITHUB_WORKSPACE/run24-selinux-hide-proof.txt"
+          grep -Fq 'PCHM30 RUN24 selinux_hide enable ENTER' KernelSU/kernel/feature/selinux_hide.c
+          grep -Fq 'PCHM30 RUN24 selinux_hide legacy policy backup READY' KernelSU/kernel/selinux/rules.c
+          grep -Fq '#include "hook/arm64/patch_memory.c"' KernelSU/kernel/ksu.c
+          grep -Fq 'ksu_selinux_hide_init();' KernelSU/kernel/ksu.c
+          grep -Fq 'ksu_selinux_hide_handle_second_stage();' KernelSU/kernel/runtime/ksud.c
+          grep -Eq '[[:space:]]ksu_selinux_hide_init$' "$RUN23_NM" || { echo '[FATAL] missing ksu_selinux_hide_init'; exit 93; }
+          echo '[PASS] Run24 has silence-hide on 4.14 + proven KPM runtimefix + SukiSU/SUSFS/BBG/LZ4KD + BTF/KPROBES/Scene' | tee -a "$GITHUB_WORKSPACE/run23-btf-kprobe-proof.txt"
+      - name: Patch final Image with proven SukiSU KPM patcher
+        shell: bash
+        run: python3 "$GITHUB_WORKSPACE/run-run19-step.py" 'Patch final Image with pinned SukiSU KPM patcher'
+      - name: Package reusable flash ZIP
+        shell: bash
+        run: python3 "$GITHUB_WORKSPACE/run-run19-step.py" 'Package reusable PCHM30 Run19 KPM AnyKernel3 ZIP'
+      - name: Upload Run24 silence-hide artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: PCHM30-A16-RUN24-SELINUX-HIDE-${{ github.run_number }}
+          path: |
+            run24-selinux-hide-compat.log
+            run24-selinux-hide-proof.txt
+            run23-kpm-runtimefix-base-proof.txt
+            run23-kpm-runtimefix-source-proof.txt
+            run18-sukisu-swap.log
+            run18-sukisu-proof.txt
+            run19-kpm-enable.log
+            run19-kpm-config-proof.txt
+            run19-kpm-patcher.log
+            run19-kpm-final-proof.txt
+            run16-builtin-proof.txt
+            run17-builtin-runtime-proof.txt
+            run17-bbg-zram-stage-proof.txt
+            run17-btf-kprobe-scene-stage-proof.txt
+            run19-btf-kprobe-scene-fix.log
+            run23-btf-kprobe-proof.txt
+            run23-vmlinux.btf
+            run23-vmlinux-nm.txt
+            run19-prepatch-image-strings.txt
+            run19-patched-image-strings.txt
+            run19-vmlinux-nm.txt
+            PCHM30-A16-RUN19-KPM-PREPATCH-Image-${{ github.run_number }}
+            PCHM30-A16-RUN19-KPM-SUKISU-Image-${{ github.run_number }}
+            PCHM30-A16-RUN19-KPM-SUKISU-SUSFS220-AK3-${{ github.run_number }}.zip
+            PCHM30-A16-RUN19-KPM-SUKISU-SUSFS220-AK3-${{ github.run_number }}.zip.sha256
+            source/android/kernel/msm-4.14/out-pchm30-a16-bpf/.config
+            source/android/kernel/msm-4.14/out-pchm30-a16-bpf/arch/arm64/boot/Image
+          include-hidden-files: true
+          if-no-files-found: warn

@@ -55,7 +55,6 @@ jobs:
     name: Run23 proven KPM runtimefix + SukiSU/BBG/LZ4KD + BTF/KPROBES
     runs-on: ubuntu-22.04
     timeout-minutes: 360
-
     steps:
       - name: Checkout exact successful A16 rootless baseline
         uses: actions/checkout@v4
@@ -64,3 +63,202 @@ jobs:
           path: source/android/kernel/msm-4.14
           fetch-depth: 1
           submodules: false
+      - name: Install BTF host tooling without Azure mirror hang
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          echo '===== APT MIRROR BEFORE ====='
+          cat /etc/apt/apt-mirrors.txt 2>/dev/null || true
+          if [ -f /etc/apt/apt-mirrors.txt ]; then
+            printf '%s\n' 'https://archive.ubuntu.com/ubuntu/' | sudo tee /etc/apt/apt-mirrors.txt >/dev/null
+          fi
+          sudo sed -i -e 's#http://azure.archive.ubuntu.com/ubuntu#https://archive.ubuntu.com/ubuntu#g' -e 's#https://azure.archive.ubuntu.com/ubuntu#https://archive.ubuntu.com/ubuntu#g' /etc/apt/sources.list 2>/dev/null || true
+          sudo find /etc/apt/sources.list.d -maxdepth 1 -type f -print0 2>/dev/null | sudo xargs -0 -r sed -i -e 's#http://azure.archive.ubuntu.com/ubuntu#https://archive.ubuntu.com/ubuntu#g' -e 's#https://azure.archive.ubuntu.com/ubuntu#https://archive.ubuntu.com/ubuntu#g' || true
+          APT_OPTS=(-o Acquire::Retries=2 -o Acquire::ForceIPv4=true -o Acquire::http::Timeout=20 -o Acquire::https::Timeout=20)
+          apt_retry() { local attempt rc; for attempt in 1 2 3; do echo "===== apt attempt ${attempt}/3: $* ====="; set +e; sudo timeout 240s apt-get "${APT_OPTS[@]}" "$@"; rc=$?; set -e; if [ "$rc" -eq 0 ]; then return 0; fi; echo "[WARN] apt attempt ${attempt} failed/timed out rc=${rc}"; sudo rm -rf /var/lib/apt/lists/partial/* || true; sleep $((attempt * 5)); done; return 1; }
+          apt_retry update
+          DEBIAN_FRONTEND=noninteractive apt_retry install -y --no-install-recommends dwarves binutils
+          pahole --version
+      - name: Hard gate proven KPM runtime-fix ancestry
+        working-directory: source/android/kernel/msm-4.14
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          git fetch --no-tags --depth=1 origin "$GITHUB_SHA"
+          git show "$GITHUB_SHA:.github/scripts/run19-kpm-enable.sh" > "$GITHUB_WORKSPACE/run23-kpm-enable-proof.sh"
+          grep -Fq 'pchm30_kpm_access_ok_write' "$GITHUB_WORKSPACE/run23-kpm-enable-proof.sh"
+          grep -Fq "new = 'if (!pchm30_kpm_access_ok_write(arg1, len)) {'" "$GITHUB_WORKSPACE/run23-kpm-enable-proof.sh"
+          grep -Fq 'PCHM30 RUN20 KPM load ENTER' "$GITHUB_WORKSPACE/run23-kpm-enable-proof.sh"
+          grep -Fq 'PCHM30 RUN20 KPM load EXIT' "$GITHUB_WORKSPACE/run23-kpm-enable-proof.sh"
+          grep -Fq 'PCHM30 RUN20 KPM list ENTER' "$GITHUB_WORKSPACE/run23-kpm-enable-proof.sh"
+          grep -Fq 'PCHM30 RUN20 KPM list EXIT' "$GITHUB_WORKSPACE/run23-kpm-enable-proof.sh"
+          echo 'kpm_runtimefix_base=a82515ffbe2e02e9b2f34c0616be9d64c7daa417' | tee "$GITHUB_WORKSPACE/run23-kpm-runtimefix-base-proof.txt"
+          echo '[PASS] Run23 is on the 4.14 KPM runtime-fix line; old run19-kpm-exp1-only base is forbidden' | tee -a "$GITHUB_WORKSPACE/run23-kpm-runtimefix-base-proof.txt"
+      - name: Prepare proven KPM step runner from Run23 ref
+        working-directory: source/android/kernel/msm-4.14
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          git fetch --no-tags --depth=1 origin "$RUN19_SOURCE_BRANCH"
+          git show "FETCH_HEAD:$RUN19_SOURCE_WORKFLOW" > "$GITHUB_WORKSPACE/run19-source.yml"
+          grep -Fq 'PCHM30 A16 Run19 KPM EXP1' "$GITHUB_WORKSPACE/run19-source.yml"
+          cat > "$GITHUB_WORKSPACE/run-run19-step.py" <<'PY'
+          import os, subprocess, sys
+          from pathlib import Path
+          if len(sys.argv) != 2:
+              raise SystemExit('usage: run-run19-step.py <step name>')
+          name = sys.argv[1]
+          workspace = Path(os.environ['GITHUB_WORKSPACE'])
+          lines = (workspace / 'run19-source.yml').read_text().splitlines(True)
+          marker = f'      - name: {name}\n'
+          try:
+              start = lines.index(marker)
+          except ValueError:
+              raise SystemExit(f'Run19 step not found: {name}')
+          end = len(lines)
+          for i in range(start + 1, len(lines)):
+              if lines[i].startswith('      - name: '):
+                  end = i
+                  break
+          block = lines[start:end]
+          workdir = None
+          run_index = None
+          for i, line in enumerate(block):
+              if line.startswith('        working-directory: '):
+                  workdir = line.split(': ', 1)[1].strip()
+              if line.startswith('        run: '):
+                  if line.split(': ', 1)[1].strip() not in ('|', '|-', '|+', '>', '>-', '>+'):
+                      raise SystemExit(f'unsupported inline run step: {name}')
+                  run_index = i + 1
+                  break
+          if run_index is None:
+              raise SystemExit(f'Run19 step is not shell: {name}')
+          script_lines = []
+          for line in block[run_index:]:
+              if line.startswith('          '):
+                  script_lines.append(line[10:])
+              elif line.strip() == '':
+                  script_lines.append('\n')
+              else:
+                  raise SystemExit(f'unexpected indentation: {line!r}')
+          cwd = workspace / workdir if workdir else workspace
+          print(f'===== REUSE KPM RUNTIMEFIX STEP: {name} =====', flush=True)
+          subprocess.run(['bash', '-c', 'set -Eeuo pipefail\n' + ''.join(script_lines)], cwd=cwd, check=True, env=os.environ.copy())
+          PY
+          python3 -m py_compile "$GITHUB_WORKSPACE/run-run19-step.py"
+      - name: Build KPM runtimefixed SukiSU BBG LZ4KD stack
+        shell: bash
+        run: python3 "$GITHUB_WORKSPACE/run-run19-step.py" 'Build Run19 from proven Run18 stack with KPM compiled in'
+      - name: Verify KPM runtime fix reached generated source
+        working-directory: source/android/kernel/msm-4.14
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          test -f KernelSU/kernel/kpm/kpm.c
+          grep -Fq 'pchm30_kpm_access_ok_write' KernelSU/kernel/kpm/kpm.c
+          grep -Fq 'if (!pchm30_kpm_access_ok_write(arg1, len)) {' KernelSU/kernel/kpm/kpm.c
+          grep -Fq 'PCHM30 RUN20 KPM load ENTER' KernelSU/kernel/kpm/kpm.c
+          grep -Fq 'PCHM30 RUN20 KPM load EXIT' KernelSU/kernel/kpm/kpm.c
+          grep -Fq 'PCHM30 RUN20 KPM list ENTER' KernelSU/kernel/kpm/kpm.c
+          grep -Fq 'PCHM30 RUN20 KPM list EXIT' KernelSU/kernel/kpm/kpm.c
+          echo '[PASS] generated KernelSU KPM source contains the proven 4.14 runtime fixes' | tee "$GITHUB_WORKSPACE/run23-kpm-runtimefix-source-proof.txt"
+      - name: Apply successful Run17 BTF Kprobe fix and relink
+        working-directory: source/android/kernel/msm-4.14
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          git fetch --no-tags --depth=1 origin "$RUN17_BTF_FIX_COMMIT"
+          git show "$RUN17_BTF_FIX_COMMIT:.github/scripts/run17-btf-kprobe-scene-fix.sh" > "$GITHUB_WORKSPACE/run19-btf-kprobe-scene-fix.sh"
+          chmod +x "$GITHUB_WORKSPACE/run19-btf-kprobe-scene-fix.sh"
+          "$GITHUB_WORKSPACE/run19-btf-kprobe-scene-fix.sh"
+          CC_BIN="${CC:-$TOOLCHAIN_ROOT/Snapdragon-LLVM-ARM-Compiler-10.0.7-for-Android-NDK/bin/clang}"
+          REAL_CC_BIN="${REAL_CC:-$CC_BIN}"
+          CROSS64="${CROSS_COMPILE:-$TOOLCHAIN_ROOT/aarch64-linux-android-4.9/bin/aarch64-linux-android-}"
+          CROSS32="${CROSS_COMPILE_ARM32:-$TOOLCHAIN_ROOT/arm-linux-androideabi-4.9/bin/arm-linux-androideabi-}"
+          LD_BIN="${LD:-${CROSS64}ld}"
+          CLANG_TRIPLE_BIN="${CLANG_TRIPLE:-aarch64-linux-gnu-}"
+          test -x "$CC_BIN"
+          test -x "$LD_BIN"
+          test -x "${CROSS64}objcopy"
+          unset LLVM LLVM_IAS KBUILD_COMPILER_STRING
+          make O="$OUT_DIR" ARCH=arm64 LOCALVERSION=+ CC="$CC_BIN" REAL_CC="$REAL_CC_BIN" LD="$LD_BIN" CROSS_COMPILE="$CROSS64" CROSS_COMPILE_ARM32="$CROSS32" CLANG_TRIPLE="$CLANG_TRIPLE_BIN" -j4
+      - name: Verify original KPM and Run18 features still survive
+        shell: bash
+        run: python3 "$GITHUB_WORKSPACE/run-run19-step.py" 'Verify compiled KPM and all proven Run18 features'
+      - name: Hard verify BTF Kprobes Scene and KPM runtimefix together
+        working-directory: source/android/kernel/msm-4.14
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          IMAGE="$OUT_DIR/arch/arm64/boot/Image"
+          VMLINUX="$OUT_DIR/vmlinux"
+          CONFIG="$OUT_DIR/.config"
+          CROSS64="${CROSS_COMPILE:-$TOOLCHAIN_ROOT/aarch64-linux-android-4.9/bin/aarch64-linux-android-}"
+          OBJCOPY_BIN="${CROSS64}objcopy"
+          RUN23_NM="$GITHUB_WORKSPACE/run23-vmlinux-nm.txt"
+          test -s "$IMAGE"
+          test -s "$VMLINUX"
+          test -x "$OBJCOPY_BIN"
+          test -s "$GITHUB_WORKSPACE/run18-sukisu-proof.txt"
+          test -s "$GITHUB_WORKSPACE/run19-kpm-config-proof.txt"
+          test -s "$GITHUB_WORKSPACE/run17-bbg-zram-stage-proof.txt"
+          test -s "$GITHUB_WORKSPACE/run17-btf-kprobe-scene-stage-proof.txt"
+          test -s "$GITHUB_WORKSPACE/run23-kpm-runtimefix-base-proof.txt"
+          test -s "$GITHUB_WORKSPACE/run23-kpm-runtimefix-source-proof.txt"
+          for cfg in CONFIG_KSU=y CONFIG_KSU_SUSFS=y CONFIG_KPM=y CONFIG_KALLSYMS=y CONFIG_KALLSYMS_ALL=y CONFIG_BBG=y CONFIG_CRYPTO_LZ4K=y CONFIG_CRYPTO_LZ4KD=y CONFIG_LZ4K_COMPRESS=y CONFIG_LZ4K_DECOMPRESS=y CONFIG_LZ4KD_COMPRESS=y CONFIG_LZ4KD_DECOMPRESS=y CONFIG_BPF=y CONFIG_BPF_SYSCALL=y CONFIG_BPF_JIT=y CONFIG_CGROUP_BPF=y CONFIG_BPF_STREAM_PARSER=y CONFIG_DEBUG_INFO=y CONFIG_DEBUG_INFO_BTF=y CONFIG_KPROBES=y CONFIG_KRETPROBES=y CONFIG_KPROBE_EVENTS=y CONFIG_PERF_EVENTS=y CONFIG_BPF_EVENTS=y; do
+            grep -qx "$cfg" "$CONFIG" || { echo "[FATAL] missing $cfg"; exit 91; }
+          done
+          readelf -SW "$VMLINUX" | grep -E '[[:space:]]\.BTF[[:space:]]' | tee "$GITHUB_WORKSPACE/run23-btf-kprobe-proof.txt"
+          test "$(readelf -SW "$VMLINUX" | grep -Ec '[[:space:]]\.BTF[[:space:]]')" -eq 1
+          "$OBJCOPY_BIN" --dump-section .BTF="$GITHUB_WORKSPACE/run23-vmlinux.btf" "$VMLINUX"
+          test -s "$GITHUB_WORKSPACE/run23-vmlinux.btf"
+          nm "$VMLINUX" > "$RUN23_NM"
+          grep -E '__start_BTF$|__stop_BTF$|btf_vmlinux|__btf_vmlinux' "$RUN23_NM" | head -n 20 | tee -a "$GITHUB_WORKSPACE/run23-btf-kprobe-proof.txt" || true
+          grep -Eq '[[:space:]]register_kprobe$' "$RUN23_NM"
+          grep -Eq '[[:space:]]register_kretprobe$' "$RUN23_NM"
+          for sym in sys_bind sys_getsockname sys_close; do
+            grep -Eq "[[:space:]]${sym}$" "$RUN23_NM" || { echo "[FATAL] missing ${sym}"; exit 92; }
+          done
+          grep -Fq 'default_compressor = "lz4kd"' drivers/block/zram/zram_drv.c
+          grep -Fq 'PCHM30 RUN20 KPM load ENTER' KernelSU/kernel/kpm/kpm.c
+          grep -Fq 'if (!pchm30_kpm_access_ok_write(arg1, len)) {' KernelSU/kernel/kpm/kpm.c
+          echo '[PASS] Run23 has proven KPM 4.14 runtimefix + SukiSU/SUSFS/BBG/LZ4KD + BTF/KPROBES/Scene' | tee -a "$GITHUB_WORKSPACE/run23-btf-kprobe-proof.txt"
+      - name: Patch final Image with proven SukiSU KPM patcher
+        shell: bash
+        run: python3 "$GITHUB_WORKSPACE/run-run19-step.py" 'Patch final Image with pinned SukiSU KPM patcher'
+      - name: Package reusable flash ZIP
+        shell: bash
+        run: python3 "$GITHUB_WORKSPACE/run-run19-step.py" 'Package reusable PCHM30 Run19 KPM AnyKernel3 ZIP'
+      - name: Upload Run23 corrected artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: PCHM30-A16-RUN23-KPM-RUNTIMEFIX-BTF-${{ github.run_number }}
+          path: |
+            run23-kpm-runtimefix-base-proof.txt
+            run23-kpm-runtimefix-source-proof.txt
+            run18-sukisu-swap.log
+            run18-sukisu-proof.txt
+            run19-kpm-enable.log
+            run19-kpm-config-proof.txt
+            run19-kpm-patcher.log
+            run19-kpm-final-proof.txt
+            run16-builtin-proof.txt
+            run17-builtin-runtime-proof.txt
+            run17-bbg-zram-stage-proof.txt
+            run17-btf-kprobe-scene-stage-proof.txt
+            run19-btf-kprobe-scene-fix.log
+            run23-btf-kprobe-proof.txt
+            run23-vmlinux.btf
+            run23-vmlinux-nm.txt
+            run19-prepatch-image-strings.txt
+            run19-patched-image-strings.txt
+            run19-vmlinux-nm.txt
+            PCHM30-A16-RUN19-KPM-PREPATCH-Image-${{ github.run_number }}
+            PCHM30-A16-RUN19-KPM-SUKISU-Image-${{ github.run_number }}
+            PCHM30-A16-RUN19-KPM-SUKISU-SUSFS220-AK3-${{ github.run_number }}.zip
+            PCHM30-A16-RUN19-KPM-SUKISU-SUSFS220-AK3-${{ github.run_number }}.zip.sha256
+            source/android/kernel/msm-4.14/out-pchm30-a16-bpf/.config
+            source/android/kernel/msm-4.14/out-pchm30-a16-bpf/arch/arm64/boot/Image
+          include-hidden-files: true
+          if-no-files-found: warn

@@ -7,10 +7,20 @@ cd "$KERNEL_DIR"
 MODE="${1:-defer}"
 RUN17_STAGE="$GITHUB_WORKSPACE/run17-bbg-lz4kd.sh"
 RUN17_PROOF="$GITHUB_WORKSPACE/run17-bbg-zram-stage-proof.txt"
+RUN24_STAGE="$GITHUB_WORKSPACE/run24-selinux-hide-compat.sh"
 LOG="$GITHUB_WORKSPACE/run19-kpm-enable.log"
 
 if [[ "$MODE" != "--apply" ]]; then
   exec > >(tee "$LOG") 2>&1
+
+  echo '===== RUN24: apply Linux 4.14 SELinux-hide compatibility before KPM defer ====='
+  git show "$GITHUB_SHA:.github/scripts/run24-selinux-hide-compat.sh" > "$RUN24_STAGE"
+  chmod +x "$RUN24_STAGE"
+  "$RUN24_STAGE"
+  test -s "$GITHUB_WORKSPACE/run24-selinux-hide-proof.txt"
+  grep -Fxq 'selinux_hide_4_14=enabled' "$GITHUB_WORKSPACE/run24-selinux-hide-proof.txt"
+  grep -Fxq 'patch_memory=vendored' "$GITHUB_WORKSPACE/run24-selinux-hide-proof.txt"
+
   echo '===== RUN20: defer KPM until proven Run17 BBG/LZ4KD stage completes ====='
   test -f "$RUN17_STAGE"
 
@@ -195,6 +205,7 @@ grep -Fq '#define SUSFS_VERSION "v2.2.0"' include/linux/susfs.h
   echo 'bbg=preserved'
   echo 'lz4k_lz4kd=preserved'
   echo 'run18_stack=preserved'
+  echo 'run24_selinux_hide=staged'
 } | tee "$GITHUB_WORKSPACE/run19-kpm-config-proof.txt"
 
-echo '[PASS] Run20 enabled and hardened KPM after proven Run17 BBG/LZ4KD staging'
+echo '[PASS] Run24 kept Run20 KPM hardening and staged SELinux-hide compatibility'

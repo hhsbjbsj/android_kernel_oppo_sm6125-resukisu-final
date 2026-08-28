@@ -1,0 +1,102 @@
+name: PCHM30 A16 Run25 SM6125 Mainline Probe
+# Run25: from proven run24 hide identity, probe Linux mainline SM6125.
+# This is an audit + compile experiment. It does NOT produce a safe Android flash.
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - pchm30-a16-run25-sm6125-mainline
+    paths:
+      - '.github/workflows/pchm30-a16-run25-sm6125-mainline.yml'
+      - '.github/scripts/run25-sm6125-mainline.sh'
+      - 'arch/arm64/boot/dts/qcom/trinket.dtsi'
+
+permissions:
+  contents: read
+
+jobs:
+  mainline-probe:
+    name: Run25 SM6125 mainline DTS + Image.gz probe
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    steps:
+      - name: Checkout run24-based Run25 tree (sparse)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          sparse-checkout: |
+            .github/scripts/run25-sm6125-mainline.sh
+            .github/workflows/pchm30-a16-run25-sm6125-mainline.yml
+            arch/arm64/boot/dts/qcom/trinket.dtsi
+          sparse-checkout-cone-mode: false
+
+      - name: Install aarch64 cross toolchain without Azure mirror hang
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          echo '===== APT MIRROR BEFORE ====='
+          cat /etc/apt/apt-mirrors.txt 2>/dev/null || true
+          if [ -f /etc/apt/apt-mirrors.txt ]; then
+            printf '%s\n' 'https://archive.ubuntu.com/ubuntu/' | sudo tee /etc/apt/apt-mirrors.txt >/dev/null
+          fi
+          sudo sed -i \
+            -e 's#http://azure.archive.ubuntu.com/ubuntu#https://archive.ubuntu.com/ubuntu#g' \
+            -e 's#https://azure.archive.ubuntu.com/ubuntu#https://archive.ubuntu.com/ubuntu#g' \
+            /etc/apt/sources.list 2>/dev/null || true
+          sudo find /etc/apt/sources.list.d -maxdepth 1 -type f -print0 2>/dev/null \
+            | sudo xargs -0 -r sed -i \
+              -e 's#http://azure.archive.ubuntu.com/ubuntu#https://archive.ubuntu.com/ubuntu#g' \
+              -e 's#https://azure.archive.ubuntu.com/ubuntu#https://archive.ubuntu.com/ubuntu#g' \
+            || true
+          APT_OPTS=(-o Acquire::Retries=2 -o Acquire::ForceIPv4=true -o Acquire::http::Timeout=20 -o Acquire::https::Timeout=20)
+          apt_retry() {
+            local attempt rc
+            for attempt in 1 2 3; do
+              echo "===== apt attempt ${attempt}/3: $* ====="
+              set +e
+              sudo timeout 240s apt-get "${APT_OPTS[@]}" "$@"
+              rc=$?
+              set -e
+              if [ "$rc" -eq 0 ]; then
+                return 0
+              fi
+              echo "[WARN] apt attempt ${attempt} failed/timed out rc=${rc}"
+              sudo rm -rf /var/lib/apt/lists/partial/* || true
+              sleep $((attempt * 5))
+            done
+            return 1
+          }
+          apt_retry update
+          DEBIAN_FRONTEND=noninteractive apt_retry install -y --no-install-recommends \
+            gcc-aarch64-linux-gnu binutils-aarch64-linux-gnu \
+            gcc make bison flex bc python3 \
+            libssl-dev libelf-dev device-tree-compiler
+          aarch64-linux-gnu-gcc --version | head -n 1
+          dtc --version
+
+      - name: Run SM6125 mainline probe
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          chmod +x .github/scripts/run25-sm6125-mainline.sh
+          .github/scripts/run25-sm6125-mainline.sh
+          test -s out-run25/FLASH-VERDICT.txt
+          echo '===== FLASH VERDICT ====='
+          cat out-run25/FLASH-VERDICT.txt
+
+      - name: Upload Run25 mainline probe artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: PCHM30-A16-RUN25-SM6125-MAINLINE-${{ github.run_number }}
+          path: |
+            out-run25/PCHM30-SM6125-MAINLINE-REPORT.txt
+            out-run25/FLASH-VERDICT.txt
+            out-run25/linux-mainline.sha
+            out-run25/dtbs/
+            out-run25/pchm30-skeleton/
+            out-run25/mainline-boards/
+            out-run25/Image.gz
+          if-no-files-found: warn
+          include-hidden-files: true

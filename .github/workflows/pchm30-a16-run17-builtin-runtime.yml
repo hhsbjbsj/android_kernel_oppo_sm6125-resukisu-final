@@ -26,9 +26,9 @@ env:
   A16_FIRST: c2c621b5448adc69e105b1519b93dd637a581da5
   A16_LAST: c74436291044381d4365d91afa0c8f4a574b22b4
   ROOT_SNAPSHOT: b667ba359bf7da11b43c5d6403788d21c19facd7
-  # Newest ReSukiSU that still matches this tree's SUSFS 2.2.0 overlay.
-  # main@03b60f26 (2026-08-24) requires susfs_*_no_su / zygote_next APIs.
-  RESUKISU_COMMIT: b2ac2fc8703ce9f5226e2a38a59f8b72f8a3005c
+  # ReSukiSU main@82c7f72 (2026-08-29). Clone-time shims in
+  # run17-update-resukisu.sh keep the SUSFS 2.2.0 / 4.14 ABI.
+  RESUKISU_COMMIT: 82c7f72d6486db3edc5deaa321e4acf96febd38e
   ROOT_SUCCESS_BRANCH: pchm30-a16-resukisu-susfs220
   ROOT_SUCCESS_WORKFLOW: .github/workflows/pchm30-a16-resukisu-susfs220-build.yml
   EXP1_BRANCH: pchm30-a16-btf-sockmap-exp1

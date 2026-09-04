@@ -23,6 +23,12 @@ test -L drivers/kernelsu
 test "$(readlink drivers/kernelsu)" = '../KernelSU/kernel'
 grep -Fq 'obj-$(CONFIG_KSU_SUSFS) += susfs.o' fs/Makefile
 
+echo '===== RUN25: lift the proven 4.14 SUSFS 2.2.0 port to 2.3.0 ====='
+git show "$GITHUB_SHA:.github/scripts/run25-susfs230-adapt.sh" > "$GITHUB_WORKSPACE/run25-susfs230-adapt.sh"
+chmod +x "$GITHUB_WORKSPACE/run25-susfs230-adapt.sh"
+"$GITHUB_WORKSPACE/run25-susfs230-adapt.sh"
+grep -Fq '#define SUSFS_VERSION "v2.3.0"' include/linux/susfs.h
+
 echo '===== Fetch PCHM30 SukiSU 4.14 compatibility patch for current builtin pin ====='
 PATCH="$GITHUB_WORKSPACE/sukisu-builtin-4.14-compat.patch"
 if git fetch --no-tags --depth=1 origin "$GITHUB_SHA" && \
@@ -102,16 +108,16 @@ make O="$OUT_DIR" ARCH=arm64 LOCALVERSION=+ \
 grep -q '^CONFIG_KSU=y$' "$OUT_DIR/.config"
 grep -q '^CONFIG_KSU_SUSFS=y$' "$OUT_DIR/.config"
 ! grep -q '^CONFIG_KPM=y$' "$OUT_DIR/.config"
-grep -Fq '#define SUSFS_VERSION "v2.2.0"' include/linux/susfs.h
+grep -Fq '#define SUSFS_VERSION "v2.3.0"' include/linux/susfs.h
 
 echo '===== RUN18 SukiSU proof ====='
 {
   echo "kernel_base=$(git rev-parse HEAD)"
   echo "sukisu_commit=$(git -C KernelSU rev-parse HEAD)"
   echo "sukisu_origin=$(git -C KernelSU remote get-url origin)"
-  echo 'susfs_version=v2.2.0'
+  echo 'susfs_version=v2.3.0'
   echo 'kpm=disabled'
   echo 'run17_bpf_builtin_stack=preserved'
 } | tee "$GITHUB_WORKSPACE/run18-sukisu-proof.txt"
 
-echo '[PASS] Run18 replaced only the KSU core with pinned SukiSU; SUSFS 2.2.0 and Run17 kernel-side stack remain intact'
+echo '[PASS] Run18 replaced only the KSU core with pinned SukiSU; SUSFS 2.3.0 and Run17 kernel-side stack remain intact'

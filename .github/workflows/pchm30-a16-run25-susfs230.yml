@@ -32,6 +32,14 @@ env:
   RESUKISU_COMMIT: beaaea0eb895dc41e7b9bf5e3f39e57aa9635bab
   ROOT_SUCCESS_BRANCH: pchm30-a16-resukisu-susfs220
   ROOT_SUCCESS_WORKFLOW: .github/workflows/pchm30-a16-resukisu-susfs220-build.yml
+  EXP1_BRANCH: pchm30-a16-btf-sockmap-exp1
+  EXP1_WORKFLOW: .github/workflows/pchm30-a16-btf-sockmap-exp1-v2.yml
+  WIFI_SUCCESS_BRANCH: pchm30-a16-wifi-abi-exp1
+  WIFI_SUCCESS_WORKFLOW: .github/workflows/pchm30-a16-wifi-abi-exp1-build.yml
+  EXP2_BRANCH: pchm30-a16-btf-exp2-diagnose
+  EXP2_WORKFLOW: .github/workflows/pchm30-a16-btf-exp2-diagnose.yml
+  UPSTREAM_BTF_UAPI: f063c889c9458354a92b235a51cbb60d30321070
+  UPSTREAM_BTF_KERNEL: 1dc92851849cc2235a1efef8f8d5a9255efc5f13
   SUKISU_REPO: https://github.com/SukiSU-Ultra/SukiSU-Ultra.git
   SUKISU_COMMIT: 5a2bb7e5813002ccaabe02fa864cfb2dde6b5109
   SUKISU_BRANCH: builtin

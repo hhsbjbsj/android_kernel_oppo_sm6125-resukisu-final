@@ -1,0 +1,19 @@
+name: PCHM30 A16 Run25 SUSFS 2.3.0
+# Registered on main so Actions can see it. The real build lives on pchm30-a16-run25-susfs230.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [pchm30-a16-run25-susfs230]
+    paths:
+      - '.github/workflows/pchm30-a16-run25-susfs230.yml'
+      - '.github/scripts/run25-susfs230-adapt.sh'
+      - '.github/scripts/run18-sukisu-swap.sh'
+
+jobs:
+  noop:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Workflow registered
+        run: echo 'Run25 workflow is registered on main; real build lives on pchm30-a16-run25-susfs230'

@@ -54,7 +54,7 @@ echo 'GKI 2.3 moved inode flags to i_mapping->flags and uses fsnotify handle_ino
 echo 'PCHM30 4.14 already has a proven non-GKI 2.2.0 port on i_state + fsnotify_add_mark.'
 echo 'Adapt 2.3.0 onto that 4.14 port instead of replacing kernel hook sites.'
 
-python3 - <<'PY'
+python3 -u - <<'PY'
 from pathlib import Path
 
 h = Path('include/linux/susfs.h')
@@ -64,12 +64,15 @@ new = '#define SUSFS_VERSION "v2.3.0"'
 if hs.count(old) != 1:
     raise SystemExit(f'susfs.h version anchor count={hs.count(old)}')
 h.write_text(hs.replace(old, new, 1))
+print('updated include/linux/susfs.h SUSFS_VERSION to v2.3.0', flush=True)
 
 d = Path('include/linux/susfs_def.h')
 ds = d.read_text()
 if '#define TIF_PROC_UMOUNTED 33' not in ds:
     raise SystemExit('4.14 susfs_def.h missing TIF_PROC_UMOUNTED')
 if '#define TIF_PROC_NO_SU 34' not in ds:
+    if ds.count('#define TIF_PROC_UMOUNTED 33\n') != 1:
+        raise SystemExit('cannot insert 2.3 TIF flags after TIF_PROC_UMOUNTED')
     ds = ds.replace(
         '#define TIF_PROC_UMOUNTED 33\n',
         '#define TIF_PROC_UMOUNTED 33\n'
@@ -78,24 +81,30 @@ if '#define TIF_PROC_NO_SU 34' not in ds:
         1,
     )
     d.write_text(ds)
+    print('added TIF_PROC_NO_SU and TIF_PROC_UMOUNTED_FOR_ZYGOTE_NEXT', flush=True)
+else:
+    print('2.3 TIF flags already present', flush=True)
 
 # Keep 4.14 flag storage on inode->i_state. GKI 2.3 i_mapping->flags would
 # desync the already-applied 2.2 hook sites in namei/namespace/open.
-if 'inode->i_mapping->flags' in Path('include/linux/susfs_def.h').read_text():
+def_text = Path('include/linux/susfs_def.h').read_text()
+c_text = Path('fs/susfs.c').read_text()
+if 'inode->i_mapping->flags' in def_text or 'inode->i_mapping->flags' in c_text:
     raise SystemExit('refused to switch 4.14 SUSFS flags onto i_mapping')
-if 'inode->i_mapping->flags' in Path('fs/susfs.c').read_text():
-    raise SystemExit('refused to import GKI 2.3 i_mapping flag storage into susfs.c')
+print('kept inode->i_state flag storage', flush=True)
 PY
 
+echo '===== RUN25: verify 2.3.0 adaptation on the 4.14 port ====='
 grep -Fq '#define SUSFS_VERSION "v2.3.0"' include/linux/susfs.h
 ! grep -Fq '#define SUSFS_VERSION "v2.2.0"' include/linux/susfs.h
 grep -Fq '#define TIF_PROC_NO_SU 34' include/linux/susfs_def.h
 grep -Fq '#define TIF_PROC_UMOUNTED_FOR_ZYGOTE_NEXT 35' include/linux/susfs_def.h
-grep -Fq 'test_bit(AS_FLAGS_SUS_PATH, &inode->i_state)' include/linux/susfs_def.h || \
-  grep -Fq 'AS_FLAGS_SUS_PATH, &inode->i_state' include/linux/susfs_def.h
+grep -Fq '#define AS_FLAGS_SUS_PATH' include/linux/susfs_def.h
+grep -Fq 'AS_FLAGS_SUS_PATH, &inode->i_state' fs/susfs.c
 ! grep -Fq 'i_mapping->flags' fs/susfs.c
-! grep -Fq 'handle_inode_event' fs/susfs.c
+! grep -Fq 'i_mapping->flags' include/linux/susfs_def.h
 grep -Fq 'fsnotify_add_mark' fs/susfs.c
+grep -Fq '.handle_event = susfs_handle_sdcard_inode_event' fs/susfs.c
 
 {
   echo "run25_base=$GITHUB_SHA"

@@ -154,9 +154,12 @@ if 'TIF_PROC_NO_SU' not in d or 'TIF_PROC_UMOUNTED_FOR_ZYGOTE_NEXT' not in d:
 if 'susfs_open_redirect_spoof_show_map_vma_srcu' not in c:
     raise SystemExit('2.3 OPEN_REDIRECT srcu helper missing')
 
-Path('include/linux/susfs.h').write_text(gki_h)
-Path('include/linux/susfs_def.h').write_text(d)
-Path('fs/susfs.c').write_text(c)
+def _clean(text):
+    return '\n'.join(line.rstrip() for line in text.splitlines()) + '\n'
+
+Path('include/linux/susfs.h').write_text(_clean(gki_h))
+Path('include/linux/susfs_def.h').write_text(_clean(d))
+Path('fs/susfs.c').write_text(_clean(c))
 print('overlaid GKI v2.3.0 susfs.c/h/def.h with 4.14 i_state + fsnotify_add_mark', flush=True)
 
 mmu = Path('fs/proc/task_mmu.c')
@@ -180,6 +183,10 @@ grep -Fq 'susfs_open_redirect_spoof_show_map_vma_srcu' fs/susfs.c
 ! grep -Fq 'i_mapping->flags' include/linux/susfs_def.h
 ! grep -Fq 'i_mapping->flags' fs/susfs.c
 grep -Fq '&inode->i_state' fs/susfs.c
+
+git add -- include/linux/susfs.h include/linux/susfs_def.h fs/susfs.c
+git diff --check
+git diff --cached --check || true
 
 {
   echo "run26_base=$GITHUB_SHA"

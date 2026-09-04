@@ -94,39 +94,46 @@ jobs:
           block = lines[start:end]
           workdir = None
           run_index = None
+          inline_script = None
           for i, line in enumerate(block):
               if line.startswith('        working-directory: '):
                   workdir = line.split(': ', 1)[1].strip()
               if line.startswith('        run: '):
-                  if line.split(': ', 1)[1].strip() not in ('|', '|-', '|+', '>', '>-', '>+'):
-                      raise SystemExit(f'unsupported inline run step: {name}')
-                  run_index = i + 1
+                  value = line.split(': ', 1)[1].rstrip('\n')
+                  if value in ('|', '|-', '|+', '>', '>-', '>+'):
+                      run_index = i + 1
+                  else:
+                      inline_script = value
                   break
-          if run_index is None:
+          if inline_script is None and run_index is None:
               raise SystemExit(f'Run24 step is not shell: {name}')
-          script_lines = []
-          for line in block[run_index:]:
-              if line.startswith('          '):
-                  script_lines.append(line[10:])
-              elif line.strip() == '':
-                  script_lines.append('\n')
-              else:
-                  raise SystemExit(f'unexpected indentation: {line!r}')
+          if inline_script is not None:
+              script = inline_script + '\n'
+          else:
+              script_lines = []
+              for line in block[run_index:]:
+                  if line.startswith('          '):
+                      script_lines.append(line[10:])
+                  elif line.strip() == '':
+                      script_lines.append('\n')
+                  else:
+                      raise SystemExit(f'unexpected indentation: {line!r}')
+              script = ''.join(script_lines)
           cwd = workspace / workdir if workdir else workspace
           print(f'===== REUSE RUN24 STEP: {name} =====', flush=True)
-          subprocess.run(['bash', '-c', 'set -Eeuo pipefail\n' + ''.join(script_lines)], cwd=cwd, check=True, env=os.environ.copy())
+          subprocess.run(['bash', '-c', 'set -Eeuo pipefail\n' + script], cwd=cwd, check=True, env=os.environ.copy())
           PY
           python3 -m py_compile "$GITHUB_WORKSPACE/run-run24-step.py"
-          # Run24 prepare step overwrites run19-source.yml; wrap a patched copy after it.
           python3 "$GITHUB_WORKSPACE/run-run24-step.py" 'Install BTF host tooling without Azure mirror hang'
           python3 "$GITHUB_WORKSPACE/run-run24-step.py" 'Hard gate proven KPM runtime-fix ancestry'
           python3 "$GITHUB_WORKSPACE/run-run24-step.py" 'Prepare proven KPM step runner from Run23 ref'
           sed -i 's/v2\.2\.0/v2.3.0/g' "$GITHUB_WORKSPACE/run19-source.yml"
           grep -Fq 'SUSFS_VERSION "v2.3.0"' "$GITHUB_WORKSPACE/run19-source.yml"
+          test -f "$GITHUB_WORKSPACE/run-run19-step.py"
 
       - name: Build Run24 stack with SUSFS 2.3.0 adapter
         shell: bash
-        run: python3 "$GITHUB_WORKSPACE/run-run24-step.py" 'Build KPM runtimefixed SukiSU BBG LZ4KD stack'
+        run: python3 "$GITHUB_WORKSPACE/run-run19-step.py" 'Build Run19 from proven Run18 stack with KPM compiled in'
 
       - name: Verify generated source and SUSFS 2.3.0
         working-directory: source/android/kernel/msm-4.14
@@ -146,10 +153,10 @@ jobs:
         run: |
           set -Eeuo pipefail
           python3 "$GITHUB_WORKSPACE/run-run24-step.py" 'Apply successful Run17 BTF Kprobe fix and relink'
-          python3 "$GITHUB_WORKSPACE/run-run24-step.py" 'Verify original KPM and Run18 features still survive'
+          python3 "$GITHUB_WORKSPACE/run-run19-step.py" 'Verify compiled KPM and all proven Run18 features'
           python3 "$GITHUB_WORKSPACE/run-run24-step.py" 'Hard verify BTF Kprobes Scene and KPM runtimefix together'
-          python3 "$GITHUB_WORKSPACE/run-run24-step.py" 'Patch final Image with proven SukiSU KPM patcher'
-          python3 "$GITHUB_WORKSPACE/run-run24-step.py" 'Package reusable flash ZIP'
+          python3 "$GITHUB_WORKSPACE/run-run19-step.py" 'Patch final Image with pinned SukiSU KPM patcher'
+          python3 "$GITHUB_WORKSPACE/run-run19-step.py" 'Package reusable PCHM30 Run19 KPM AnyKernel3 ZIP'
           grep -Fq '#define SUSFS_VERSION "v2.3.0"' "$GITHUB_WORKSPACE/$KERNEL_REL/include/linux/susfs.h"
           echo '[PASS] Run25 compiled the Run24 ReSukiSU/SukiSU line with SUSFS 2.3.0'
 

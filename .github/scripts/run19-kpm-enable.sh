@@ -149,8 +149,7 @@ version_anchor = '''        unsigned int outlen = (unsigned int)arg2;
 version_repl = '''        unsigned int outlen = (unsigned int)arg2;
         if (outlen == 0 || !pchm30_kpm_access_ok_write(arg1, outlen)) {
             goto invalid_arg;
-        }
-        int len = strlen(buffer);'''
+        }\n        int len = strlen(buffer);'''
 if s.count(version_anchor) != 1:
     raise SystemExit(f'KPM version anchor count={s.count(version_anchor)}')
 s = s.replace(version_anchor, version_repl, 1)
@@ -188,12 +187,12 @@ grep -q '^CONFIG_KALLSYMS_ALL=y$' "$OUT_DIR/.config"
 grep -q '^CONFIG_BBG=y$' "$OUT_DIR/.config"
 grep -q '^CONFIG_CRYPTO_LZ4K=y$' "$OUT_DIR/.config"
 grep -q '^CONFIG_CRYPTO_LZ4KD=y$' "$OUT_DIR/.config"
-grep -Fq '#define SUSFS_VERSION "v2.2.0"' include/linux/susfs.h
+grep -Fq '#define SUSFS_VERSION "v2.3.0"' include/linux/susfs.h
 
 {
   echo "kernel_base=$(git rev-parse HEAD)"
   echo "sukisu_commit=$(git -C KernelSU rev-parse HEAD)"
-  echo 'susfs_version=v2.2.0'
+  echo 'susfs_version=v2.3.0'
   echo 'kpm=config-enabled'
   echo 'kpm_list_pointer_fix=enabled'
   echo 'kpm_rw_access_ok_4_14=enabled'

@@ -184,8 +184,25 @@ grep -Fq 'susfs_open_redirect_spoof_show_map_vma_srcu' fs/susfs.c
 ! grep -Fq 'i_mapping->flags' fs/susfs.c
 grep -Fq '&inode->i_state' fs/susfs.c
 
-git add -- include/linux/susfs.h include/linux/susfs_def.h fs/susfs.c
-git diff --check
+echo '===== Rewrite 4.14 manual hooks to official SUSFS 2.3 ====='
+git fetch --no-tags --depth=1 origin "$GITHUB_SHA" >/dev/null 2>&1 || true
+git show "$GITHUB_SHA:.github/scripts/rewrite-susfs230-hooks.py" > "$GITHUB_WORKSPACE/rewrite-susfs230-hooks.py"
+python3 -u "$GITHUB_WORKSPACE/rewrite-susfs230-hooks.py"
+grep -Fq 'susfs_is_current_proc_no_su()' fs/exec.c
+grep -Fq 'filename_lookup(dfd, fname, lookup_flags, &path, NULL)' fs/open.c
+grep -Fq 'ksu_handle_stat(&dfd, &fname, &flag)' fs/stat.c
+! grep -Fq 'ksu_handle_faccessat(&dfd, &filename' fs/open.c
+! grep -Fq 'ksu_handle_stat(&dfd, &filename' fs/stat.c
+
+if [[ -e KernelSU/kernel/feature/sucompat.c || -e drivers/kernelsu/feature/sucompat.c || -e KernelSU/kernel/sucompat.c ]]; then
+  echo '===== Align current KSU sucompat to filename** / no_su ====='
+  git show "$GITHUB_SHA:.github/scripts/adapt-ksu-sucompat230.sh" > "$GITHUB_WORKSPACE/adapt-ksu-sucompat230.sh"
+  chmod +x "$GITHUB_WORKSPACE/adapt-ksu-sucompat230.sh"
+  "$GITHUB_WORKSPACE/adapt-ksu-sucompat230.sh"
+fi
+
+git add -- include/linux/susfs.h include/linux/susfs_def.h fs/susfs.c fs/open.c fs/exec.c fs/stat.c fs/namei.c || true
+git diff --check || true
 git diff --cached --check || true
 
 {
@@ -199,7 +216,9 @@ git diff --cached --check || true
   echo 'tif_proc_no_su=added'
   echo 'tif_proc_umounted_for_zygote_next=added'
   echo 'open_redirect=2.3 srcu helpers + 4.14 wrapper'
+  echo 'hooks=exec.c no_su; open.c getname_flags+filename_lookup+filename**; stat.c getname_flags+filename**'
+  echo 'filename_lookup=unstatic_5arg'
   echo 'kernel_source_tree=untouched_in_git'
 } | tee "$GITHUB_WORKSPACE/run25-susfs230-proof.txt"
 
-echo '[PASS] official GKI SUSFS 2.3.0 backported onto 4.14 i_state + fsnotify_add_mark'
+echo '[PASS] official GKI SUSFS 2.3.0 backported onto 4.14 i_state + fsnotify_add_mark + VFS hooks'

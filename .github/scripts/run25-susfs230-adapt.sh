@@ -73,26 +73,26 @@ typedef const unsigned char *susfs_fname_t;
 #endif
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 9, 0)
-#define SUSFS_DECL_FSNOTIFY_OPS(name)                                            \
-int name(struct fsnotify_mark *mark, u32 mask, struct inode *inode,    \
+#define SUSFS_DECL_FSNOTIFY_OPS(name)                                            \\
+int name(struct fsnotify_mark *mark, u32 mask, struct inode *inode,    \\
 struct inode *dir, const struct qstr *file_name, u32 cookie)
 #elif LINUX_VERSION_CODE >= KERNEL_VERSION(4, 18, 0)
-#define SUSFS_DECL_FSNOTIFY_OPS(name)                                            \
-int name(struct fsnotify_group *group, struct inode *inode, u32 mask,  \
-const void *data, int data_type, susfs_fname_t file_name,       \
+#define SUSFS_DECL_FSNOTIFY_OPS(name)                                            \\
+int name(struct fsnotify_group *group, struct inode *inode, u32 mask,  \\
+const void *data, int data_type, susfs_fname_t file_name,       \\
 u32 cookie, struct fsnotify_iter_info *iter_info)
 #elif LINUX_VERSION_CODE >= KERNEL_VERSION(4, 12, 0)
-#define SUSFS_DECL_FSNOTIFY_OPS(name)                                            \
-int name(struct fsnotify_group *group, struct inode *inode,            \
-struct fsnotify_mark *inode_mark,                             \
-struct fsnotify_mark *vfsmount_mark, u32 mask,                \
-const void *data, int data_type, susfs_fname_t file_name,       \
+#define SUSFS_DECL_FSNOTIFY_OPS(name)                                            \\
+int name(struct fsnotify_group *group, struct inode *inode,            \\
+struct fsnotify_mark *inode_mark,                             \\
+struct fsnotify_mark *vfsmount_mark, u32 mask,                \\
+const void *data, int data_type, susfs_fname_t file_name,       \\
 u32 cookie, struct fsnotify_iter_info *iter_info)
 #else
-#define SUSFS_DECL_FSNOTIFY_OPS(name)                                            \
-int name(struct fsnotify_group *group, struct inode *inode,            \
-struct fsnotify_mark *inode_mark,                             \
-struct fsnotify_mark *vfsmount_mark, u32 mask, void *data,    \
+#define SUSFS_DECL_FSNOTIFY_OPS(name)                                            \\
+int name(struct fsnotify_group *group, struct inode *inode,            \\
+struct fsnotify_mark *inode_mark,                             \\
+struct fsnotify_mark *vfsmount_mark, u32 mask, void *data,    \\
 int data_type, susfs_fname_t file_name, u32 cookie)
 #endif
 '''
@@ -184,15 +184,17 @@ grep -Fq 'susfs_open_redirect_spoof_show_map_vma_srcu' fs/susfs.c
 ! grep -Fq 'i_mapping->flags' fs/susfs.c
 grep -Fq '&inode->i_state' fs/susfs.c
 
-echo '===== Rewrite 4.14 manual hooks to official SUSFS 2.3 ====='
+echo '===== Rewrite 4.14 2.2 inline hooks to official SUSFS 2.3 ====='
 git fetch --no-tags --depth=1 origin "$GITHUB_SHA" >/dev/null 2>&1 || true
 git show "$GITHUB_SHA:.github/scripts/rewrite-susfs230-hooks.py" > "$GITHUB_WORKSPACE/rewrite-susfs230-hooks.py"
 python3 -u "$GITHUB_WORKSPACE/rewrite-susfs230-hooks.py"
 grep -Fq 'susfs_is_current_proc_no_su()' fs/exec.c
 grep -Fq 'filename_lookup(dfd, fname, lookup_flags, &path, NULL)' fs/open.c
-grep -Fq 'ksu_handle_stat(&dfd, &fname, &flag)' fs/stat.c
+grep -Fq 'ksu_handle_faccessat(&dfd, &fname, &mode, NULL)' fs/open.c
+grep -Eq 'ksu_handle_stat\(&dfd, &fname, &flags?\)' fs/stat.c || grep -Fq 'filename_lookup(dfd, fname, lookup_flags, &path, NULL)' fs/stat.c
 ! grep -Fq 'ksu_handle_faccessat(&dfd, &filename' fs/open.c
-! grep -Fq 'ksu_handle_stat(&dfd, &filename' fs/stat.c
+! grep -Fq 'susfs_is_current_proc_umounted()' fs/exec.c
+! grep -Fq 'susfs_is_current_proc_umounted()' fs/open.c
 
 if [[ -e KernelSU/kernel/feature/sucompat.c || -e drivers/kernelsu/feature/sucompat.c || -e KernelSU/kernel/sucompat.c ]]; then
   echo '===== Align current KSU sucompat to filename** / no_su ====='

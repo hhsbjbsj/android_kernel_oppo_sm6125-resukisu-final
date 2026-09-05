@@ -1,188 +1,251 @@
 #!/usr/bin/env python3
-"""Rewrite SM6125 4.14 manual hooks to official SUSFS 2.3 logic.
+"""Rewrite SM6125 4.14 SUSFS 2.2 inline hooks to official 2.3 logic.
 
-Runs AFTER apply-resukisu-hooks.py. Mirrors simonpunk da34bba1 / f3087ec1
-and JackA1ltman NonGKI susfs_inline_hook_patches.sh.
+The PCHM30 overlay does NOT use clean-tree CONFIG_KSU_MANUAL_HOOK.
+It uses the same 2.2 inline style as Xiaomi 4.19 / JackA1ltman:
+  susfs_is_current_proc_umounted() early-out + user-pointer faccessat/stat.
 
-4.14 filename_lookup is static and already 5-arg:
-  filename_lookup(dfd, name, flags, path, root)
+This file mirrors:
+  gitlab.com/simonpunk/susfs4ksu da34bba1 / f3087ec1
+  JackA1ltman/NonGKI_Kernel_Build_2nd Patches/susfs_inline_hook_patches.sh
 """
 from pathlib import Path
+import re
 
 
-def must_replace(text, old, new, label):
-    if old not in text:
-        raise SystemExit(f'{label}: expected block not found')
-    return text.replace(old, new, 1)
+def fail(msg):
+    raise SystemExit(msg)
 
 
-def ensure_include(text, needle, include_line):
-    if include_line in text:
-        return text
-    if needle in text:
-        return text.replace(needle, needle + '\n' + include_line, 1)
-    return include_line + '\n' + text
+def read(path):
+    return Path(path).read_text()
+
+
+def write(path, text):
+    Path(path).write_text(text)
+    print('wrote', path, flush=True)
+
+
+def replace_umounted(text, label):
+    n = text.count('susfs_is_current_proc_umounted()')
+    if n == 0:
+        if 'susfs_is_current_proc_no_su()' in text:
+            print(label + ': already no_su', flush=True)
+            return text
+        fail(label + ': no umounted/no_su early-out')
+    text = text.replace('susfs_is_current_proc_umounted()', 'susfs_is_current_proc_no_su()')
+    print(label + ': umounted -> no_su x%d' % n, flush=True)
+    return text
 
 
 def unstatic_filename_lookup():
     p = Path('fs/namei.c')
     t = p.read_text()
-    old = ('static int filename_lookup(int dfd, struct filename *name, unsigned flags,\n'
-           '\t\t\t   struct path *path, struct path *root)')
-    new = ('int filename_lookup(int dfd, struct filename *name, unsigned flags,\n'
-           '\t\t\t   struct path *path, struct path *root)')
+    old = 'static int filename_lookup(int dfd, struct filename *name, unsigned flags,'
+    new = 'int filename_lookup(int dfd, struct filename *name, unsigned flags,'
     if old in t:
         t = t.replace(old, new, 1)
-        p.write_text(t)
+        write('fs/namei.c', t)
         print('unstatic filename_lookup in fs/namei.c', flush=True)
-    elif 'int filename_lookup(int dfd, struct filename *name, unsigned flags,' in t:
+    elif re.search(r'^int filename_lookup\(int dfd, struct filename \*name, unsigned flags,', t, re.M):
         print('filename_lookup already non-static', flush=True)
     else:
-        raise SystemExit('cannot find 4.14 filename_lookup prototype in fs/namei.c')
-
-    decl = ('extern int filename_lookup(int dfd, struct filename *name, unsigned flags,\n'
-            '\t\t\t    struct path *path, struct path *root);\n')
+        fail('cannot find filename_lookup in fs/namei.c')
+    decl = (
+        'extern int filename_lookup(int dfd, struct filename *name, unsigned flags,\n'
+        '\t\t\tstruct path *path, struct path *root);\n'
+    )
     for rel in ('fs/open.c', 'fs/stat.c'):
-        q = Path(rel)
-        s = q.read_text()
-        if 'extern int filename_lookup(' in s:
+        text = read(rel)
+        if 'extern int filename_lookup(' in text:
             continue
-        if '#include "internal.h"' in s:
-            s = s.replace('#include "internal.h"', '#include "internal.h"\n' + decl, 1)
+        if '#include <linux/susfs_def.h>' in text:
+            text = text.replace(
+                '#include <linux/susfs_def.h>',
+                '#include <linux/susfs_def.h>\n' + decl,
+                1,
+            )
+        elif '#ifdef CONFIG_KSU_SUSFS' in text:
+            text = text.replace(
+                '#ifdef CONFIG_KSU_SUSFS',
+                '#ifdef CONFIG_KSU_SUSFS\n' + decl,
+                1,
+            )
         else:
-            s = decl + s
-        q.write_text(s)
+            fail(rel + ': no place to declare filename_lookup')
+        write(rel, text)
         print('declared filename_lookup in', rel, flush=True)
 
 
-# ---- fs/namei.c : make filename_lookup usable from open/stat ----
+# ---- fs/exec.c : TIF_PROC_UMOUNTED -> TIF_PROC_NO_SU ----
+exec_t = replace_umounted(read('fs/exec.c'), 'fs/exec.c')
+write('fs/exec.c', exec_t)
+
+# ---- fs/open.c ----
+open_t = read('fs/open.c')
+open_t = open_t.replace(
+    'extern int ksu_handle_faccessat(int *dfd, const char __user **filename_user, int *mode,',
+    'extern int ksu_handle_faccessat(int *dfd, struct filename **filename, int *mode,',
+)
+open_t = replace_umounted(open_t, 'fs/open.c proto/early-out')
+
+# Drop the 2.2 early-out that still calls handle(&filename) before lookup.
+# Official 2.3 does getname_flags + handle(&fname) + filename_lookup.
+old_early = re.compile(
+    r'#ifdef CONFIG_KSU_SUSFS\s*' 
+    r'if \(likely\(susfs_is_current_proc_no_su\(\)\)\)\s*'
+    r'goto orig_flow;\s*'
+    r'if \(static_branch_likely\(&ksu_su_compat_enabled\)\)\s*'
+    r'if \(unlikely\(__ksu_is_allow_uid_for_current\(current_uid\(\)\.val\)\)\) \{\s*'
+    r'ksu_handle_faccessat\(&dfd, &filename, &mode, NULL\);\s*'
+    r'\}\s*'
+    r'orig_flow:\s*'
+    r'#endif\s*',
+    re.M,
+)
+if old_early.search(open_t):
+    open_t = old_early.sub('', open_t, count=1)
+    print('fs/open.c: removed 2.2 user-pointer early-out', flush=True)
+elif 'ksu_handle_faccessat(&dfd, &fname, &mode, NULL)' in open_t:
+    print('fs/open.c: handle already uses fname', flush=True)
+else:
+    print('WARN: fs/open.c 2.2 early-out block not exact; continue', flush=True)
+
+if 'struct filename *fname = NULL;' not in open_t:
+    needle = '\tunsigned int lookup_flags = LOOKUP_FOLLOW;\n'
+    if needle not in open_t:
+        fail('fs/open.c: no lookup_flags anchor')
+    open_t = open_t.replace(
+        needle,
+        needle + '#ifdef CONFIG_KSU_SUSFS\n\tstruct filename *fname = NULL;\n#endif\n',
+        1,
+    )
+
+old_upa = '\tres = user_path_at(dfd, filename, lookup_flags, &path);'
+new_upa = '''#ifdef CONFIG_KSU_SUSFS
+	fname = getname_flags(filename, lookup_flags, NULL);
+	if (likely(susfs_is_current_proc_no_su()))
+		goto orig_faccessat;
+	if (static_branch_likely(&ksu_su_compat_enabled)) {
+		if (unlikely(__ksu_is_allow_uid_for_current(current_uid().val)))
+			ksu_handle_faccessat(&dfd, &fname, &mode, NULL);
+	}
+orig_faccessat:
+	res = filename_lookup(dfd, fname, lookup_flags, &path, NULL);
+#else
+	res = user_path_at(dfd, filename, lookup_flags, &path);
+#endif'''
+if 'filename_lookup(dfd, fname, lookup_flags, &path, NULL)' in open_t:
+    print('fs/open.c: filename_lookup already present', flush=True)
+elif old_upa not in open_t:
+    fail('fs/open.c: user_path_at site not found')
+else:
+    open_t = open_t.replace(old_upa, new_upa, 1)
+    print('fs/open.c: user_path_at -> getname_flags + filename_lookup', flush=True)
+write('fs/open.c', open_t)
+
+# ---- fs/stat.c ----
+stat_t = read('fs/stat.c')
+if '#include "internal.h"' not in stat_t:
+    if '#include <linux/syscalls.h>' in stat_t:
+        stat_t = stat_t.replace(
+            '#include <linux/syscalls.h>',
+            '#include <linux/syscalls.h>\n#include "internal.h"',
+            1,
+        )
+    elif '#include <linux/susfs_def.h>' in stat_t:
+        stat_t = stat_t.replace(
+            '#include <linux/susfs_def.h>',
+            '#include <linux/susfs_def.h>\n#include "internal.h"',
+            1,
+        )
+
+stat_t = stat_t.replace(
+    'extern int ksu_handle_stat(int *dfd, const char __user **filename_user, int *flags);',
+    'extern int ksu_handle_stat(int *dfd, struct filename **filename, int *flags);',
+)
+stat_t = stat_t.replace(
+    'extern int ksu_handle_stat(int *dfd, const char __user **filename_user,\n\t\t\t\tint *flags);',
+    'extern int ksu_handle_stat(int *dfd, struct filename **filename,\n\t\t\t\tint *flags);',
+)
+if 'susfs_is_current_proc_umounted()' in stat_t or 'susfs_is_current_proc_no_su()' in stat_t:
+    stat_t = replace_umounted(stat_t, 'fs/stat.c proto/early-out')
+
+old_stat_early = re.compile(
+    r'#ifdef CONFIG_KSU_SUSFS\s*'
+    r'if \(likely\(susfs_is_current_proc_no_su\(\)\)\)\s*'
+    r'goto orig_flow;\s*'
+    r'if \(static_branch_likely\(&ksu_su_compat_enabled\)\) \{\s*'
+    r'if \(unlikely\(__ksu_is_allow_uid_for_current\(current_uid\(\)\.val\)\)\)\s*'
+    r'ksu_handle_stat\(&dfd, &filename, &flags\);\s*'
+    r'\}\s*'
+    r'orig_flow:\s*'
+    r'#endif\s*',
+    re.M,
+)
+if old_stat_early.search(stat_t):
+    stat_t = old_stat_early.sub('', stat_t, count=1)
+    print('fs/stat.c: removed 2.2 user-pointer early-out', flush=True)
+
+if 'user_path_at(dfd, filename, lookup_flags, &path)' in stat_t:
+    if 'struct filename *fname = NULL;' not in stat_t:
+        for anchor in (
+            '\tunsigned int lookup_flags = LOOKUP_FOLLOW | LOOKUP_AUTOMOUNT;\n',
+            '\tunsigned int lookup_flags = LOOKUP_FOLLOW;\n',
+        ):
+            if anchor in stat_t:
+                stat_t = stat_t.replace(
+                    anchor,
+                    anchor + '#ifdef CONFIG_KSU_SUSFS\n\tstruct filename *fname = NULL;\n#endif\n',
+                    1,
+                )
+                break
+    old_err = '\terror = user_path_at(dfd, filename, lookup_flags, &path);'
+    new_err = '''#ifdef CONFIG_KSU_SUSFS
+	fname = getname_flags(filename, lookup_flags, NULL);
+	if (likely(susfs_is_current_proc_no_su()))
+		goto orig_statx;
+	if (static_branch_likely(&ksu_su_compat_enabled)) {
+		if (unlikely(__ksu_is_allow_uid_for_current(current_uid().val)))
+			ksu_handle_stat(&dfd, &fname, &flags);
+	}
+orig_statx:
+	error = filename_lookup(dfd, fname, lookup_flags, &path, NULL);
+#else
+	error = user_path_at(dfd, filename, lookup_flags, &path);
+#endif'''
+    if 'filename_lookup(dfd, fname, lookup_flags, &path, NULL)' in stat_t:
+        print('fs/stat.c: filename_lookup already present', flush=True)
+    elif old_err not in stat_t:
+        fail('fs/stat.c: user_path_at site not found')
+    else:
+        stat_t = stat_t.replace(old_err, new_err, 1)
+        print('fs/stat.c: user_path_at -> getname_flags + filename_lookup', flush=True)
+else:
+    print('fs/stat.c: no vfs_statx user_path_at; keeping syscall-level handle + no_su', flush=True)
+    # 4.14 manual newfstatat still uses vfs_fstatat(user pointer).
+    # Keep handle(&filename) after proto change only if filename** handler
+    # accepts the user pointer through getname inside sucompat.
+    if 'ksu_handle_stat(&dfd, &filename, &flag)' in stat_t:
+        print('fs/stat.c: newfstatat still passes user filename into handle', flush=True)
+write('fs/stat.c', stat_t)
+
 unstatic_filename_lookup()
 
-
-# ---- fs/exec.c : TIF_PROC_NO_SU early-out around execve hooks ----
-p = Path('fs/exec.c')
-t = p.read_text()
-t = ensure_include(t, '#include <linux/fs.h>', '#include <linux/susfs.h>')
-
-old = """#ifdef CONFIG_KSU_MANUAL_HOOK
-\tksu_handle_execveat((int *)AT_FDCWD, &filename, &argv, &envp, 0);
-#endif
-\treturn do_execveat_common(AT_FDCWD, filename, argv, envp, 0);
-"""
-new = """#ifdef CONFIG_KSU_MANUAL_HOOK
-#ifdef CONFIG_KSU_SUSFS
-\tif (likely(susfs_is_current_proc_no_su()))
-\t\tgoto orig_execve;
-#endif
-\tksu_handle_execveat((int *)AT_FDCWD, &filename, &argv, &envp, 0);
-orig_execve:
-#endif
-\treturn do_execveat_common(AT_FDCWD, filename, argv, envp, 0);
-"""
-count = t.count(old)
-if count < 1:
-    if 'susfs_is_current_proc_no_su()' in t:
-        print('fs/exec.c already has no_su early-out', flush=True)
-    else:
-        raise SystemExit('fs/exec.c: expected manual execve hook not found')
-else:
-    t = t.replace(old, new)
-    p.write_text(t)
-    print(f'rewrote fs/exec.c sucompat early-out on {count} sites', flush=True)
-
-
-# ---- fs/open.c : getname_flags + filename_lookup + filename** ----
-p = Path('fs/open.c')
-t = p.read_text()
-t = ensure_include(t, '#include <linux/fs.h>', '#include <linux/susfs.h>')
-
-old = """extern int ksu_handle_faccessat(int *dfd, const char __user **filename_user,
-\t\t\t\tint *mode, int *flags);
-"""
-new = """extern int ksu_handle_faccessat(int *dfd, struct filename **filename,
-\t\t\t\tint *mode, int *flags);
-"""
-if old in t:
-    t = t.replace(old, new, 1)
-elif 'extern int ksu_handle_faccessat(int *dfd, struct filename **filename' in t:
-    print('fs/open.c proto already filename**', flush=True)
-else:
-    raise SystemExit('fs/open.c: faccessat prototype not found')
-
-old = """\tint res;\n\tunsigned int lookup_flags = LOOKUP_FOLLOW;\n\n#ifdef CONFIG_KSU_MANUAL_HOOK\n\tksu_handle_faccessat(&dfd, &filename, &mode, NULL);\n#endif\n"""
-new = """\tint res;\n\tunsigned int lookup_flags = LOOKUP_FOLLOW;\n#ifdef CONFIG_KSU_SUSFS\n\tstruct filename *fname = NULL;\n#endif\n"""
-if old in t:
-    t = t.replace(old, new, 1)
-elif 'struct filename *fname = NULL;' in t and 'do_faccessat' in t:
-    print('fs/open.c already dropped user-pointer faccessat hook', flush=True)
-else:
-    raise SystemExit('fs/open.c: expected manual faccessat hook not found')
-
-old = """retry:\n\tres = user_path_at(dfd, filename, lookup_flags, &path);\n\tif (res)\n\t\tgoto out;\n"""
-new = """retry:\n#ifdef CONFIG_KSU_SUSFS\n\tfname = getname_flags(filename, lookup_flags, NULL);\n\tif (IS_ERR(fname)) {\n\t\tres = PTR_ERR(fname);\n\t\tfname = NULL;\n\t\tgoto out;\n\t}\n#ifdef CONFIG_KSU_MANUAL_HOOK\n\tif (likely(susfs_is_current_proc_no_su()))\n\t\tgoto orig_faccessat;\n\tksu_handle_faccessat(&dfd, &fname, &mode, NULL);\norig_faccessat:\n#endif\n\tres = filename_lookup(dfd, fname, lookup_flags, &path, NULL);\n\tputname(fname);\n\tfname = NULL;\n#else\n\tres = user_path_at(dfd, filename, lookup_flags, &path);\n#endif\n\tif (res)\n\t\tgoto out;\n"""
-if old in t:
-    t = t.replace(old, new, 1)
-elif 'filename_lookup(dfd, fname, lookup_flags, &path, NULL)' in t:
-    print('fs/open.c already uses filename_lookup', flush=True)
-else:
-    raise SystemExit('fs/open.c: user_path_at retry block not found')
-
-p.write_text(t)
-print('rewrote fs/open.c do_faccessat to getname_flags + filename_lookup', flush=True)
-
-
-# ---- fs/stat.c : same split on newfstatat / fstatat64 ----
-p = Path('fs/stat.c')
-t = p.read_text()
-t = ensure_include(t, '#include <linux/syscalls.h>', '#include <linux/susfs.h>')
-
-old = """extern int ksu_handle_stat(int *dfd, const char __user **filename_user,
-\t\t\t\tint *flags);\n"""
-new = """extern int ksu_handle_stat(int *dfd, struct filename **filename,
-\t\t\t\tint *flags);\n"""
-if old in t:
-    t = t.replace(old, new, 1)
-elif 'extern int ksu_handle_stat(int *dfd, struct filename **filename' in t:
-    print('fs/stat.c proto already filename**', flush=True)
-else:
-    raise SystemExit('fs/stat.c: stat prototype not found')
-
-# newfstatat and fstatat64 both call vfs_fstatat(dfd, filename, ...)
-old = """#ifdef CONFIG_KSU_MANUAL_HOOK\n\tksu_handle_stat(&dfd, &filename, &flag);\n#endif\n\terror = vfs_fstatat(dfd, filename, &stat, flag);\n"""
-new = """#ifdef CONFIG_KSU_SUSFS\n\t{\n\t\tstruct filename *fname;\n\t\tunsigned int lookup_flags = LOOKUP_FOLLOW | LOOKUP_AUTOMOUNT;\n\n\t\tif (flag & AT_SYMLINK_NOFOLLOW)\n\t\t\tlookup_flags &= ~LOOKUP_FOLLOW;\n\t\tfname = getname_flags(filename, lookup_flags, NULL);\n\t\tif (IS_ERR(fname))\n\t\t\treturn PTR_ERR(fname);\n#ifdef CONFIG_KSU_MANUAL_HOOK\n\t\tif (!susfs_is_current_proc_no_su())\n\t\t\tksu_handle_stat(&dfd, &fname, &flag);\n#endif\n\t\tputname(fname);\n\t}\n#endif\n\terror = vfs_fstatat(dfd, filename, &stat, flag);\n"""
-count = t.count(old)
-if count < 1:
-    if 'ksu_handle_stat(&dfd, &fname, &flag)' in t:
-        print('fs/stat.c already uses filename** handler', flush=True)
-    else:
-        raise SystemExit('fs/stat.c: expected manual stat hook not found')
-else:
-    t = t.replace(old, new)
-    print(f'rewrote fs/stat.c vfs_fstatat sites ({count}) to getname_flags + filename**', flush=True)
-
-p.write_text(t)
-
 # sanity
-for f, needles, forbidden in (
-    ('fs/exec.c', ['susfs_is_current_proc_no_su()'], []),
-    ('fs/open.c', ['getname_flags(filename, lookup_flags, NULL)',
-                   'filename_lookup(dfd, fname, lookup_flags, &path, NULL)',
-                   'ksu_handle_faccessat(&dfd, &fname, &mode, NULL)',
-                   'susfs_is_current_proc_no_su()'],
-     ['ksu_handle_faccessat(&dfd, &filename']),
-    ('fs/stat.c', ['getname_flags(filename, lookup_flags, NULL)',
-                   'ksu_handle_stat(&dfd, &fname, &flag)',
-                   'susfs_is_current_proc_no_su()'],
-     ['ksu_handle_stat(&dfd, &filename']),
-    ('fs/namei.c', ['int filename_lookup(int dfd, struct filename *name, unsigned flags,'],
-     ['static int filename_lookup(int dfd, struct filename *name, unsigned flags,']),
-):
-    text = Path(f).read_text()
-    for n in needles:
-        if n not in text:
-            raise SystemExit(f'{f} missing {n!r}')
-    for n in forbidden:
-        if n in text:
-            raise SystemExit(f'{f} still has 2.2 call {n!r}')
+exec_t = read('fs/exec.c')
+open_t = read('fs/open.c')
+if 'susfs_is_current_proc_no_su()' not in exec_t:
+    fail('fs/exec.c missing no_su')
+if 'getname_flags(filename, lookup_flags, NULL)' not in open_t:
+    fail('fs/open.c missing getname_flags')
+if 'filename_lookup(dfd, fname, lookup_flags, &path, NULL)' not in open_t:
+    fail('fs/open.c missing filename_lookup')
+if 'ksu_handle_faccessat(&dfd, &fname, &mode, NULL)' not in open_t:
+    fail('fs/open.c missing filename** faccessat call')
+if 'ksu_handle_faccessat(&dfd, &filename' in open_t:
+    fail('fs/open.c still has 2.2 user-pointer faccessat call')
+if 'susfs_is_current_proc_umounted()' in exec_t:
+    fail('fs/exec.c still has umounted early-out')
 
 print('hook rewrite verified', flush=True)

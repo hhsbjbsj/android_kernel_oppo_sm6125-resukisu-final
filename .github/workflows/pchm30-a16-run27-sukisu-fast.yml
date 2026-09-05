@@ -1,0 +1,20 @@
+name: PCHM30 A16 Run27 SukiSU Fast SUSFS 2.3.0
+# Registered on main so Actions can see it. The real build lives on pchm30-a16-run27-sukisu-fast.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [pchm30-a16-run27-sukisu-fast]
+    paths:
+      - '.github/workflows/pchm30-a16-run27-sukisu-fast.yml'
+      - '.github/scripts/run18-sukisu-swap.sh'
+      - '.github/scripts/run19-kpm-enable.sh'
+      - '.github/scripts/run25-susfs230-adapt.sh'
+
+jobs:
+  noop:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Workflow registered
+        run: echo 'Run27 SukiSU fast workflow is registered on main; real build lives on pchm30-a16-run27-sukisu-fast'

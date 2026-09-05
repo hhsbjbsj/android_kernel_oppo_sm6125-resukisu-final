@@ -1,5 +1,5 @@
 name: PCHM30 A16 Run26 ReSukiSU SUSFS 2.3.0
-# ReSukiSU line from Run17. Full GKI 2.3 overlay on 4.14. KPM stays off.
+# ReSukiSU line from Run17. Full GKI 2.3 overlay + 4.14 hook rewrite. KPM stays off.
 
 on:
   workflow_dispatch:
@@ -9,6 +9,8 @@ on:
       - '.github/workflows/pchm30-a16-run26-resukisu-susfs230.yml'
       - '.github/scripts/run25-susfs230-adapt.sh'
       - '.github/scripts/run26-disable-kpm.sh'
+      - '.github/scripts/rewrite-susfs230-hooks.py'
+      - '.github/scripts/adapt-ksu-sucompat230.sh'
 
 env:
   TOOLCHAIN_RELEASE_TAG: pchm30-build-environment-20260810
@@ -73,6 +75,8 @@ jobs:
           git show "$GITHUB_SHA:.github/scripts/run17-bbg-lz4kd.sh" > "$GITHUB_WORKSPACE/run17-bbg-lz4kd.sh"
           git show "$GITHUB_SHA:.github/scripts/run25-susfs230-adapt.sh" > "$GITHUB_WORKSPACE/run25-susfs230-adapt.sh"
           git show "$GITHUB_SHA:.github/scripts/run26-disable-kpm.sh" > "$GITHUB_WORKSPACE/run26-disable-kpm.sh"
+          git show "$GITHUB_SHA:.github/scripts/rewrite-susfs230-hooks.py" > "$GITHUB_WORKSPACE/rewrite-susfs230-hooks.py"
+          git show "$GITHUB_SHA:.github/scripts/adapt-ksu-sucompat230.sh" > "$GITHUB_WORKSPACE/adapt-ksu-sucompat230.sh"
           git show "$RUN17_BTF_FIX_COMMIT:.github/scripts/run17-btf-kprobe-scene-fix.sh" > "$GITHUB_WORKSPACE/run17-btf-kprobe-scene-fix.sh"
           chmod +x \
             "$GITHUB_WORKSPACE/run17-orchestrate.sh" \
@@ -80,7 +84,8 @@ jobs:
             "$GITHUB_WORKSPACE/run17-bbg-lz4kd.sh" \
             "$GITHUB_WORKSPACE/run17-btf-kprobe-scene-fix.sh" \
             "$GITHUB_WORKSPACE/run25-susfs230-adapt.sh" \
-            "$GITHUB_WORKSPACE/run26-disable-kpm.sh"
+            "$GITHUB_WORKSPACE/run26-disable-kpm.sh" \
+            "$GITHUB_WORKSPACE/adapt-ksu-sucompat230.sh"
 
           python3 - <<'PY'
           from pathlib import Path
@@ -140,10 +145,13 @@ jobs:
           grep -Fq 'susfs_open_redirect_spoof_show_map_vma_srcu' fs/susfs.c
           grep -Fq '&inode->i_state' fs/susfs.c
           ! grep -Fq 'i_mapping->flags' fs/susfs.c
+          grep -Fq 'susfs_is_current_proc_no_su()' fs/exec.c
+          grep -Fq 'filename_lookup(dfd, fname, lookup_flags, &path, NULL)' fs/open.c
+          grep -Fq 'ksu_handle_stat(&dfd, &fname, &flag)' fs/stat.c
           grep -q '^CONFIG_KSU=y$' "$CONFIG"
           grep -q '^CONFIG_KSU_SUSFS=y$' "$CONFIG"
           ! grep -q '^CONFIG_KPM=y$' "$CONFIG"
-          echo '[PASS] ReSukiSU image is SUSFS 2.3.0 with KPM disabled'
+          echo '[PASS] ReSukiSU image is SUSFS 2.3.0 with KPM disabled and 2.3 VFS hooks'
 
       - name: Package reusable PCHM30 AnyKernel3 ZIP
         working-directory: source/android/kernel/msm-4.14

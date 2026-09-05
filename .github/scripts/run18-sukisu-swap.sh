@@ -15,10 +15,9 @@ echo "SukiSU repo:   $SUKISU_REPO"
 echo "SukiSU commit: $SUKISU_COMMIT"
 echo "compat source: $SUKISU_COMPAT_SOURCE_COMMIT"
 
-echo '===== Preserve SUSFS 2.2.0 kernel-side hooks ====='
+echo '===== Preserve SUSFS kernel-side hooks ====='
 test -f fs/susfs.c
 test -f include/linux/susfs.h
-grep -Fq '#define SUSFS_VERSION "v2.2.0"' include/linux/susfs.h
 test -L drivers/kernelsu
 test "$(readlink drivers/kernelsu)" = '../KernelSU/kernel'
 grep -Fq 'obj-$(CONFIG_KSU_SUSFS) += susfs.o' fs/Makefile
@@ -28,6 +27,8 @@ git show "$GITHUB_SHA:.github/scripts/run25-susfs230-adapt.sh" > "$GITHUB_WORKSP
 chmod +x "$GITHUB_WORKSPACE/run25-susfs230-adapt.sh"
 "$GITHUB_WORKSPACE/run25-susfs230-adapt.sh"
 grep -Fq '#define SUSFS_VERSION "v2.3.0"' include/linux/susfs.h
+grep -Fq 'susfs_is_current_proc_no_su()' fs/exec.c
+grep -Fq 'filename_lookup(dfd, fname, lookup_flags, &path, NULL)' fs/open.c
 
 echo '===== Fetch PCHM30 SukiSU 4.14 compatibility patch for current builtin pin ====='
 PATCH="$GITHUB_WORKSPACE/sukisu-builtin-4.14-compat.patch"
@@ -64,6 +65,11 @@ grep -Fq '#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0)' KernelSU/kernel/ru
 ! grep -q '^[[:space:]]*fallthrough;' KernelSU/kernel/policy/allowlist.c
 grep -Fq 'DEFINE_STATIC_KEY_TRUE(ksu_su_compat_enabled);' KernelSU/kernel/feature/sucompat.c
 grep -Fq 'manager spawn zygote SID mismatch' KernelSU/kernel/hook/lsm_hook.c
+
+echo '===== Re-align SukiSU sucompat after swap overwrote ReSukiSU handlers ====='
+git show "$GITHUB_SHA:.github/scripts/adapt-ksu-sucompat230.sh" > "$GITHUB_WORKSPACE/adapt-ksu-sucompat230.sh"
+chmod +x "$GITHUB_WORKSPACE/adapt-ksu-sucompat230.sh"
+"$GITHUB_WORKSPACE/adapt-ksu-sucompat230.sh"
 
 echo '===== Install PCHM30 Linux 4.14 compatibility marker used by the proven SukiSU branch ====='
 cat > include/linux/pchm30_sukisu_4_14_compat.h <<'EOF'
@@ -116,8 +122,10 @@ echo '===== RUN18 SukiSU proof ====='
   echo "sukisu_commit=$(git -C KernelSU rev-parse HEAD)"
   echo "sukisu_origin=$(git -C KernelSU remote get-url origin)"
   echo 'susfs_version=v2.3.0'
+  echo 'hooks=exec_no_su+open_filename_lookup+stat_filename'
+  echo 'sucompat=realigned_after_swap'
   echo 'kpm=disabled'
   echo 'run17_bpf_builtin_stack=preserved'
 } | tee "$GITHUB_WORKSPACE/run18-sukisu-proof.txt"
 
-echo '[PASS] Run18 replaced only the KSU core with pinned SukiSU; SUSFS 2.3.0 and Run17 kernel-side stack remain intact'
+echo '[PASS] Run18 replaced only the KSU core with pinned SukiSU; SUSFS 2.3.0 hooks and sucompat remain intact'

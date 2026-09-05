@@ -147,7 +147,8 @@ jobs:
           ! grep -Fq 'i_mapping->flags' fs/susfs.c
           grep -Fq 'susfs_is_current_proc_no_su()' fs/exec.c
           grep -Fq 'filename_lookup(dfd, fname, lookup_flags, &path, NULL)' fs/open.c
-          grep -Fq 'ksu_handle_stat(&dfd, &fname, &flag)' fs/stat.c
+          grep -n 'ksu_handle_stat' fs/stat.c || true
+          grep -Eq 'ksu_handle_stat\(&dfd, &fname, &(flag|flags)\)' fs/stat.c
           grep -q '^CONFIG_KSU=y$' "$CONFIG"
           grep -q '^CONFIG_KSU_SUSFS=y$' "$CONFIG"
           ! grep -q '^CONFIG_KPM=y$' "$CONFIG"

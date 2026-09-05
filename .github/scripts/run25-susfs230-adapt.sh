@@ -60,7 +60,8 @@ if '#include <linux/version.h>' not in d:
         )
 
 if 'SUSFS_DECL_FSNOTIFY_OPS' not in d:
-    helper = r'''
+    # Single-line macros: avoid leaked double-backslash C continuations.
+    helper = '''
 /* 4.14 / non-GKI fsnotify compatibility */
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 2, 0)
 typedef const struct qstr *susfs_fname_t;
@@ -73,42 +74,34 @@ typedef const unsigned char *susfs_fname_t;
 #endif
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 9, 0)
-#define SUSFS_DECL_FSNOTIFY_OPS(name)                                            \\
-int name(struct fsnotify_mark *mark, u32 mask, struct inode *inode,    \\
-struct inode *dir, const struct qstr *file_name, u32 cookie)
+#define SUSFS_DECL_FSNOTIFY_OPS(name) int name(struct fsnotify_mark *mark, u32 mask, struct inode *inode, struct inode *dir, const struct qstr *file_name, u32 cookie)
 #elif LINUX_VERSION_CODE >= KERNEL_VERSION(4, 18, 0)
-#define SUSFS_DECL_FSNOTIFY_OPS(name)                                            \\
-int name(struct fsnotify_group *group, struct inode *inode, u32 mask,  \\
-const void *data, int data_type, susfs_fname_t file_name,       \\
-u32 cookie, struct fsnotify_iter_info *iter_info)
+#define SUSFS_DECL_FSNOTIFY_OPS(name) int name(struct fsnotify_group *group, struct inode *inode, u32 mask, const void *data, int data_type, susfs_fname_t file_name, u32 cookie, struct fsnotify_iter_info *iter_info)
 #elif LINUX_VERSION_CODE >= KERNEL_VERSION(4, 12, 0)
-#define SUSFS_DECL_FSNOTIFY_OPS(name)                                            \\
-int name(struct fsnotify_group *group, struct inode *inode,            \\
-struct fsnotify_mark *inode_mark,                             \\
-struct fsnotify_mark *vfsmount_mark, u32 mask,                \\
-const void *data, int data_type, susfs_fname_t file_name,       \\
-u32 cookie, struct fsnotify_iter_info *iter_info)
+#define SUSFS_DECL_FSNOTIFY_OPS(name) int name(struct fsnotify_group *group, struct inode *inode, struct fsnotify_mark *inode_mark, struct fsnotify_mark *vfsmount_mark, u32 mask, const void *data, int data_type, susfs_fname_t file_name, u32 cookie, struct fsnotify_iter_info *iter_info)
 #else
-#define SUSFS_DECL_FSNOTIFY_OPS(name)                                            \\
-int name(struct fsnotify_group *group, struct inode *inode,            \\
-struct fsnotify_mark *inode_mark,                             \\
-struct fsnotify_mark *vfsmount_mark, u32 mask, void *data,    \\
-int data_type, susfs_fname_t file_name, u32 cookie)
+#define SUSFS_DECL_FSNOTIFY_OPS(name) int name(struct fsnotify_group *group, struct inode *inode, struct fsnotify_mark *inode_mark, struct fsnotify_mark *vfsmount_mark, u32 mask, void *data, int data_type, susfs_fname_t file_name, u32 cookie)
 #endif
 '''
     d = d.replace('#endif // #ifndef KSU_SUSFS_DEF_H', helper + '\n#endif // #ifndef KSU_SUSFS_DEF_H')
 
+# Never leave doubled C continuations in the generated header.
+while '\\\\\n' in d:
+    d = d.replace('\\\\\n', '\\\n')
+if any(line.rstrip().endswith('\\\\') for line in d.splitlines()):
+    raise SystemExit('double-backslash line continuation leaked into susfs_def.h')
+
 d = d.replace(
     '''static inline bool susfs_is_current_proc_umounted_app(void) {
-	return (likely(test_thread_flag(TIF_PROC_UMOUNTED)) &&
-			current_uid().val >= 10000);
+\treturn (likely(test_thread_flag(TIF_PROC_UMOUNTED)) &&
+\t\t\tcurrent_uid().val >= 10000);
 }''',
     '''static inline bool susfs_is_current_proc_umounted_app(void) {
-	return (likely(test_thread_flag(TIF_PROC_UMOUNTED)) &&
+\treturn (likely(test_thread_flag(TIF_PROC_UMOUNTED)) &&
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 12, 0)
-			__kuid_val(current_uid()) >= 10000);
+\t\t\t__kuid_val(current_uid()) >= 10000);
 #else
-			current_uid().val >= 10000);
+\t\t\tcurrent_uid().val >= 10000);
 #endif
 }'''
 )
@@ -124,15 +117,15 @@ if 'int susfs_open_redirect_spoof_show_map_vma(' not in c:
 #ifdef CONFIG_KSU_SUSFS_OPEN_REDIRECT
 int susfs_open_redirect_spoof_show_map_vma(struct inode *inode, unsigned long *out_ino, dev_t *out_dev, char *spoofed_name)
 {
-	char *name = NULL;
-	int ret;
+\tchar *name = NULL;
+\tint ret;
 
-	if (!spoofed_name)
-		return 0;
-	ret = susfs_open_redirect_spoof_show_map_vma_srcu(inode, out_ino, out_dev, &name);
-	if (ret && name)
-		strscpy(spoofed_name, name, SUSFS_MAX_LEN_PATHNAME);
-	return ret;
+\tif (!spoofed_name)
+\t\treturn 0;
+\tret = susfs_open_redirect_spoof_show_map_vma_srcu(inode, out_ino, out_dev, &name);
+\tif (ret && name)
+\t\tstrscpy(spoofed_name, name, SUSFS_MAX_LEN_PATHNAME);
+\treturn ret;
 }
 #endif
 '''
@@ -183,6 +176,16 @@ grep -Fq 'susfs_open_redirect_spoof_show_map_vma_srcu' fs/susfs.c
 ! grep -Fq 'i_mapping->flags' include/linux/susfs_def.h
 ! grep -Fq 'i_mapping->flags' fs/susfs.c
 grep -Fq '&inode->i_state' fs/susfs.c
+python3 - <<'CHK'
+from pathlib import Path
+text = Path('include/linux/susfs_def.h').read_text()
+bad = [i + 1 for i, line in enumerate(text.splitlines()) if line.rstrip().endswith('\\\\')]
+if bad:
+    raise SystemExit('double-backslash continuation in susfs_def.h at lines %s' % bad)
+if '#define SUSFS_DECL_FSNOTIFY_OPS(name) int name(' not in text:
+    raise SystemExit('SUSFS_DECL_FSNOTIFY_OPS is not a single-line int name(...) macro')
+print('susfs_def.h fsnotify macro ok', flush=True)
+CHK
 
 echo '===== Rewrite 4.14 2.2 inline hooks to official SUSFS 2.3 ====='
 git fetch --no-tags --depth=1 origin "$GITHUB_SHA" >/dev/null 2>&1 || true
@@ -191,7 +194,7 @@ python3 -u "$GITHUB_WORKSPACE/rewrite-susfs230-hooks.py"
 grep -Fq 'susfs_is_current_proc_no_su()' fs/exec.c
 grep -Fq 'filename_lookup(dfd, fname, lookup_flags, &path, NULL)' fs/open.c
 grep -Fq 'ksu_handle_faccessat(&dfd, &fname, &mode, NULL)' fs/open.c
-grep -Eq 'ksu_handle_stat\(&dfd, &fname, &flags?\)' fs/stat.c || grep -Fq 'filename_lookup(dfd, fname, lookup_flags, &path, NULL)' fs/stat.c
+grep -Eq 'ksu_handle_stat\\(&dfd, &fname, &flags?\\)' fs/stat.c || grep -Fq 'filename_lookup(dfd, fname, lookup_flags, &path, NULL)' fs/stat.c
 ! grep -Fq 'ksu_handle_faccessat(&dfd, &filename' fs/open.c
 ! grep -Fq 'susfs_is_current_proc_umounted()' fs/exec.c
 ! grep -Fq 'susfs_is_current_proc_umounted()' fs/open.c

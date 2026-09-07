@@ -247,19 +247,16 @@ if sig.exists():
 binder = Path('drivers/android/binder.c')
 if binder.exists():
     bs = binder.read_text()
-    already = '#define TF_UPDATE_TXN' in bs or 'REKERNEL_FROZEN_TASK_GROUP_STUB' in bs
-    need = ('TF_UPDATE_TXN' in bs) or ('frozen_task_group(' in bs)
-    if need and not already:
+    if 'TF_UPDATE_TXN' in bs and '#ifndef TF_UPDATE_TXN' not in bs and '#define TF_UPDATE_TXN' not in bs:
         guard = (
             '#ifndef TF_UPDATE_TXN\n'
             '#define TF_UPDATE_TXN 0x00\n'
             '#endif\n'
-            '#ifndef frozen_task_group\n'
-            '#define frozen_task_group(p) 0\n'
-            '#endif\n'
         )
+        # Do not #define frozen_task_group here. rekernel.h already provides
+        # the inline; a 0-macro turns that definition into "bool 0(".
         binder.write_text(guard + bs)
-        print('injected 4.14 binder TF_UPDATE_TXN/frozen_task_group stubs')
+        print('injected 4.14 binder TF_UPDATE_TXN stub only')
 PY
 enable_opt REKERNEL
 disable_opt REKERNEL_NETWORK

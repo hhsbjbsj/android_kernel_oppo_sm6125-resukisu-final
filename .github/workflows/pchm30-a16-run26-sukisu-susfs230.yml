@@ -14,6 +14,7 @@ on:
       - '.github/scripts/run24-selinux-hide-compat.sh'
       - '.github/scripts/run25-susfs230-adapt.sh'
       - '.github/scripts/run28-extra-features.sh'
+      - '.github/scripts/inject-run28-sukisu.py'
 
 env:
   TOOLCHAIN_RELEASE_TAG: pchm30-build-environment-20260810
@@ -140,26 +141,8 @@ jobs:
           test -f "$GITHUB_WORKSPACE/run-run19-step.py"
           git show "$GITHUB_SHA:.github/scripts/run28-extra-features.sh" > "$GITHUB_WORKSPACE/run28-extra-features.sh"
           chmod +x "$GITHUB_WORKSPACE/run28-extra-features.sh"
-          python3 - <<'PY'
-          from pathlib import Path
-          import os
-          p = Path(os.environ['GITHUB_WORKSPACE']) / 'run19-source.yml'
-          s = p.read_text()
-          extra = '"$GITHUB_WORKSPACE/run28-extra-features.sh"'
-          needle = '"$GITHUB_WORKSPACE/run17-bbg-lz4kd.sh"\\n\\n'
-          insert = (
-              '"$GITHUB_WORKSPACE/run17-bbg-lz4kd.sh"\\n\\'\n'
-              '              \\'"$GITHUB_WORKSPACE/run28-extra-features.sh"\\n\\n'
-          )
-          if extra not in s:
-              if needle not in s:
-                  raise SystemExit('cannot locate unique bbg orchestrator insert in run19-source.yml')
-              s = s.replace(needle, insert, 1)
-              p.write_text(s)
-          if extra not in p.read_text():
-              raise SystemExit('failed to inject run28 into run19 orchestrator rewriter')
-          print('injected run28 into run19 orchestrator rewriter')
-          PY
+          git show "$GITHUB_SHA:.github/scripts/inject-run28-sukisu.py" > "$GITHUB_WORKSPACE/inject-run28-sukisu.py"
+          python3 "$GITHUB_WORKSPACE/inject-run28-sukisu.py"
 
       - name: Build Run24 SukiSU stack with SUSFS 2.3.0 overlay and KPM
         shell: bash

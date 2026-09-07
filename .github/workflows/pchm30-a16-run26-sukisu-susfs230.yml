@@ -145,16 +145,20 @@ jobs:
           import os
           p = Path(os.environ['GITHUB_WORKSPACE']) / 'run19-source.yml'
           s = p.read_text()
-          marker = '"$GITHUB_WORKSPACE/run17-bbg-lz4kd.sh"'
           extra = '"$GITHUB_WORKSPACE/run28-extra-features.sh"'
+          needle = '"$GITHUB_WORKSPACE/run17-bbg-lz4kd.sh"\\n\\n'
+          insert = (
+              '"$GITHUB_WORKSPACE/run17-bbg-lz4kd.sh"\\n\\'\n'
+              '              \\'"$GITHUB_WORKSPACE/run28-extra-features.sh"\\n\\n'
+          )
           if extra not in s:
-              if marker not in s:
-                  raise SystemExit('cannot locate run17-bbg-lz4kd call in run19-source.yml')
-              s = s.replace(marker, marker + '\n              ' + extra, 1)
+              if needle not in s:
+                  raise SystemExit('cannot locate unique bbg orchestrator insert in run19-source.yml')
+              s = s.replace(needle, insert, 1)
               p.write_text(s)
           if extra not in p.read_text():
-              raise SystemExit('failed to inject run28 into run19-source.yml')
-          print('injected run28 into run19-source.yml')
+              raise SystemExit('failed to inject run28 into run19 orchestrator rewriter')
+          print('injected run28 into run19 orchestrator rewriter')
           PY
 
       - name: Build Run24 SukiSU stack with SUSFS 2.3.0 overlay and KPM

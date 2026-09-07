@@ -1,48 +1,33 @@
 #!/usr/bin/env python3
-# Patch the materialized Run19 step runner so Run28 is inserted into
-# run19-orchestrate.sh after that file is rewritten, before it is executed.
-# Avoids YAML/Python/bash quoting in the SukiSU workflow.
+# Patch materialized run19-source.yml so the inner orchestrator rewriter
+# inserts Run28 after BBG. Do not touch run-run19-step.py launch lines;
+# those also contain run19-orchestrate.sh as a git-show redirect.
 from pathlib import Path
 import os
 
-ws = Path(os.environ['GITHUB_WORKSPACE'])
-runner = ws / 'run-run19-step.py'
-if not runner.is_file():
-    raise SystemExit('run-run19-step.py is missing')
+p = Path(os.environ['GITHUB_WORKSPACE']) / 'run19-source.yml'
+if not p.is_file():
+    raise SystemExit('run19-source.yml is missing')
 
-s = runner.read_text()
-old = (
-    "subprocess.run(['bash', '-c', 'set -Eeuo pipefail\\n' + ''.join(script_lines)], "
-    "cwd=cwd, check=True, env=os.environ.copy())"
-)
-if old not in s:
-    raise SystemExit('cannot locate run-run19-step.py subprocess.run call')
+s = p.read_text()
+if 'run28-extra-features.sh' in s:
+    print('run19-source.yml already contains run28')
+else:
+    old = (
+        "'\"$GITHUB_WORKSPACE/run17-bbg-lz4kd.sh\"\\n\\n'\n"
+        '              "run_step \'Instrument exact BTF rejection path\'"'
+    )
+    new = (
+        "'\"$GITHUB_WORKSPACE/run17-bbg-lz4kd.sh\"\\n'\n"
+        "              '\"$GITHUB_WORKSPACE/run28-extra-features.sh\"\\n\\n'\n"
+        '              "run_step \'Instrument exact BTF rejection path\'"'
+    )
+    if old not in s:
+        raise SystemExit(
+            'cannot locate unique new_runtime bbg insert in run19-source.yml'
+        )
+    p.write_text(s.replace(old, new, 1))
+    print('patched run19-source.yml new_runtime to call run28 after bbg')
 
-new = '''
-joined_script = ''.join(script_lines)
-launch = '"$GITHUB_WORKSPACE/run19-orchestrate.sh"\\n'
-if launch not in joined_script:
-    raise SystemExit('cannot locate run19-orchestrate.sh launch in extracted step')
-hook = (
-    "python3 - <<'R28'\\n"
-    "from pathlib import Path\\n"
-    "import os\\n"
-    "p = Path(os.environ['GITHUB_WORKSPACE']) / 'run19-orchestrate.sh'\\n"
-    "s = p.read_text()\\n"
-    "call = '\\"$GITHUB_WORKSPACE/run28-extra-features.sh\\"\\n'\\n"
-    "key = '\\"$GITHUB_WORKSPACE/run17-bbg-lz4kd.sh\\"\\n'\\n"
-    "if call not in s:\\n"
-    "    if key not in s:\\n"
-    "        raise SystemExit('cannot find bbg call in run19-orchestrate.sh')\\n"
-    "    p.write_text(s.replace(key, key + call, 1))\\n"
-    "print('injected run28 into run19-orchestrate.sh')\\n"
-    "R28\\n"
-)
-joined_script = joined_script.replace(launch, hook + launch, 1)
-subprocess.run(['bash', '-c', 'set -Eeuo pipefail\\n' + joined_script], cwd=cwd, check=True, env=os.environ.copy())
-'''.lstrip('\n')
-
-runner.write_text(s.replace(old, new, 1))
-if 'run28-extra-features.sh' not in runner.read_text():
-    raise SystemExit('failed to patch run-run19-step.py with Run28 hook')
-print('patched run-run19-step.py to inject Run28 before orchestrate launch')
+if 'run28-extra-features.sh' not in p.read_text():
+    raise SystemExit('run28 missing from run19-source.yml after patch')

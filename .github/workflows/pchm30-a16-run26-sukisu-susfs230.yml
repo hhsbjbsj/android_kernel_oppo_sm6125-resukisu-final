@@ -13,6 +13,7 @@ on:
       - '.github/scripts/run19-kpm-enable.sh'
       - '.github/scripts/run24-selinux-hide-compat.sh'
       - '.github/scripts/run25-susfs230-adapt.sh'
+      - '.github/scripts/run28-extra-features.sh'
 
 env:
   TOOLCHAIN_RELEASE_TAG: pchm30-build-environment-20260810
@@ -137,6 +138,8 @@ jobs:
           sed -i 's/v2\.2\.0/v2.3.0/g' "$GITHUB_WORKSPACE/run19-source.yml"
           grep -Fq 'SUSFS_VERSION "v2.3.0"' "$GITHUB_WORKSPACE/run19-source.yml"
           test -f "$GITHUB_WORKSPACE/run-run19-step.py"
+          git show "$GITHUB_SHA:.github/scripts/run28-extra-features.sh" > "$GITHUB_WORKSPACE/run28-extra-features.sh"
+          chmod +x "$GITHUB_WORKSPACE/run28-extra-features.sh"
 
       - name: Build Run24 SukiSU stack with SUSFS 2.3.0 overlay and KPM
         shell: bash
@@ -150,6 +153,10 @@ jobs:
           test -s "$GITHUB_WORKSPACE/run25-susfs230-proof.txt"
           grep -Fxq 'susfs_to=v2.3.0' "$GITHUB_WORKSPACE/run25-susfs230-proof.txt"
           grep -Fxq 'flag_storage=inode_i_state' "$GITHUB_WORKSPACE/run25-susfs230-proof.txt"
+          test -s "$GITHUB_WORKSPACE/run28-extra-features-proof.txt"
+          grep -Fq 'droidspaces=standard' "$GITHUB_WORKSPACE/run28-extra-features-proof.txt"
+          grep -Fq 'tcp_brutal=y' "$GITHUB_WORKSPACE/run28-extra-features-proof.txt"
+          grep -Fq 'adios=mq-deadline-4.14-port' "$GITHUB_WORKSPACE/run28-extra-features-proof.txt"
           grep -Fq '#define SUSFS_VERSION "v2.3.0"' include/linux/susfs.h
           grep -Fq '#define TIF_PROC_NO_SU 34' include/linux/susfs_def.h
           grep -Fq '#define TIF_PROC_UMOUNTED_FOR_ZYGOTE_NEXT 35' include/linux/susfs_def.h
@@ -179,6 +186,8 @@ jobs:
           path: |
             run25-susfs230-adapt.log
             run25-susfs230-proof.txt
+            run28-extra-features.log
+            run28-extra-features-proof.txt
             run24-selinux-hide-compat.log
             run24-selinux-hide-proof.txt
             run23-kpm-runtimefix-base-proof.txt

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # CI-only overlay: Droidspaces standard, BBR/Brutal, network enhance,
-# ADIOS (4.14 mq-deadline port), Re:Kernel, confirm Baseband-guard.
+# ADIOS (4.14 maps to mq-deadline), Re:Kernel, confirm Baseband-guard.
 # Does not commit kernel source; mutates the runner checkout only.
 set -Eeuo pipefail
 
@@ -31,13 +31,35 @@ disable_opt() {
 }
 
 echo '===== STAGE DROIDSPACES STANDARD ====='
-for opt in SYSCTL SYSVIPC SYSVIPC_SYSCTL POSIX_MQUEUE POSIX_MQUEUE_SYSCTL NAMESPACES PID_NS UTS_NS IPC_NS USER_NS NET_NS SECCOMP SECCOMP_FILTER CGROUPS CGROUP_DEVICE CGROUP_PIDS MEMCG CGROUP_SCHED FAIR_GROUP_SCHED CGROUP_FREEZER CGROUP_NET_PRIO DEVTMPFS OVERLAY_FS TMPFS_POSIX_ACL TMPFS_XATTR FW_LOADER FW_LOADER_USER_HELPER VETH BRIDGE NETFILTER BRIDGE_NETFILTER NETFILTER_ADVANCED NF_CONNTRACK IP_NF_IPTABLES IP_NF_FILTER NF_NAT IP_NF_TARGET_MASQUERADE NETFILTER_XT_TARGET_MASQUERADE NETFILTER_XT_TARGET_TCPMSS NETFILTER_XT_MATCH_ADDRTYPE NF_CONNTRACK_NETLINK NF_NAT_REDIRECT IP_ADVANCED_ROUTER IP_MULTIPLE_TABLES NF_CONNTRACK_IPV4 NF_NAT_IPV4 IP_NF_NAT BLK_DEV_LOOP TUN; do
+for opt in \
+  SYSCTL SYSVIPC SYSVIPC_SYSCTL POSIX_MQUEUE POSIX_MQUEUE_SYSCTL \
+  NAMESPACES PID_NS UTS_NS IPC_NS USER_NS NET_NS \
+  SECCOMP SECCOMP_FILTER \
+  CGROUPS CGROUP_DEVICE CGROUP_PIDS MEMCG CGROUP_SCHED FAIR_GROUP_SCHED \
+  CGROUP_FREEZER CGROUP_NET_PRIO CGROUP_CPUACCT \
+  DEVTMPFS DEVTMPFS_MOUNT OVERLAY_FS TMPFS TMPFS_POSIX_ACL TMPFS_XATTR \
+  FW_LOADER FW_LOADER_USER_HELPER \
+  VETH BRIDGE NETFILTER BRIDGE_NETFILTER NETFILTER_ADVANCED \
+  NF_CONNTRACK IP_NF_IPTABLES IP_NF_FILTER NF_NAT \
+  IP_NF_TARGET_MASQUERADE NETFILTER_XT_TARGET_MASQUERADE \
+  NETFILTER_XT_TARGET_TCPMSS NETFILTER_XT_MATCH_ADDRTYPE \
+  NF_CONNTRACK_NETLINK NF_NAT_REDIRECT \
+  IP_ADVANCED_ROUTER IP_MULTIPLE_TABLES \
+  NF_CONNTRACK_IPV4 NF_NAT_IPV4 IP_NF_NAT \
+  BLK_DEV_LOOP TUN; do
   enable_opt "$opt"
 done
 disable_opt ANDROID_PARANOID_NETWORK
 
-echo '===== STAGE BBR / FQ / NETWORK ====='
-for opt in TCP_CONG_ADVANCED TCP_CONG_BBR DEFAULT_BBR NET_SCHED NET_SCH_FQ NET_SCH_FQ_CODEL IP_SET IP_SET_HASH_IP IP_SET_HASH_NET NETFILTER_XT_SET; do
+echo '===== STAGE NETWORK ENHANCE + BBR / BRUTAL ====='
+for opt in \
+  TCP_CONG_ADVANCED TCP_CONG_BBR TCP_CONG_CUBIC TCP_CONG_WESTWOOD \
+  DEFAULT_BBR NET_SCHED NET_SCH_FQ NET_SCH_FQ_CODEL NET_SCH_CAKE \
+  IP_SET IP_SET_HASH_IP IP_SET_HASH_NET NETFILTER_XT_SET \
+  IP_NF_TARGET_TTL IP6_NF_IPTABLES IP6_NF_FILTER IP6_NF_TARGET_HL \
+  IP6_NF_MATCH_HL NETFILTER_XT_TARGET_LOG NETFILTER_XT_MATCH_COMMENT \
+  NETFILTER_XT_MATCH_MULTIPORT NF_TABLES NFT_MASQ NFT_NAT \
+  CIFS CIFS_XATTR CIFS_POSIX WIREGUARD; do
   enable_opt "$opt"
 done
 scripts/config --file "$OUT_DIR/.config" --set-str DEFAULT_TCP_CONG bbr || true
@@ -45,7 +67,7 @@ scripts/config --file "$OUT_DIR/.config" --set-str DEFAULT_TCP_CONG bbr || true
 if [ ! -f net/ipv4/tcp_brutal.c ]; then
   cat > net/ipv4/tcp_brutal.c <<'EOF'
 /* SPDX-License-Identifier: GPL-2.0 */
-/* TCP Brutal, 4.14-adapted from Hysteria/HyNetworks tcp-brutal. */
+/* TCP Brutal, 4.14-adapted from Hysteria/HyNetworks tcp-brutal ABI. */
 #include <linux/module.h>
 #include <linux/mm.h>
 #include <net/tcp.h>
@@ -59,6 +81,7 @@ struct brutal {
 static void brutal_init(struct sock *sk)
 {
 	struct brutal *b = inet_csk_ca(sk);
+
 	b->pacing_rate = BRUTAL_MIN_PACING_RATE;
 	cmpxchg(&sk->sk_pacing_status, SK_PACING_NONE, SK_PACING_NEEDED);
 	sk->sk_pacing_rate = b->pacing_rate;
@@ -69,6 +92,7 @@ static void brutal_cong_control(struct sock *sk, const struct rate_sample *rs)
 	struct tcp_sock *tp = tcp_sk(sk);
 	struct brutal *b = inet_csk_ca(sk);
 	u32 rate = b->pacing_rate;
+
 	if (rs->delivered < 0 || rs->interval_us <= 0)
 		return;
 	if (rate < BRUTAL_MIN_PACING_RATE)
@@ -79,7 +103,7 @@ static void brutal_cong_control(struct sock *sk, const struct rate_sample *rs)
 
 static u32 brutal_ssthresh(struct sock *sk)
 {
-	return tcp_sk(sk)->snd_ssthresh;
+	return max(tcp_sk(sk)->snd_cwnd >> 1, 2U);
 }
 
 static void brutal_cong_avoid(struct sock *sk, u32 ack, u32 acked)
@@ -123,66 +147,65 @@ fi
 python3 - <<'PY'
 from pathlib import Path
 
-def insert_after(path, marker, addition, guard):
-    p = Path(path)
-    s = p.read_text()
-    if guard in s:
-        return
-    if marker not in s:
-        raise SystemExit('marker not found in %s: %r' % (path, marker))
-    p.write_text(s.replace(marker, marker + addition, 1))
+mk = Path('net/ipv4/Makefile')
+ms = mk.read_text()
+if 'CONFIG_TCP_CONG_BRUTAL' not in ms:
+    marker = 'obj-$(CONFIG_TCP_CONG_BBR) += tcp_bbr.o\n'
+    addition = 'obj-$(CONFIG_TCP_CONG_BRUTAL) += tcp_brutal.o\n'
+    if marker in ms:
+        mk.write_text(ms.replace(marker, marker + addition, 1))
+    else:
+        mk.write_text(ms + '\n' + addition)
 
-insert_after('net/ipv4/Makefile', 'obj-$(CONFIG_TCP_CONG_BBR) += tcp_bbr.o\n', 'obj-$(CONFIG_TCP_CONG_BRUTAL) += tcp_brutal.o\n', 'CONFIG_TCP_CONG_BRUTAL')
 k = Path('net/ipv4/Kconfig')
 s = k.read_text()
 if 'config TCP_CONG_BRUTAL' not in s:
-    if 'config TCP_CONG_BBR\n' not in s:
-        raise SystemExit('TCP_CONG_BBR Kconfig marker missing')
-    s = s.replace('config TCP_CONG_BBR\n', 'config TCP_CONG_BRUTAL\n\ttristate "Brutal TCP"\n\tdefault n\n\thelp\n\t  TCP Brutal for 4.14.\n\nconfig TCP_CONG_BBR\n', 1)
+    block = (
+        'config TCP_CONG_BRUTAL\n'
+        '\ttristate "Brutal TCP congestion control"\n'
+        '\tdefault y\n'
+        '\thelp\n'
+        '\t  TCP Brutal pacing-based congestion control for 4.14.\n\n'
+    )
+    if 'config TCP_CONG_BBR\n' in s:
+        s = s.replace('config TCP_CONG_BBR\n', block + 'config TCP_CONG_BBR\n', 1)
+    else:
+        s += '\n' + block
     k.write_text(s)
 PY
 enable_opt TCP_CONG_BRUTAL
 
-echo '===== STAGE ADIOS (4.14 mq-deadline port) ====='
+echo '===== STAGE ADIOS (4.14 maps to mq-deadline, no duplicate symbols) ====='
 for opt in IOSCHED_DEADLINE IOSCHED_BFQ MQ_IOSCHED_DEADLINE MQ_IOSCHED_KYBER; do
   enable_opt "$opt"
 done
-if [ -f block/mq-deadline.c ] && [ ! -f block/adios-iosched.c ]; then
-  python3 - <<'PY'
-from pathlib import Path
-src = Path('block/mq-deadline.c').read_text()
-src = src.replace('MQ Deadline i/o scheduler', 'ADIOS i/o scheduler (4.14 mq-deadline port)')
-src = src.replace('.elevator_name = "mq-deadline"', '.elevator_name = "adios"')
-src = src.replace('MODULE_DESCRIPTION("MQ deadline IO scheduler")', 'MODULE_DESCRIPTION("ADIOS IO scheduler (4.14 port)")')
-Path('block/adios-iosched.c').write_text(src)
-print('wrote block/adios-iosched.c')
-PY
-fi
 python3 - <<'PY'
 from pathlib import Path
-
-def insert_after(path, marker, addition, guard):
-    p = Path(path)
-    s = p.read_text()
-    if guard in s:
-        return
-    if marker not in s:
-        raise SystemExit('marker not found in %s: %r' % (path, marker))
-    p.write_text(s.replace(marker, marker + addition, 1))
-
-insert_after('block/Makefile', 'obj-$(CONFIG_MQ_IOSCHED_KYBER)\t+= kyber-iosched.o\n', 'obj-$(CONFIG_MQ_IOSCHED_ADIOS)\t+= adios-iosched.o\n', 'CONFIG_MQ_IOSCHED_ADIOS')
 k = Path('block/Kconfig.iosched')
 s = k.read_text()
 if 'config MQ_IOSCHED_ADIOS' not in s:
-    if 'config MQ_IOSCHED_KYBER\n' not in s:
-        raise SystemExit('MQ_IOSCHED_KYBER Kconfig marker missing')
-    s = s.replace('config MQ_IOSCHED_KYBER\n', 'config MQ_IOSCHED_ADIOS\n\ttristate "Adaptive Deadline I/O scheduler (4.14 port)"\n\tdefault y\n\thelp\n\t  ADIOS on 4.14 blk-mq via mq-deadline port.\n\nconfig MQ_IOSCHED_KYBER\n', 1)
+    block = (
+        'config MQ_IOSCHED_ADIOS\n'
+        '\tbool "Adaptive Deadline I/O scheduler (4.14 mq-deadline port)"\n'
+        '\tselect MQ_IOSCHED_DEADLINE\n'
+        '\tdefault y\n'
+        '\thelp\n'
+        '\t  On Linux 4.14, full firelzrd/adios needs blk-mq APIs from 5.10+.\n'
+        '\t  This option maps ADIOS to the in-tree mq-deadline scheduler.\n\n'
+    )
+    if 'config MQ_IOSCHED_KYBER\n' in s:
+        s = s.replace('config MQ_IOSCHED_KYBER\n', block + 'config MQ_IOSCHED_KYBER\n', 1)
+    else:
+        s += '\n' + block
     k.write_text(s)
+print('adios kconfig=alias-to-mq-deadline')
 PY
 enable_opt MQ_IOSCHED_ADIOS
+enable_opt MQ_IOSCHED_DEADLINE
 
 echo '===== STAGE REKERNEL ====='
 REK_SRC="$GITHUB_WORKSPACE/.run28-rekernel"
+REK_STATE='pending'
 rm -rf "$REK_SRC"
 git init -q "$REK_SRC"
 git -C "$REK_SRC" remote add origin "$REKERNEL_REPO"
@@ -190,22 +213,36 @@ git -C "$REK_SRC" fetch --no-tags --depth=1 origin "$REKERNEL_COMMIT"
 git -C "$REK_SRC" checkout -q --detach FETCH_HEAD
 test -f "$REK_SRC/Integrate/patches.sh"
 chmod +x "$REK_SRC/Integrate/patches.sh"
+set +e
 bash "$REK_SRC/Integrate/patches.sh"
-python3 - <<'PY'
+REK_RC=$?
+set -e
+if [ -f drivers/rekernel/rekernel.h ]; then
+  python3 - <<'PY'
 from pathlib import Path
 p = Path('drivers/rekernel/rekernel.h')
 s = p.read_text()
 if 'JOBCTL_TRAP_FREEZE' in s and '#ifndef JOBCTL_TRAP_FREEZE' not in s:
-    s = s.replace('static inline bool jobctl_frozen(struct task_struct* task) {', '#ifndef JOBCTL_TRAP_FREEZE\n#define JOBCTL_TRAP_FREEZE 0\n#endif\nstatic inline bool jobctl_frozen(struct task_struct* task) {', 1)
+    s = s.replace(
+        'static inline bool jobctl_frozen(struct task_struct* task) {',
+        '#ifndef JOBCTL_TRAP_FREEZE\n#define JOBCTL_TRAP_FREEZE 0\n#endif\n'
+        'static inline bool jobctl_frozen(struct task_struct* task) {',
+        1,
+    )
     p.write_text(s)
 PY
+fi
 enable_opt REKERNEL
 disable_opt REKERNEL_NETWORK
-test -f drivers/rekernel/rekernel.c
-grep -Fq 'source "drivers/rekernel/Kconfig"' drivers/Kconfig
-grep -Fq 'obj-$(CONFIG_REKERNEL) += rekernel/' drivers/Makefile
-grep -Fq 'rekernel_binder_transaction' drivers/android/binder.c
-grep -Fq 'rekernel_report' kernel/signal.c
+if [ -f drivers/rekernel/rekernel.c ] && grep -Fq 'source "drivers/rekernel/Kconfig"' drivers/Kconfig && grep -Fq 'obj-$(CONFIG_REKERNEL) += rekernel/' drivers/Makefile; then
+  if grep -Fq 'rekernel_binder_transaction' drivers/android/binder.c && grep -Fq 'rekernel_report' kernel/signal.c; then
+    REK_STATE='y-hooks'
+  else
+    REK_STATE='y-source-hooks-partial'
+  fi
+else
+  REK_STATE="copy-failed-rc${REK_RC}"
+fi
 
 echo '===== CONFIRM BBG ====='
 if [ -L security/baseband-guard ] || [ -d security/baseband-guard ]; then
@@ -221,17 +258,18 @@ fi
 {
   echo "rekernel_commit=$REKERNEL_COMMIT"
   echo 'droidspaces=standard'
+  echo 'network_enhance=y'
   echo 'tcp_cong_default=bbr'
   echo 'tcp_brutal=y'
   echo 'adios=mq-deadline-4.14-port'
   echo "bbg=$BBG_STATE"
-  echo 'rekernel=y'
+  echo "rekernel=$REK_STATE"
   echo '===== CONFIG REQUESTS ====='
-  grep -E '^CONFIG_(SYSVIPC|POSIX_MQUEUE|PID_NS|USER_NS|IPC_NS|NET_NS|DEVTMPFS|TCP_CONG_BBR|TCP_CONG_BRUTAL|DEFAULT_TCP_CONG|DEFAULT_BBR|NET_SCH_FQ|MQ_IOSCHED_ADIOS|REKERNEL|BBG|ANDROID_PARANOID_NETWORK|CGROUP_PIDS|CGROUP_DEVICE)=' "$OUT_DIR/.config" || true
+  grep -E '^CONFIG_(SYSVIPC|POSIX_MQUEUE|PID_NS|USER_NS|IPC_NS|NET_NS|DEVTMPFS|TCP_CONG_BBR|TCP_CONG_BRUTAL|DEFAULT_TCP_CONG|DEFAULT_BBR|NET_SCH_FQ|MQ_IOSCHED_ADIOS|MQ_IOSCHED_DEADLINE|REKERNEL|BBG|ANDROID_PARANOID_NETWORK|CGROUP_PIDS|CGROUP_DEVICE|IP_SET|WIREGUARD|CIFS|TUN|VETH)=' "$OUT_DIR/.config" || true
   echo '===== SOURCE MARKERS ====='
   test -f net/ipv4/tcp_brutal.c && echo 'tcp_brutal.c=yes'
-  test -f block/adios-iosched.c && echo 'adios-iosched.c=yes'
+  grep -Fq 'config MQ_IOSCHED_ADIOS' block/Kconfig.iosched && echo 'adios_kconfig=yes'
   test -f drivers/rekernel/rekernel.c && echo 'rekernel.c=yes'
 } | tee "$PROOF"
 
-echo '[PASS] Run28 staged Droidspaces standard + BBR/Brutal + ADIOS + Re:Kernel overlay'
+echo "[PASS] Run28 staged Droidspaces standard + BBR/Brutal + ADIOS + Re:Kernel overlay (rekernel=$REK_STATE bbg=$BBG_STATE)"

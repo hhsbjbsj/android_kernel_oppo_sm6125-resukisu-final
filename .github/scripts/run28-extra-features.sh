@@ -43,6 +43,15 @@ for opt in \
   TUN VETH CIFS CIFS_XATTR CIFS_POSIX WIREGUARD; do
   enable_opt "$opt"
 done
+# TCP_CONG_ADVANCED exposes a pile of NEW children (BIC first). Seed them
+# as explicit =n so silentoldconfig does not abort on SukiSU's .config.
+for opt in \
+  TCP_CONG_BIC TCP_CONG_HTCP TCP_CONG_HSTCP TCP_CONG_HYBLA \
+  TCP_CONG_VEGAS TCP_CONG_NV TCP_CONG_SCALABLE TCP_CONG_LP \
+  TCP_CONG_VENO TCP_CONG_YEAH TCP_CONG_ILLINOIS TCP_CONG_DCTCP \
+  TCP_CONG_CDG TCP_MD5SIG; do
+  disable_opt "$opt"
+done
 # Do not flip DEFAULT_BBR: that adds a NEW default-cong choice and aborts silentoldconfig.
 scripts/config --file "$OUT_DIR/.config" --set-str DEFAULT_TCP_CONG bbr || true
 
@@ -198,6 +207,23 @@ else
   BBG_STATE='missing-run17-not-applied'
 fi
 
+echo '===== OLDDEFCONFIG (answer remaining NEW symbols with defaults) ====='
+# SukiSU hits make silentoldconfig later. ReSukiSU stock config already had
+# TCP_CONG_ADVANCED children; SukiSU did not. olddefconfig is non-interactive.
+yes '' | make O="$OUT_DIR" ARCH=arm64 olddefconfig || \
+  make O="$OUT_DIR" ARCH=arm64 olddefconfig || true
+# Re-assert requested defaults after olddefconfig may reset string/choice.
+enable_opt TCP_CONG_ADVANCED
+enable_opt TCP_CONG_BBR
+enable_opt TCP_CONG_CUBIC
+enable_opt TCP_CONG_WESTWOOD
+enable_opt TCP_CONG_BRUTAL
+enable_opt NET_SCH_FQ
+enable_opt NET_SCH_FQ_CODEL
+enable_opt MQ_IOSCHED_DEADLINE
+enable_opt MQ_IOSCHED_ADIOS
+scripts/config --file "$OUT_DIR/.config" --set-str DEFAULT_TCP_CONG bbr || true
+
 {
   echo 'droidspaces=off'
   echo 'rekernel=off'
@@ -207,7 +233,7 @@ fi
   echo 'adios=mq-deadline-4.14-port'
   echo "bbg=$BBG_STATE"
   echo '===== CONFIG REQUESTS ====='
-  grep -E '^CONFIG_(TCP_CONG_BBR|TCP_CONG_BRUTAL|DEFAULT_TCP_CONG|NET_SCH_FQ|MQ_IOSCHED_ADIOS|MQ_IOSCHED_DEADLINE|REKERNEL|BBG|IP_SET|WIREGUARD|CIFS|TUN|VETH)=' "$OUT_DIR/.config" || true
+  grep -E '^CONFIG_(TCP_CONG_BBR|TCP_CONG_BRUTAL|TCP_CONG_BIC|TCP_CONG_ADVANCED|DEFAULT_TCP_CONG|NET_SCH_FQ|MQ_IOSCHED_ADIOS|MQ_IOSCHED_DEADLINE|REKERNEL|BBG|IP_SET|WIREGUARD|CIFS|TUN|VETH)=' "$OUT_DIR/.config" || true
   echo '===== SOURCE MARKERS ====='
   test -f net/ipv4/tcp_brutal.c && echo 'tcp_brutal.c=yes'
   grep -Fq 'config MQ_IOSCHED_ADIOS' block/Kconfig.iosched && echo 'adios_kconfig=yes'

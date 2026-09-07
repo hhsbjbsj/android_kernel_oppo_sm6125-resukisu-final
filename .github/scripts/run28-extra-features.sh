@@ -1,23 +1,20 @@
 #!/usr/bin/env bash
 # CI-only overlay: network enhance, BBR/Brutal, ADIOS (4.14 mq-deadline),
-# Re:Kernel, confirm Baseband-guard. No Droidspaces.
+# confirm Baseband-guard. No Droidspaces. No Re-Kernel.
 # Does not commit kernel source; mutates the runner checkout only.
 set -Eeuo pipefail
 
 KERNEL_DIR="${KERNEL_DIR:-$GITHUB_WORKSPACE/$KERNEL_REL}"
 OUT_DIR="${OUT_DIR:-out-pchm30-a16-bpf}"
-REKERNEL_REPO="${REKERNEL_REPO:-https://github.com/Sakion-Team/Re-Kernel.git}"
-REKERNEL_COMMIT="${REKERNEL_COMMIT:-5adec4896a549af60fab2ab59441a777551763b9}"
 LOG="$GITHUB_WORKSPACE/run28-extra-features.log"
 PROOF="$GITHUB_WORKSPACE/run28-extra-features-proof.txt"
 
 exec > >(tee "$LOG") 2>&1
 cd "$KERNEL_DIR"
 
-echo '===== RUN28 EXTRA FEATURES (4.14 CI overlay, no Droidspaces) ====='
+echo '===== RUN28 EXTRA FEATURES (4.14 CI overlay, no Droidspaces, no Re-Kernel) ====='
 echo "kernel_dir=$KERNEL_DIR"
 echo "out_dir=$OUT_DIR"
-echo "rekernel_commit=$REKERNEL_COMMIT"
 test -f "$OUT_DIR/.config"
 test -x scripts/config
 
@@ -33,7 +30,7 @@ disable_opt() {
 echo '===== STAGE NETWORK ENHANCE + BBR / BRUTAL ====='
 for opt in \
   TCP_CONG_ADVANCED TCP_CONG_BBR TCP_CONG_CUBIC TCP_CONG_WESTWOOD \
-  DEFAULT_BBR NET_SCHED NET_SCH_FQ NET_SCH_FQ_CODEL NET_SCH_CAKE \
+  NET_SCHED NET_SCH_FQ NET_SCH_FQ_CODEL \
   IP_SET IP_SET_HASH_IP IP_SET_HASH_NET NETFILTER_XT_SET \
   NETFILTER NETFILTER_ADVANCED NF_CONNTRACK \
   IP_NF_IPTABLES IP_NF_FILTER NF_NAT IP_NF_NAT \
@@ -46,6 +43,7 @@ for opt in \
   TUN VETH CIFS CIFS_XATTR CIFS_POSIX WIREGUARD; do
   enable_opt "$opt"
 done
+# Do not flip DEFAULT_BBR: that adds a NEW default-cong choice and aborts silentoldconfig.
 scripts/config --file "$OUT_DIR/.config" --set-str DEFAULT_TCP_CONG bbr || true
 
 if [ ! -f net/ipv4/tcp_brutal.c ]; then
@@ -159,10 +157,10 @@ if 'config TCP_CONG_BRUTAL' not in s:
 PY
 enable_opt TCP_CONG_BRUTAL
 
-echo '===== STAGE ADIOS (4.14 maps to mq-deadline, no duplicate symbols) ====='
-for opt in IOSCHED_DEADLINE IOSCHED_BFQ MQ_IOSCHED_DEADLINE MQ_IOSCHED_KYBER; do
-  enable_opt "$opt"
-done
+echo '===== STAGE ADIOS (4.14 maps to mq-deadline; do not enable legacy deadline) ====='
+# Enabling IOSCHED_DEADLINE adds DEFAULT_DEADLINE as a NEW choice and
+# aborts silentoldconfig. Only touch mq-deadline.
+enable_opt MQ_IOSCHED_DEADLINE
 python3 - <<'PY'
 from pathlib import Path
 k = Path('block/Kconfig.iosched')
@@ -187,88 +185,7 @@ PY
 enable_opt MQ_IOSCHED_ADIOS
 enable_opt MQ_IOSCHED_DEADLINE
 
-echo '===== STAGE REKERNEL ====='
-REK_SRC="$GITHUB_WORKSPACE/.run28-rekernel"
-REK_STATE='pending'
-rm -rf "$REK_SRC"
-git init -q "$REK_SRC"
-git -C "$REK_SRC" remote add origin "$REKERNEL_REPO"
-git -C "$REK_SRC" fetch --no-tags --depth=1 origin "$REKERNEL_COMMIT"
-git -C "$REK_SRC" checkout -q --detach FETCH_HEAD
-test -f "$REK_SRC/Integrate/patches.sh"
-chmod +x "$REK_SRC/Integrate/patches.sh"
-set +e
-bash "$REK_SRC/Integrate/patches.sh"
-REK_RC=$?
-set -e
-python3 - <<'PY'
-from pathlib import Path
-import re
-
-# OPPO hans.h also defines enumerator SIGNAL. Prefix Re:Kernel enums
-# so kernel/signal.c can include both headers.
-renames = {
-    'BINDER': 'REKERNEL_BINDER',
-    'SIGNAL': 'REKERNEL_SIGNAL',
-    'NETWORK': 'REKERNEL_NETWORK',
-    'REPLY': 'REKERNEL_REPLY',
-    'TRANSACTION': 'REKERNEL_TRANSACTION',
-    'OVERFLOW': 'REKERNEL_OVERFLOW',
-}
-
-def rewrite_idents(text):
-    for old, new in renames.items():
-        text = re.sub(r'\b' + old + r'\b', new, text)
-    return text
-
-for rel in ('drivers/rekernel/rekernel.h', 'drivers/rekernel/rekernel.c'):
-    p = Path(rel)
-    if not p.exists():
-        continue
-    s = p.read_text()
-    if 'JOBCTL_TRAP_FREEZE' in s and '#ifndef JOBCTL_TRAP_FREEZE' not in s:
-        s = s.replace(
-            'static inline bool jobctl_frozen(struct task_struct* task) {',
-            '#ifndef JOBCTL_TRAP_FREEZE\n#define JOBCTL_TRAP_FREEZE 0\n#endif\n'
-            'static inline bool jobctl_frozen(struct task_struct* task) {',
-            1,
-        )
-    p.write_text(rewrite_idents(s))
-    print('rewrote %s enums' % rel)
-
-sig = Path('kernel/signal.c')
-if sig.exists():
-    s = sig.read_text()
-    n = s.replace('rekernel_report(SIGNAL,', 'rekernel_report(REKERNEL_SIGNAL,')
-    if n != s:
-        sig.write_text(n)
-        print('rewrote kernel/signal.c rekernel_report type')
-
-binder = Path('drivers/android/binder.c')
-if binder.exists():
-    bs = binder.read_text()
-    if 'TF_UPDATE_TXN' in bs and '#ifndef TF_UPDATE_TXN' not in bs and '#define TF_UPDATE_TXN' not in bs:
-        guard = (
-            '#ifndef TF_UPDATE_TXN\n'
-            '#define TF_UPDATE_TXN 0x00\n'
-            '#endif\n'
-        )
-        # Do not #define frozen_task_group here. rekernel.h already provides
-        # the inline; a 0-macro turns that definition into "bool 0(".
-        binder.write_text(guard + bs)
-        print('injected 4.14 binder TF_UPDATE_TXN stub only')
-PY
-enable_opt REKERNEL
-disable_opt REKERNEL_NETWORK
-if [ -f drivers/rekernel/rekernel.c ] && grep -Fq 'source "drivers/rekernel/Kconfig"' drivers/Kconfig && grep -Fq 'obj-$(CONFIG_REKERNEL) += rekernel/' drivers/Makefile; then
-  if grep -Fq 'rekernel_binder_transaction' drivers/android/binder.c && grep -Fq 'rekernel_report' kernel/signal.c; then
-    REK_STATE='y-hooks'
-  else
-    REK_STATE='y-source-hooks-partial'
-  fi
-else
-  REK_STATE="copy-failed-rc${REK_RC}"
-fi
+echo '===== REKERNEL SKIPPED ====='
 
 echo '===== CONFIRM BBG ====='
 if [ -L security/baseband-guard ] || [ -d security/baseband-guard ]; then
@@ -282,21 +199,19 @@ else
 fi
 
 {
-  echo "rekernel_commit=$REKERNEL_COMMIT"
   echo 'droidspaces=off'
+  echo 'rekernel=off'
   echo 'network_enhance=y'
   echo 'tcp_cong_default=bbr'
   echo 'tcp_brutal=y'
   echo 'adios=mq-deadline-4.14-port'
   echo "bbg=$BBG_STATE"
-  echo "rekernel=$REK_STATE"
   echo '===== CONFIG REQUESTS ====='
-  grep -E '^CONFIG_(TCP_CONG_BBR|TCP_CONG_BRUTAL|DEFAULT_TCP_CONG|DEFAULT_BBR|NET_SCH_FQ|MQ_IOSCHED_ADIOS|MQ_IOSCHED_DEADLINE|REKERNEL|BBG|IP_SET|WIREGUARD|CIFS|TUN|VETH)=' "$OUT_DIR/.config" || true
+  grep -E '^CONFIG_(TCP_CONG_BBR|TCP_CONG_BRUTAL|DEFAULT_TCP_CONG|NET_SCH_FQ|MQ_IOSCHED_ADIOS|MQ_IOSCHED_DEADLINE|REKERNEL|BBG|IP_SET|WIREGUARD|CIFS|TUN|VETH)=' "$OUT_DIR/.config" || true
   echo '===== SOURCE MARKERS ====='
   test -f net/ipv4/tcp_brutal.c && echo 'tcp_brutal.c=yes'
   grep -Fq 'config MQ_IOSCHED_ADIOS' block/Kconfig.iosched && echo 'adios_kconfig=yes'
-  test -f drivers/rekernel/rekernel.c && echo 'rekernel.c=yes'
-  grep -Fq 'REKERNEL_SIGNAL' drivers/rekernel/rekernel.h && echo 'rekernel_enum_prefixed=yes'
+  if [ -f drivers/rekernel/rekernel.c ]; then echo 'rekernel.c=unexpected'; else echo 'rekernel.c=absent'; fi
 } | tee "$PROOF"
 
-echo "[PASS] Run28 staged BBR/Brutal + ADIOS + Re:Kernel + BBG overlay (rekernel=$REK_STATE bbg=$BBG_STATE)"
+echo "[PASS] Run28 staged BBR/Brutal + ADIOS + BBG overlay (rekernel=off bbg=$BBG_STATE)"

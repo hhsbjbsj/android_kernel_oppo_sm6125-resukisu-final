@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# CI-only overlay: Droidspaces standard, BBR/Brutal, network enhance,
-# ADIOS (4.14 maps to mq-deadline), Re:Kernel, confirm Baseband-guard.
+# CI-only overlay: network enhance, BBR/Brutal, ADIOS (4.14 mq-deadline),
+# Re:Kernel, confirm Baseband-guard. No Droidspaces.
 # Does not commit kernel source; mutates the runner checkout only.
 set -Eeuo pipefail
 
@@ -14,7 +14,7 @@ PROOF="$GITHUB_WORKSPACE/run28-extra-features-proof.txt"
 exec > >(tee "$LOG") 2>&1
 cd "$KERNEL_DIR"
 
-echo '===== RUN28 EXTRA FEATURES (4.14 CI overlay) ====='
+echo '===== RUN28 EXTRA FEATURES (4.14 CI overlay, no Droidspaces) ====='
 echo "kernel_dir=$KERNEL_DIR"
 echo "out_dir=$OUT_DIR"
 echo "rekernel_commit=$REKERNEL_COMMIT"
@@ -30,36 +30,20 @@ disable_opt() {
   scripts/config --file "$OUT_DIR/.config" -d "$opt" || true
 }
 
-echo '===== STAGE DROIDSPACES STANDARD ====='
-for opt in \
-  SYSCTL SYSVIPC SYSVIPC_SYSCTL POSIX_MQUEUE POSIX_MQUEUE_SYSCTL \
-  NAMESPACES PID_NS UTS_NS IPC_NS USER_NS NET_NS \
-  SECCOMP SECCOMP_FILTER \
-  CGROUPS CGROUP_DEVICE CGROUP_PIDS MEMCG CGROUP_SCHED FAIR_GROUP_SCHED \
-  CGROUP_FREEZER CGROUP_NET_PRIO CGROUP_CPUACCT \
-  DEVTMPFS DEVTMPFS_MOUNT OVERLAY_FS TMPFS TMPFS_POSIX_ACL TMPFS_XATTR \
-  FW_LOADER FW_LOADER_USER_HELPER \
-  VETH BRIDGE NETFILTER BRIDGE_NETFILTER NETFILTER_ADVANCED \
-  NF_CONNTRACK IP_NF_IPTABLES IP_NF_FILTER NF_NAT \
-  IP_NF_TARGET_MASQUERADE NETFILTER_XT_TARGET_MASQUERADE \
-  NETFILTER_XT_TARGET_TCPMSS NETFILTER_XT_MATCH_ADDRTYPE \
-  NF_CONNTRACK_NETLINK NF_NAT_REDIRECT \
-  IP_ADVANCED_ROUTER IP_MULTIPLE_TABLES \
-  NF_CONNTRACK_IPV4 NF_NAT_IPV4 IP_NF_NAT \
-  BLK_DEV_LOOP TUN; do
-  enable_opt "$opt"
-done
-disable_opt ANDROID_PARANOID_NETWORK
-
 echo '===== STAGE NETWORK ENHANCE + BBR / BRUTAL ====='
 for opt in \
   TCP_CONG_ADVANCED TCP_CONG_BBR TCP_CONG_CUBIC TCP_CONG_WESTWOOD \
   DEFAULT_BBR NET_SCHED NET_SCH_FQ NET_SCH_FQ_CODEL NET_SCH_CAKE \
   IP_SET IP_SET_HASH_IP IP_SET_HASH_NET NETFILTER_XT_SET \
+  NETFILTER NETFILTER_ADVANCED NF_CONNTRACK \
+  IP_NF_IPTABLES IP_NF_FILTER NF_NAT IP_NF_NAT \
+  IP_NF_TARGET_MASQUERADE NETFILTER_XT_TARGET_MASQUERADE \
+  NETFILTER_XT_TARGET_TCPMSS NETFILTER_XT_MATCH_ADDRTYPE \
   IP_NF_TARGET_TTL IP6_NF_IPTABLES IP6_NF_FILTER IP6_NF_TARGET_HL \
   IP6_NF_MATCH_HL NETFILTER_XT_TARGET_LOG NETFILTER_XT_MATCH_COMMENT \
-  NETFILTER_XT_MATCH_MULTIPORT NF_TABLES NFT_MASQ NFT_NAT \
-  CIFS CIFS_XATTR CIFS_POSIX WIREGUARD; do
+  NETFILTER_XT_MATCH_MULTIPORT \
+  IP_ADVANCED_ROUTER IP_MULTIPLE_TABLES \
+  TUN VETH CIFS CIFS_XATTR CIFS_POSIX WIREGUARD; do
   enable_opt "$opt"
 done
 scripts/config --file "$OUT_DIR/.config" --set-str DEFAULT_TCP_CONG bbr || true
@@ -217,21 +201,49 @@ set +e
 bash "$REK_SRC/Integrate/patches.sh"
 REK_RC=$?
 set -e
-if [ -f drivers/rekernel/rekernel.h ]; then
-  python3 - <<'PY'
+python3 - <<'PY'
 from pathlib import Path
-p = Path('drivers/rekernel/rekernel.h')
-s = p.read_text()
-if 'JOBCTL_TRAP_FREEZE' in s and '#ifndef JOBCTL_TRAP_FREEZE' not in s:
-    s = s.replace(
-        'static inline bool jobctl_frozen(struct task_struct* task) {',
-        '#ifndef JOBCTL_TRAP_FREEZE\n#define JOBCTL_TRAP_FREEZE 0\n#endif\n'
-        'static inline bool jobctl_frozen(struct task_struct* task) {',
-        1,
-    )
-    p.write_text(s)
+import re
+
+# OPPO hans.h also defines enumerator SIGNAL. Prefix Re:Kernel enums
+# so kernel/signal.c can include both headers.
+renames = {
+    'BINDER': 'REKERNEL_BINDER',
+    'SIGNAL': 'REKERNEL_SIGNAL',
+    'NETWORK': 'REKERNEL_NETWORK',
+    'REPLY': 'REKERNEL_REPLY',
+    'TRANSACTION': 'REKERNEL_TRANSACTION',
+    'OVERFLOW': 'REKERNEL_OVERFLOW',
+}
+
+def rewrite_idents(text):
+    for old, new in renames.items():
+        text = re.sub(r'\b' + old + r'\b', new, text)
+    return text
+
+for rel in ('drivers/rekernel/rekernel.h', 'drivers/rekernel/rekernel.c'):
+    p = Path(rel)
+    if not p.exists():
+        continue
+    s = p.read_text()
+    if 'JOBCTL_TRAP_FREEZE' in s and '#ifndef JOBCTL_TRAP_FREEZE' not in s:
+        s = s.replace(
+            'static inline bool jobctl_frozen(struct task_struct* task) {',
+            '#ifndef JOBCTL_TRAP_FREEZE\n#define JOBCTL_TRAP_FREEZE 0\n#endif\n'
+            'static inline bool jobctl_frozen(struct task_struct* task) {',
+            1,
+        )
+    p.write_text(rewrite_idents(s))
+    print('rewrote %s enums' % rel)
+
+sig = Path('kernel/signal.c')
+if sig.exists():
+    s = sig.read_text()
+    n = s.replace('rekernel_report(SIGNAL,', 'rekernel_report(REKERNEL_SIGNAL,')
+    if n != s:
+        sig.write_text(n)
+        print('rewrote kernel/signal.c rekernel_report type')
 PY
-fi
 enable_opt REKERNEL
 disable_opt REKERNEL_NETWORK
 if [ -f drivers/rekernel/rekernel.c ] && grep -Fq 'source "drivers/rekernel/Kconfig"' drivers/Kconfig && grep -Fq 'obj-$(CONFIG_REKERNEL) += rekernel/' drivers/Makefile; then
@@ -257,7 +269,7 @@ fi
 
 {
   echo "rekernel_commit=$REKERNEL_COMMIT"
-  echo 'droidspaces=standard'
+  echo 'droidspaces=off'
   echo 'network_enhance=y'
   echo 'tcp_cong_default=bbr'
   echo 'tcp_brutal=y'
@@ -265,11 +277,12 @@ fi
   echo "bbg=$BBG_STATE"
   echo "rekernel=$REK_STATE"
   echo '===== CONFIG REQUESTS ====='
-  grep -E '^CONFIG_(SYSVIPC|POSIX_MQUEUE|PID_NS|USER_NS|IPC_NS|NET_NS|DEVTMPFS|TCP_CONG_BBR|TCP_CONG_BRUTAL|DEFAULT_TCP_CONG|DEFAULT_BBR|NET_SCH_FQ|MQ_IOSCHED_ADIOS|MQ_IOSCHED_DEADLINE|REKERNEL|BBG|ANDROID_PARANOID_NETWORK|CGROUP_PIDS|CGROUP_DEVICE|IP_SET|WIREGUARD|CIFS|TUN|VETH)=' "$OUT_DIR/.config" || true
+  grep -E '^CONFIG_(TCP_CONG_BBR|TCP_CONG_BRUTAL|DEFAULT_TCP_CONG|DEFAULT_BBR|NET_SCH_FQ|MQ_IOSCHED_ADIOS|MQ_IOSCHED_DEADLINE|REKERNEL|BBG|IP_SET|WIREGUARD|CIFS|TUN|VETH)=' "$OUT_DIR/.config" || true
   echo '===== SOURCE MARKERS ====='
   test -f net/ipv4/tcp_brutal.c && echo 'tcp_brutal.c=yes'
   grep -Fq 'config MQ_IOSCHED_ADIOS' block/Kconfig.iosched && echo 'adios_kconfig=yes'
   test -f drivers/rekernel/rekernel.c && echo 'rekernel.c=yes'
+  grep -Fq 'REKERNEL_SIGNAL' drivers/rekernel/rekernel.h && echo 'rekernel_enum_prefixed=yes'
 } | tee "$PROOF"
 
-echo "[PASS] Run28 staged Droidspaces standard + BBR/Brutal + ADIOS + Re:Kernel overlay (rekernel=$REK_STATE bbg=$BBG_STATE)"
+echo "[PASS] Run28 staged BBR/Brutal + ADIOS + Re:Kernel + BBG overlay (rekernel=$REK_STATE bbg=$BBG_STATE)"

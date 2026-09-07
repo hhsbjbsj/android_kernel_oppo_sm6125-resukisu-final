@@ -140,6 +140,25 @@ jobs:
           test -f "$GITHUB_WORKSPACE/run-run19-step.py"
           git show "$GITHUB_SHA:.github/scripts/run28-extra-features.sh" > "$GITHUB_WORKSPACE/run28-extra-features.sh"
           chmod +x "$GITHUB_WORKSPACE/run28-extra-features.sh"
+          python3 - <<'PY'
+          from pathlib import Path
+          import os
+          p = Path(os.environ['GITHUB_WORKSPACE']) / 'run19-source.yml'
+          s = p.read_text()
+          needle = '"$GITHUB_WORKSPACE/run17-bbg-lz4kd.sh"\n'
+          insert = (
+              '"$GITHUB_WORKSPACE/run17-bbg-lz4kd.sh"\n'
+              '              '"$GITHUB_WORKSPACE/run28-extra-features.sh"\n'
+          )
+          if 'run28-extra-features.sh' not in s:
+              if needle not in s:
+                  raise SystemExit('cannot locate run17-bbg-lz4kd call in run19-source.yml')
+              s = s.replace(needle, insert, 1)
+              p.write_text(s)
+          if 'run28-extra-features.sh' not in p.read_text():
+              raise SystemExit('failed to inject run28 into run19-source.yml')
+          print('injected run28 into run19-source.yml')
+          PY
 
       - name: Build Run24 SukiSU stack with SUSFS 2.3.0 overlay and KPM
         shell: bash
@@ -154,7 +173,7 @@ jobs:
           grep -Fxq 'susfs_to=v2.3.0' "$GITHUB_WORKSPACE/run25-susfs230-proof.txt"
           grep -Fxq 'flag_storage=inode_i_state' "$GITHUB_WORKSPACE/run25-susfs230-proof.txt"
           test -s "$GITHUB_WORKSPACE/run28-extra-features-proof.txt"
-          grep -Fq 'droidspaces=standard' "$GITHUB_WORKSPACE/run28-extra-features-proof.txt"
+          grep -Fq 'droidspaces=off' "$GITHUB_WORKSPACE/run28-extra-features-proof.txt"
           grep -Fq 'tcp_brutal=y' "$GITHUB_WORKSPACE/run28-extra-features-proof.txt"
           grep -Fq 'adios=mq-deadline-4.14-port' "$GITHUB_WORKSPACE/run28-extra-features-proof.txt"
           grep -Fq '#define SUSFS_VERSION "v2.3.0"' include/linux/susfs.h

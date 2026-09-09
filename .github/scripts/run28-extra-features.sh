@@ -1,20 +1,23 @@
 #!/usr/bin/env bash
 # CI-only overlay: network enhance, BBR/Brutal, ADIOS (4.14 mq-deadline),
-# confirm Baseband-guard. No Droidspaces. No Re-Kernel.
+# Re:Kernel (4.14 stubs), confirm Baseband-guard. No Droidspaces.
 # Does not commit kernel source; mutates the runner checkout only.
 set -Eeuo pipefail
 
 KERNEL_DIR="${KERNEL_DIR:-$GITHUB_WORKSPACE/$KERNEL_REL}"
 OUT_DIR="${OUT_DIR:-out-pchm30-a16-bpf}"
+REKERNEL_REPO="${REKERNEL_REPO:-https://github.com/Sakion-Team/Re-Kernel.git}"
+REKERNEL_COMMIT="${REKERNEL_COMMIT:-5adec4896a549af60fab2ab59441a777551763b9}"
 LOG="$GITHUB_WORKSPACE/run28-extra-features.log"
 PROOF="$GITHUB_WORKSPACE/run28-extra-features-proof.txt"
 
 exec > >(tee "$LOG") 2>&1
 cd "$KERNEL_DIR"
 
-echo '===== RUN28 EXTRA FEATURES (4.14 CI overlay, no Droidspaces, no Re-Kernel) ====='
+echo '===== RUN28 EXTRA FEATURES (4.14 CI overlay, Re-Kernel on, no Droidspaces) ====='
 echo "kernel_dir=$KERNEL_DIR"
 echo "out_dir=$OUT_DIR"
+echo "rekernel_commit=$REKERNEL_COMMIT"
 test -f "$OUT_DIR/.config"
 test -x scripts/config
 
@@ -43,8 +46,8 @@ for opt in \
   TUN VETH CIFS CIFS_XATTR CIFS_POSIX WIREGUARD; do
   enable_opt "$opt"
 done
-# TCP_CONG_ADVANCED exposes a pile of NEW children (BIC first). Seed them
-# as explicit =n so silentoldconfig does not abort on SukiSU's .config.
+# TCP_CONG_ADVANCED exposes NEW children (BIC first). Seed them as =n so
+# SukiSU silentoldconfig does not abort.
 for opt in \
   TCP_CONG_BIC TCP_CONG_HTCP TCP_CONG_HSTCP TCP_CONG_HYBLA \
   TCP_CONG_VEGAS TCP_CONG_NV TCP_CONG_SCALABLE TCP_CONG_LP \
@@ -52,7 +55,6 @@ for opt in \
   TCP_CONG_CDG TCP_MD5SIG; do
   disable_opt "$opt"
 done
-# Do not flip DEFAULT_BBR: that adds a NEW default-cong choice and aborts silentoldconfig.
 scripts/config --file "$OUT_DIR/.config" --set-str DEFAULT_TCP_CONG bbr || true
 
 if [ ! -f net/ipv4/tcp_brutal.c ]; then
@@ -167,8 +169,6 @@ PY
 enable_opt TCP_CONG_BRUTAL
 
 echo '===== STAGE ADIOS (4.14 maps to mq-deadline; do not enable legacy deadline) ====='
-# Enabling IOSCHED_DEADLINE adds DEFAULT_DEADLINE as a NEW choice and
-# aborts silentoldconfig. Only touch mq-deadline.
 enable_opt MQ_IOSCHED_DEADLINE
 python3 - <<'PY'
 from pathlib import Path
@@ -194,7 +194,121 @@ PY
 enable_opt MQ_IOSCHED_ADIOS
 enable_opt MQ_IOSCHED_DEADLINE
 
-echo '===== REKERNEL SKIPPED ====='
+echo '===== STAGE REKERNEL ====='
+REK_SRC="$GITHUB_WORKSPACE/.run28-rekernel"
+REK_STATE='pending'
+rm -rf "$REK_SRC"
+git init -q "$REK_SRC"
+git -C "$REK_SRC" remote add origin "$REKERNEL_REPO"
+git -C "$REK_SRC" fetch --no-tags --depth=1 origin "$REKERNEL_COMMIT"
+git -C "$REK_SRC" checkout -q --detach FETCH_HEAD
+test -f "$REK_SRC/Integrate/patches.sh"
+chmod +x "$REK_SRC/Integrate/patches.sh"
+set +e
+bash "$REK_SRC/Integrate/patches.sh"
+REK_RC=$?
+set -e
+
+python3 - <<'PY'
+from pathlib import Path
+import re
+
+renames = {
+    'BINDER': 'REKERNEL_BINDER',
+    'SIGNAL': 'REKERNEL_SIGNAL',
+    'NETWORK': 'REKERNEL_NETWORK',
+    'REPLY': 'REKERNEL_REPLY',
+    'TRANSACTION': 'REKERNEL_TRANSACTION',
+    'OVERFLOW': 'REKERNEL_OVERFLOW',
+}
+
+def rewrite_idents(text):
+    for old, new in renames.items():
+        text = re.sub(r'\b' + old + r'\b', new, text)
+    return text
+
+stub = '''
+#ifndef JOBCTL_TRAP_FREEZE
+#define JOBCTL_TRAP_FREEZE 0
+#endif
+#ifndef TF_UPDATE_TXN
+#define TF_UPDATE_TXN 0x40
+#endif
+static inline bool rekernel_frozen_task_group(struct task_struct *task)
+{
+	if (!task)
+		return false;
+	return frozen(task) || freezing(task);
+}
+'''
+
+for rel in ('drivers/rekernel/rekernel.h', 'drivers/rekernel/rekernel.c'):
+    p = Path(rel)
+    if not p.exists():
+        continue
+    s = p.read_text()
+    if 'rekernel_frozen_task_group' not in s:
+        s = stub + '\n' + s
+    p.write_text(rewrite_idents(s))
+    print('rewrote %s enums+stubs' % rel)
+
+sig = Path('kernel/signal.c')
+if sig.exists():
+    s = sig.read_text()
+    n = s.replace('rekernel_report(SIGNAL,', 'rekernel_report(REKERNEL_SIGNAL,')
+    if n != s:
+        sig.write_text(n)
+        print('rewrote kernel/signal.c rekernel_report type')
+
+binder = Path('drivers/android/binder.c')
+if binder.exists():
+    bs = binder.read_text()
+    bs2 = bs.replace('frozen_task_group(', 'rekernel_frozen_task_group(')
+    bs2 = bs2.replace('rekernel_report(BINDER,', 'rekernel_report(REKERNEL_BINDER,')
+    if '#ifndef TF_UPDATE_TXN' not in bs2 and '#define TF_UPDATE_TXN' not in bs2:
+        guard = (
+            '#ifndef TF_UPDATE_TXN\n'
+            '#define TF_UPDATE_TXN 0x40\n'
+            '#endif\n'
+        )
+        bs2 = guard + bs2
+        print('injected 4.14 binder TF_UPDATE_TXN stub')
+    if 'rekernel_binder_transaction' not in bs2:
+        hook_inc = (
+            '#ifdef CONFIG_REKERNEL\n'
+            '#include <../rekernel/rekernel.h>\n'
+            '#endif /* CONFIG_REKERNEL */\n'
+        )
+        if '#include <../rekernel/rekernel.h>' not in bs2:
+            bs2 = hook_inc + bs2
+        needle = 'trace_binder_transaction(reply, t, target_node);'
+        call = (
+            '#ifdef CONFIG_REKERNEL\n'
+            '\trekernel_binder_transaction(reply, t, target_node, tr);\n'
+            '#endif /* CONFIG_REKERNEL */\n'
+            '\t' + needle
+        )
+        if needle in bs2:
+            bs2 = bs2.replace(needle, call, 1)
+            print('fallback hooked trace_binder_transaction')
+        else:
+            print('no trace_binder_transaction needle; hooks may be partial')
+    if bs2 != bs:
+        binder.write_text(bs2)
+        print('rewrote drivers/android/binder.c 4.14 compat')
+PY
+
+enable_opt REKERNEL
+disable_opt REKERNEL_NETWORK
+if [ -f drivers/rekernel/rekernel.c ] && grep -Fq 'source "drivers/rekernel/Kconfig"' drivers/Kconfig && grep -Fq 'obj-$(CONFIG_REKERNEL) += rekernel/' drivers/Makefile; then
+  if grep -Fq 'rekernel_binder_transaction' drivers/android/binder.c && grep -Fq 'rekernel_report' kernel/signal.c; then
+    REK_STATE='y-hooks'
+  else
+    REK_STATE='y-source-hooks-partial'
+  fi
+else
+  REK_STATE="copy-failed-rc${REK_RC}"
+fi
 
 echo '===== CONFIRM BBG ====='
 if [ -L security/baseband-guard ] || [ -d security/baseband-guard ]; then
@@ -208,11 +322,8 @@ else
 fi
 
 echo '===== OLDDEFCONFIG (answer remaining NEW symbols with defaults) ====='
-# SukiSU hits make silentoldconfig later. ReSukiSU stock config already had
-# TCP_CONG_ADVANCED children; SukiSU did not. olddefconfig is non-interactive.
 yes '' | make O="$OUT_DIR" ARCH=arm64 olddefconfig || \
   make O="$OUT_DIR" ARCH=arm64 olddefconfig || true
-# Re-assert requested defaults after olddefconfig may reset string/choice.
 enable_opt TCP_CONG_ADVANCED
 enable_opt TCP_CONG_BBR
 enable_opt TCP_CONG_CUBIC
@@ -222,22 +333,26 @@ enable_opt NET_SCH_FQ
 enable_opt NET_SCH_FQ_CODEL
 enable_opt MQ_IOSCHED_DEADLINE
 enable_opt MQ_IOSCHED_ADIOS
+enable_opt REKERNEL
+disable_opt REKERNEL_NETWORK
 scripts/config --file "$OUT_DIR/.config" --set-str DEFAULT_TCP_CONG bbr || true
 
 {
+  echo "rekernel_commit=$REKERNEL_COMMIT"
   echo 'droidspaces=off'
-  echo 'rekernel=off'
   echo 'network_enhance=y'
   echo 'tcp_cong_default=bbr'
   echo 'tcp_brutal=y'
   echo 'adios=mq-deadline-4.14-port'
   echo "bbg=$BBG_STATE"
+  echo "rekernel=$REK_STATE"
   echo '===== CONFIG REQUESTS ====='
   grep -E '^CONFIG_(TCP_CONG_BBR|TCP_CONG_BRUTAL|TCP_CONG_BIC|TCP_CONG_ADVANCED|DEFAULT_TCP_CONG|NET_SCH_FQ|MQ_IOSCHED_ADIOS|MQ_IOSCHED_DEADLINE|REKERNEL|BBG|IP_SET|WIREGUARD|CIFS|TUN|VETH)=' "$OUT_DIR/.config" || true
   echo '===== SOURCE MARKERS ====='
   test -f net/ipv4/tcp_brutal.c && echo 'tcp_brutal.c=yes'
   grep -Fq 'config MQ_IOSCHED_ADIOS' block/Kconfig.iosched && echo 'adios_kconfig=yes'
-  if [ -f drivers/rekernel/rekernel.c ]; then echo 'rekernel.c=unexpected'; else echo 'rekernel.c=absent'; fi
+  test -f drivers/rekernel/rekernel.c && echo 'rekernel.c=yes'
+  grep -Fq 'REKERNEL_SIGNAL' drivers/rekernel/rekernel.h && echo 'rekernel_enum_prefixed=yes'
 } | tee "$PROOF"
 
-echo "[PASS] Run28 staged BBR/Brutal + ADIOS + BBG overlay (rekernel=off bbg=$BBG_STATE)"
+echo "[PASS] Run28 staged BBR/Brutal + ADIOS + Re:Kernel + BBG overlay (rekernel=$REK_STATE bbg=$BBG_STATE)"

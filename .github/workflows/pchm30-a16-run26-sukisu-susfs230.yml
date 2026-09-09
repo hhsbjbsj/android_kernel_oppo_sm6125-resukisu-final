@@ -158,6 +158,8 @@ jobs:
           grep -Fxq 'flag_storage=inode_i_state' "$GITHUB_WORKSPACE/run25-susfs230-proof.txt"
           test -s "$GITHUB_WORKSPACE/run28-extra-features-proof.txt"
           grep -Fq 'droidspaces=off' "$GITHUB_WORKSPACE/run28-extra-features-proof.txt"
+          grep -Fq 'network_enhance=y' "$GITHUB_WORKSPACE/run28-extra-features-proof.txt"
+          grep -Eq 'rekernel=y-hooks|rekernel=y-source-hooks-partial' "$GITHUB_WORKSPACE/run28-extra-features-proof.txt"
           grep -Fq 'tcp_brutal=y' "$GITHUB_WORKSPACE/run28-extra-features-proof.txt"
           grep -Fq 'adios=mq-deadline-4.14-port' "$GITHUB_WORKSPACE/run28-extra-features-proof.txt"
           grep -Fq '#define SUSFS_VERSION "v2.3.0"' include/linux/susfs.h

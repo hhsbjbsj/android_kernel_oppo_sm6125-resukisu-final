@@ -151,9 +151,14 @@ def adapt_c(path: Path):
         raise SystemExit('%s: faccessat still not filename**' % path)
     if not re.search(r'int ksu_handle_stat\s*\(\s*int \*dfd,\s*struct filename \*\*filename', t):
         raise SystemExit('%s: stat still not filename**' % path)
-    susfs_span = re.search(r'#ifdef CONFIG_KSU_SUSFS\n(.*)\n#else', t, re.S)
-    if susfs_span and re.search(r'int ksu_handle_(?:faccessat|stat)\s*\([^)]*filename_user', susfs_span.group(1)):
-        raise SystemExit('%s: SUSFS block still has user-pointer faccessat/stat' % path)
+    # New ReSukiSU keeps user-pointer twins in the #else !SUSFS branch.
+    # Only fail if a SUSFS-enabled prototype still uses filename_user.
+    if re.search(
+        r'#ifdef CONFIG_KSU_SUSFS\s+'
+        r'int ksu_handle_(?:faccessat|stat)\s*\([^)]*filename_user',
+        t,
+    ):
+        raise SystemExit('%s: SUSFS-enabled faccessat/stat still uses filename_user' % path)
 
     path.write_text(t)
     print('%s: %s' % (path, '; '.join(changed) or 'unchanged'), flush=True)

@@ -91,6 +91,25 @@ if h.exists():
                       'extern struct static_key_true ksu_su_compat_enabled;')
         h.write_text(t)
         print('sucompat.h: static_key declaration', flush=True)
+# SukiSU v4.2.0 builtin references kernel_umount_feature_set but never defines it.
+um = Path('KernelSU/kernel/feature/kernel_umount.c')
+if um.exists():
+    t = um.read_text()
+    if '.set_handler = kernel_umount_feature_set' in t and 'static int kernel_umount_feature_set' not in t:
+        setter = (
+            'static int kernel_umount_feature_set(u64 value)\n'
+            '{\n'
+            '    bool enable = value != 0;\n'
+            '    ksu_kernel_umount_enabled = enable;\n'
+            '    pr_info("kernel_umount: set to %d\\n", enable);\n'
+            '    return 0;\n'
+            '}\n\n'
+        )
+        needle = 'static const struct ksu_feature_handler kernel_umount_handler'
+        if needle not in t:
+            raise SystemExit('cannot insert kernel_umount_feature_set')
+        um.write_text(t.replace(needle, setter + needle, 1))
+        print('kernel_umount.c: added missing feature_set for SukiSU v4.2', flush=True)
 print('4.14 compat follow-up done', flush=True)
 FIX
 
@@ -101,6 +120,7 @@ grep -Fq '#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0)' KernelSU/kernel/ru
 ! grep -q '^[[:space:]]*fallthrough;' KernelSU/kernel/policy/allowlist.c || true
 grep -Eq 'DEFINE_STATIC_KEY_TRUE\(ksu_su_compat_enabled\)|bool ksu_su_compat_enabled' KernelSU/kernel/feature/sucompat.c
 grep -Eq 'handle_zygote_setresuid|manager spawn zygote SID mismatch|susfs_is_sid_equal' KernelSU/kernel/hook/lsm_hook.c
+grep -Fq 'static int kernel_umount_feature_set' KernelSU/kernel/feature/kernel_umount.c
 
 echo '===== Re-align SukiSU sucompat after swap overwrote ReSukiSU handlers ====='
 git show "$GITHUB_SHA:.github/scripts/adapt-ksu-sucompat230.sh" > "$GITHUB_WORKSPACE/adapt-ksu-sucompat230.sh"

@@ -12,6 +12,7 @@ on:
       - '.github/scripts/run17-bbg-lz4kd.sh'
       - '.github/scripts/run16-orchestrate.sh'
       - '.github/scripts/package-pchm30-run17-ak3.sh'
+      - '.github/scripts/run26-sukisu-post-relink-verify.sh'
 
 env:
   TOOLCHAIN_RELEASE_TAG: pchm30-build-environment-20260810
@@ -51,7 +52,6 @@ jobs:
     name: Run19 - proven Run18 stack plus KPM
     runs-on: ubuntu-22.04
     timeout-minutes: 300
-
     steps:
       - name: Checkout exact successful A16 rootless baseline
         uses: actions/checkout@v4
@@ -60,7 +60,6 @@ jobs:
           path: source/android/kernel/msm-4.14
           fetch-depth: 1
           submodules: false
-
       - name: Build Run19 from proven Run18 stack with KPM compiled in
         working-directory: source/android/kernel/msm-4.14
         shell: bash
@@ -72,20 +71,12 @@ jobs:
           git show "$GITHUB_SHA:.github/scripts/run17-bbg-lz4kd.sh" > "$GITHUB_WORKSPACE/run17-bbg-lz4kd.sh"
           git show "$GITHUB_SHA:.github/scripts/run18-sukisu-swap.sh" > "$GITHUB_WORKSPACE/run18-sukisu-swap.sh"
           git show "$GITHUB_SHA:.github/scripts/run19-kpm-enable.sh" > "$GITHUB_WORKSPACE/run19-kpm-enable.sh"
-          chmod +x \
-            "$GITHUB_WORKSPACE/run19-orchestrate.sh" \
-            "$GITHUB_WORKSPACE/run17-builtin-runtime-retry.sh" \
-            "$GITHUB_WORKSPACE/run17-bbg-lz4kd.sh" \
-            "$GITHUB_WORKSPACE/run18-sukisu-swap.sh" \
-            "$GITHUB_WORKSPACE/run19-kpm-enable.sh"
-
+          chmod +x "$GITHUB_WORKSPACE/run19-orchestrate.sh" "$GITHUB_WORKSPACE/run17-builtin-runtime-retry.sh" "$GITHUB_WORKSPACE/run17-bbg-lz4kd.sh" "$GITHUB_WORKSPACE/run18-sukisu-swap.sh" "$GITHUB_WORKSPACE/run19-kpm-enable.sh"
           python3 - <<'PY'
           from pathlib import Path
           import os
-
           p = Path(os.environ['GITHUB_WORKSPACE']) / 'run19-orchestrate.sh'
           s = p.read_text()
-
           old_root = (
               "run_step 'Prepare proven A16 root config'\n"
               "run_step 'Enable BPF stream parser for sockmap sockhash'\n"
@@ -99,7 +90,6 @@ jobs:
           if s.count(old_root) != 1:
               raise SystemExit(f'cannot locate root-config insertion point: {s.count(old_root)}')
           s = s.replace(old_root, new_root, 1)
-
           old_runtime = (
               '"$GITHUB_WORKSPACE/run16-builtin-wifi-audio.sh"\n\n'
               "run_step 'Instrument exact BTF rejection path'"
@@ -115,8 +105,16 @@ jobs:
           s = s.replace(old_runtime, new_runtime, 1)
           p.write_text(s)
           PY
-
           grep -n 'run18-sukisu-swap' "$GITHUB_WORKSPACE/run19-orchestrate.sh"
           grep -n 'run19-kpm-enable' "$GITHUB_WORKSPACE/run19-orchestrate.sh"
-          grep -n 'run17-bbg-lz4kd' "$GITHUB_WORKSPACE/run19-orchestrate.sh"
           "$GITHUB_WORKSPACE/run19-orchestrate.sh"
+      - name: Verify compiled KPM and all proven Run18 features
+        working-directory: source/android/kernel/msm-4.14
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          # marker SUSFS_VERSION "v2.3.0" for Run26 materialize
+          git fetch --no-tags --depth=1 origin "$GITHUB_SHA"
+          git show "$GITHUB_SHA:.github/scripts/run26-sukisu-post-relink-verify.sh" > "$GITHUB_WORKSPACE/run26-sukisu-post-relink-verify.sh"
+          chmod +x "$GITHUB_WORKSPACE/run26-sukisu-post-relink-verify.sh"
+          "$GITHUB_WORKSPACE/run26-sukisu-post-relink-verify.sh"

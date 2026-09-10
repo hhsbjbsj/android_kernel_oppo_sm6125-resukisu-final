@@ -13,6 +13,7 @@ on:
       - '.github/scripts/run16-orchestrate.sh'
       - '.github/scripts/package-pchm30-run17-ak3.sh'
       - '.github/scripts/run26-sukisu-post-relink-verify.sh'
+      - '.github/scripts/run19-kpm-patch-image.sh'
 
 env:
   TOOLCHAIN_RELEASE_TAG: pchm30-build-environment-20260810
@@ -118,3 +119,24 @@ jobs:
           git show "$GITHUB_SHA:.github/scripts/run26-sukisu-post-relink-verify.sh" > "$GITHUB_WORKSPACE/run26-sukisu-post-relink-verify.sh"
           chmod +x "$GITHUB_WORKSPACE/run26-sukisu-post-relink-verify.sh"
           "$GITHUB_WORKSPACE/run26-sukisu-post-relink-verify.sh"
+      - name: Patch final Image with pinned SukiSU KPM patcher
+        working-directory: source/android/kernel/msm-4.14
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          git fetch --no-tags --depth=1 origin "$GITHUB_SHA"
+          git show "$GITHUB_SHA:.github/scripts/run19-kpm-patch-image.sh" > "$GITHUB_WORKSPACE/run19-kpm-patch-image.sh"
+          chmod +x "$GITHUB_WORKSPACE/run19-kpm-patch-image.sh"
+          "$GITHUB_WORKSPACE/run19-kpm-patch-image.sh"
+      - name: Package reusable PCHM30 Run19 KPM AnyKernel3 ZIP
+        working-directory: source/android/kernel/msm-4.14
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          git fetch --no-tags --depth=1 origin "$GITHUB_SHA"
+          git show "$GITHUB_SHA:.github/scripts/package-pchm30-run17-ak3.sh" > "$GITHUB_WORKSPACE/package-pchm30-run19-ak3.sh"
+          chmod +x "$GITHUB_WORKSPACE/package-pchm30-run19-ak3.sh"
+          "$GITHUB_WORKSPACE/package-pchm30-run19-ak3.sh" \
+            "$OUT_DIR/arch/arm64/boot/Image" \
+            "$GITHUB_WORKSPACE/PCHM30-A16-RUN19-KPM-SUKISU-SUSFS220-AK3-${GITHUB_RUN_NUMBER}.zip"
+          cp -f "$OUT_DIR/arch/arm64/boot/Image" "$GITHUB_WORKSPACE/PCHM30-A16-RUN19-KPM-SUKISU-Image-${GITHUB_RUN_NUMBER}"

@@ -1,6 +1,6 @@
 name: PCHM30 A16 Run26 ReSukiSU SUSFS 2.3.0
 # ReSukiSU line from Run17. Keep in-tree 4.14 susfs.c + 2.3 hook ABI. KPM stays off.
-# ReSukiSU pin: main @ 1e25a4c5c0e7eb71292f1fa4f48704e5490f1b82 (2026-09-10).
+# ReSukiSU: resolve refs/heads/main at compile time (do not pin SHA).
 
 on:
   workflow_dispatch:
@@ -14,6 +14,7 @@ on:
       - '.github/scripts/rewrite-susfs230-hooks.py'
       - '.github/scripts/adapt-ksu-sucompat230.sh'
       - '.github/scripts/run28-extra-features.sh'
+      - '.github/scripts/resolve-latest-ksu.sh'
 
 env:
   TOOLCHAIN_RELEASE_TAG: pchm30-build-environment-20260810
@@ -57,6 +58,15 @@ jobs:
           path: source/android/kernel/msm-4.14
           fetch-depth: 1
           submodules: false
+
+      - name: Resolve latest ReSukiSU main at build time
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          SHA=$(git ls-remote https://github.com/ReSukiSU/ReSukiSU.git refs/heads/main | awk '{print $1}')
+          test -n "$SHA"
+          echo "RESUKISU_COMMIT=$SHA" >> "$GITHUB_ENV"
+          echo "Resolved ReSukiSU main: $SHA"
 
       - name: Install BTF host tooling
         shell: bash
@@ -154,15 +164,16 @@ jobs:
           grep -Fxq 'flag_storage=inode_i_state' "$GITHUB_WORKSPACE/run25-susfs230-proof.txt"
           grep -Fxq 'susfs_overlay=skipped' "$GITHUB_WORKSPACE/run25-susfs230-proof.txt"
           grep -Fxq 'kpm=disabled' "$GITHUB_WORKSPACE/run26-disable-kpm-proof.txt"
-          grep -Fq '#define SUSFS_VERSION "v2.3.0"' include/linux/susfs.h
+          grep -Fq '#define SUSFS_VERSION \"v2.3.0\"' include/linux/susfs.h
           grep -Fq '#define TIF_PROC_NO_SU 34' include/linux/susfs_def.h
           grep -Fq 'susfs_is_current_proc_no_su()' fs/exec.c
           grep -Fq 'filename_lookup(dfd, fname, lookup_flags, &path, NULL)' fs/open.c
           grep -n 'ksu_handle_stat' fs/stat.c || true
-          grep -Eq 'ksu_handle_stat\(&dfd, &fname, &(flag|flags)\)' fs/stat.c
+          grep -Eq 'ksu_handle_stat\\(&dfd, &fname, &(flag|flags)\\)' fs/stat.c
           grep -q '^CONFIG_KSU=y$' "$CONFIG"
           grep -q '^CONFIG_KSU_SUSFS=y$' "$CONFIG"
           ! grep -q '^CONFIG_KPM=y$' "$CONFIG"
+          echo "resukisu_commit=${RESUKISU_COMMIT}" | tee -a "$GITHUB_WORKSPACE/run25-susfs230-proof.txt"
           echo '[PASS] ReSukiSU image is SUSFS 2.3.0 with KPM disabled and 2.3 VFS hooks'
 
       - name: Package reusable PCHM30 AnyKernel3 ZIP

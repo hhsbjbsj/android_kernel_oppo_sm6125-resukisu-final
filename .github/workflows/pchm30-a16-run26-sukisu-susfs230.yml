@@ -1,7 +1,6 @@
 name: PCHM30 A16 Run26 SukiSU SUSFS 2.3.0
 # SukiSU line from Run25/Run24. Keep in-tree 4.14 susfs.c + 2.3 hook ABI. KPM stays on.
-# SukiSU: resolve SukiSU-Ultra refs/heads/main at compile time.
-# ReSukiSU: resolve refs/heads/main at compile time.
+# SukiSU/ReSukiSU: resolve refs/heads/main at compile time.
 
 on:
   workflow_dispatch:
@@ -100,4 +99,130 @@ jobs:
           sed -i 's/v2\.2\.0/v2.3.0/g' "$GITHUB_WORKSPACE/run19-source.yml"
           grep -Fq 'SUSFS_VERSION "v2.3.0"' "$GITHUB_WORKSPACE/run19-source.yml"
           ! grep -Fq 'v2.2.0' "$GITHUB_WORKSPACE/run19-source.yml"
-          python3 "$GITHUB_WORKSPACE/run-run24-step.py" 'Install BTF host tooling without Azure mirror hang' || true
+          cat > "$GITHUB_WORKSPACE/run-run24-step.py" <<'PY'
+          import os, subprocess, sys
+          from pathlib import Path
+          if len(sys.argv) != 2:
+              raise SystemExit('usage: run-run24-step.py <step name>')
+          name = sys.argv[1]
+          workspace = Path(os.environ['GITHUB_WORKSPACE'])
+          lines = (workspace / 'run24-source.yml').read_text().splitlines(True)
+          marker = f'      - name: {name}\n'
+          try:
+              start = lines.index(marker)
+          except ValueError:
+              raise SystemExit(f'Run24 step not found: {name}')
+          end = len(lines)
+          for i in range(start + 1, len(lines)):
+              if lines[i].startswith('      - name: '):
+                  end = i
+                  break
+          block = lines[start:end]
+          workdir = None
+          run_index = None
+          inline_script = None
+          for i, line in enumerate(block):
+              if line.startswith('        working-directory: '):
+                  workdir = line.split(': ', 1)[1].strip()
+              if line.startswith('        run: '):
+                  value = line.split(': ', 1)[1].rstrip('\n')
+                  if value in ('|', '|-', '|+', '>', '>-', '>+'):
+                      run_index = i + 1
+                  else:
+                      inline_script = value
+                  break
+          if inline_script is None and run_index is None:
+              raise SystemExit(f'Run24 step is not shell: {name}')
+          if inline_script is not None:
+              script = inline_script + '\n'
+          else:
+              script_lines = []
+              for line in block[run_index:]:
+                  if line.startswith('          '):
+                      script_lines.append(line[10:])
+                  elif line.strip() == '':
+                      script_lines.append('\n')
+                  else:
+                      raise SystemExit(f'unexpected indentation: {line!r}')
+              script = ''.join(script_lines)
+          cwd = workspace / workdir if workdir else workspace
+          print(f'===== REUSE RUN24 STEP: {name} =====', flush=True)
+          subprocess.run(['bash', '-c', 'set -Eeuo pipefail\n' + script], cwd=cwd, check=True, env=os.environ.copy())
+          PY
+          python3 -m py_compile "$GITHUB_WORKSPACE/run-run24-step.py"
+          python3 "$GITHUB_WORKSPACE/run-run24-step.py" 'Install BTF host tooling without Azure mirror hang'
+          python3 "$GITHUB_WORKSPACE/run-run24-step.py" 'Hard gate proven KPM runtime-fix ancestry'
+          python3 "$GITHUB_WORKSPACE/run-run24-step.py" 'Prepare proven KPM step runner from Run23 ref'
+          sed -i 's/v2\.2\.0/v2.3.0/g' "$GITHUB_WORKSPACE/run19-source.yml"
+          grep -Fq 'SUSFS_VERSION "v2.3.0"' "$GITHUB_WORKSPACE/run19-source.yml"
+          test -f "$GITHUB_WORKSPACE/run-run19-step.py"
+          git show "$GITHUB_SHA:.github/scripts/run28-extra-features.sh" > "$GITHUB_WORKSPACE/run28-extra-features.sh"
+          chmod +x "$GITHUB_WORKSPACE/run28-extra-features.sh"
+          git show "$GITHUB_SHA:.github/scripts/inject-run28-sukisu.py" > "$GITHUB_WORKSPACE/inject-run28-sukisu.py"
+          python3 "$GITHUB_WORKSPACE/inject-run28-sukisu.py"
+
+      - name: Build Run24 SukiSU stack with SUSFS 2.3.0 overlay and KPM
+        shell: bash
+        run: python3 "$GITHUB_WORKSPACE/run-run19-step.py" 'Build Run19 from proven Run18 stack with KPM compiled in'
+
+      - name: Verify generated source and SUSFS 2.3.0
+        working-directory: source/android/kernel/msm-4.14
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          test -s "$GITHUB_WORKSPACE/run25-susfs230-proof.txt"
+          grep -Fxq 'susfs_to=v2.3.0' "$GITHUB_WORKSPACE/run25-susfs230-proof.txt"
+          grep -Fxq 'flag_storage=inode_i_state' "$GITHUB_WORKSPACE/run25-susfs230-proof.txt"
+          grep -Fxq 'susfs_overlay=skipped' "$GITHUB_WORKSPACE/run25-susfs230-proof.txt"
+          test -s "$GITHUB_WORKSPACE/run28-extra-features-proof.txt"
+          grep -Fq 'droidspaces=off' "$GITHUB_WORKSPACE/run28-extra-features-proof.txt"
+          grep -Fq 'network_enhance=y' "$GITHUB_WORKSPACE/run28-extra-features-proof.txt"
+          grep -Eq 'rekernel=y-hooks|rekernel=y-source-hooks-partial' "$GITHUB_WORKSPACE/run28-extra-features-proof.txt"
+          grep -Fq 'tcp_brutal=y' "$GITHUB_WORKSPACE/run28-extra-features-proof.txt"
+          grep -Fq 'adios=mq-deadline-4.14-port' "$GITHUB_WORKSPACE/run28-extra-features-proof.txt"
+          grep -Fq '#define SUSFS_VERSION "v2.3.0"' include/linux/susfs.h
+          grep -Fq '#define TIF_PROC_NO_SU 34' include/linux/susfs_def.h
+          grep -Fq '#define TIF_PROC_UMOUNTED_FOR_ZYGOTE_NEXT 35' include/linux/susfs_def.h
+          grep -Fq 'susfs_is_current_proc_no_su()' fs/exec.c
+          grep -Fq 'filename_lookup(dfd, fname, lookup_flags, &path, NULL)' fs/open.c
+          grep -q '^CONFIG_KPM=y$' "$OUT_DIR/.config"
+          python3 "$GITHUB_WORKSPACE/run-run24-step.py" 'Verify KPM runtime fix reached generated source'
+
+      - name: Apply Run17 BTF Kprobe fix, verify, patch and package
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python3 "$GITHUB_WORKSPACE/run-run24-step.py" 'Apply successful Run17 BTF Kprobe fix and relink'
+          python3 "$GITHUB_WORKSPACE/run-run19-step.py" 'Verify compiled KPM and all proven Run18 features'
+          python3 "$GITHUB_WORKSPACE/run-run24-step.py" 'Hard verify BTF Kprobes Scene and KPM runtimefix together'
+          python3 "$GITHUB_WORKSPACE/run-run19-step.py" 'Patch final Image with pinned SukiSU KPM patcher'
+          python3 "$GITHUB_WORKSPACE/run-run19-step.py" 'Package reusable PCHM30 Run19 KPM AnyKernel3 ZIP'
+          grep -Fq '#define SUSFS_VERSION "v2.3.0"' "$GITHUB_WORKSPACE/$KERNEL_REL/include/linux/susfs.h"
+          echo '[PASS] Run26 compiled SukiSU + SUSFS 2.3.0 with KPM'
+
+      - name: Upload Run26 SukiSU artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: PCHM30-A16-RUN26-SUKISU-SUSFS230-${{ github.run_number }}
+          path: |
+            run25-susfs230-adapt.log
+            run25-susfs230-proof.txt
+            run28-extra-features.log
+            run28-extra-features-proof.txt
+            run24-selinux-hide-compat.log
+            run24-selinux-hide-proof.txt
+            run23-kpm-runtimefix-base-proof.txt
+            run23-kpm-runtimefix-source-proof.txt
+            run18-sukisu-swap.log
+            run18-sukisu-proof.txt
+            run19-kpm-enable.log
+            run19-kpm-config-proof.txt
+            run19-kpm-patcher.log
+            run19-kpm-final-proof.txt
+            PCHM30-A16-RUN19-KPM-SUKISU-SUSFS220-AK3-${{ github.run_number }}.zip
+            PCHM30-A16-RUN19-KPM-SUKISU-SUSFS220-AK3-${{ github.run_number }}.zip.sha256
+            source/android/kernel/msm-4.14/out-pchm30-a16-bpf/.config
+            source/android/kernel/msm-4.14/out-pchm30-a16-bpf/arch/arm64/boot/Image
+          include-hidden-files: true
+          if-no-files-found: warn

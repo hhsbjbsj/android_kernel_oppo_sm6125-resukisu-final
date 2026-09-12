@@ -15,6 +15,7 @@ on:
       - '.github/scripts/adapt-ksu-sucompat230.sh'
       - '.github/scripts/run28-extra-features.sh'
       - '.github/scripts/resolve-latest-ksu.sh'
+      - '.github/scripts/run29-manager-handshake.sh'
 
 env:
   TOOLCHAIN_RELEASE_TAG: pchm30-build-environment-20260810
@@ -91,6 +92,7 @@ jobs:
           git show "$GITHUB_SHA:.github/scripts/rewrite-susfs230-hooks.py" > "$GITHUB_WORKSPACE/rewrite-susfs230-hooks.py"
           git show "$GITHUB_SHA:.github/scripts/adapt-ksu-sucompat230.sh" > "$GITHUB_WORKSPACE/adapt-ksu-sucompat230.sh"
           git show "$GITHUB_SHA:.github/scripts/run28-extra-features.sh" > "$GITHUB_WORKSPACE/run28-extra-features.sh"
+          git show "$GITHUB_SHA:.github/scripts/run29-manager-handshake.sh" > "$GITHUB_WORKSPACE/run29-manager-handshake.sh"
           git show "$RUN17_BTF_FIX_COMMIT:.github/scripts/run17-btf-kprobe-scene-fix.sh" > "$GITHUB_WORKSPACE/run17-btf-kprobe-scene-fix.sh"
           chmod +x \
             "$GITHUB_WORKSPACE/run17-orchestrate.sh" \
@@ -100,7 +102,8 @@ jobs:
             "$GITHUB_WORKSPACE/run25-susfs230-adapt.sh" \
             "$GITHUB_WORKSPACE/run26-disable-kpm.sh" \
             "$GITHUB_WORKSPACE/adapt-ksu-sucompat230.sh" \
-            "$GITHUB_WORKSPACE/run28-extra-features.sh"
+            "$GITHUB_WORKSPACE/run28-extra-features.sh" \
+            "$GITHUB_WORKSPACE/run29-manager-handshake.sh"
 
           python3 - <<'PY'
           from pathlib import Path
@@ -119,6 +122,7 @@ jobs:
           new_cfg = (
               "run_step 'Prepare proven A16 root config'\n"
               '"$GITHUB_WORKSPACE/run26-disable-kpm.sh"\n'
+              '"$GITHUB_WORKSPACE/run29-manager-handshake.sh"\n'
           )
           if old_cfg not in s:
               raise SystemExit('cannot locate root-config step')
@@ -137,6 +141,7 @@ jobs:
 
           grep -n 'run25-susfs230-adapt' "$GITHUB_WORKSPACE/run17-orchestrate.sh"
           grep -n 'run26-disable-kpm' "$GITHUB_WORKSPACE/run17-orchestrate.sh"
+          grep -n 'run29-manager-handshake' "$GITHUB_WORKSPACE/run17-orchestrate.sh"
           grep -n 'run28-extra-features' "$GITHUB_WORKSPACE/run17-orchestrate.sh"
           ! grep -n 'run18-sukisu-swap' "$GITHUB_WORKSPACE/run17-orchestrate.sh"
           ! grep -n 'run19-kpm-enable' "$GITHUB_WORKSPACE/run17-orchestrate.sh"
@@ -171,6 +176,12 @@ jobs:
           grep -Fq 'hooks=4.14_user_path_at+filename_user' "$GITHUB_WORKSPACE/run25-susfs230-proof.txt"
           grep -q '^CONFIG_KSU=y$' "$CONFIG"
           grep -q '^CONFIG_KSU_SUSFS=y$' "$CONFIG"
+          test -s "$GITHUB_WORKSPACE/run29-manager-handshake-proof.txt"
+          grep -Fq 'hook_guard=CONFIG_KSU' "$GITHUB_WORKSPACE/run29-manager-handshake-proof.txt"
+          grep -Fq 'ksu_handle_sys_reboot' kernel/reboot.c
+          grep -Fq '#if defined(CONFIG_KSU)' kernel/reboot.c
+          ! grep -Fq '#ifdef CONFIG_KSU_MANUAL_HOOK' kernel/reboot.c
+          grep -E '[[:space:]]ksu_handle_sys_reboot$' "$GITHUB_WORKSPACE/run16-vmlinux-nm-all.txt" || nm "$VMLINUX" | grep -E '[[:space:]]ksu_handle_sys_reboot$'
           ! grep -q '^CONFIG_KPM=y$' "$CONFIG"
           echo "resukisu_commit=${RESUKISU_COMMIT}" | tee -a "$GITHUB_WORKSPACE/run25-susfs230-proof.txt"
           echo '[PASS] ReSukiSU image keeps 4.14 user_path_at hooks, KPM off'
@@ -199,6 +210,8 @@ jobs:
             run26-disable-kpm-proof.txt
             run28-extra-features.log
             run28-extra-features-proof.txt
+            run29-manager-handshake.log
+            run29-manager-handshake-proof.txt
             run16-builtin-proof.txt
             run17-builtin-runtime-proof.txt
             run17-bbg-zram-stage-proof.txt

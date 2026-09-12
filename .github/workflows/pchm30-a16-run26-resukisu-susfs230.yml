@@ -164,12 +164,12 @@ jobs:
           grep -Fxq 'flag_storage=inode_i_state' "$GITHUB_WORKSPACE/run25-susfs230-proof.txt"
           grep -Fxq 'susfs_overlay=skipped' "$GITHUB_WORKSPACE/run25-susfs230-proof.txt"
           grep -Fxq 'kpm=disabled' "$GITHUB_WORKSPACE/run26-disable-kpm-proof.txt"
-          grep -Fq '#define SUSFS_VERSION \"v2.3.0\"' include/linux/susfs.h
+          grep -Fq '#define SUSFS_VERSION "v2.3.0"' include/linux/susfs.h
           grep -Fq '#define TIF_PROC_NO_SU 34' include/linux/susfs_def.h
           grep -Fq 'susfs_is_current_proc_no_su()' fs/exec.c
           grep -Fq 'filename_lookup(dfd, fname, lookup_flags, &path, NULL)' fs/open.c
           grep -n 'ksu_handle_stat' fs/stat.c || true
-          grep -Eq 'ksu_handle_stat\\(&dfd, &fname, &(flag|flags)\\)' fs/stat.c
+          grep -Eq 'ksu_handle_stat\(&dfd, &fname, &(flag|flags)\)' fs/stat.c
           grep -q '^CONFIG_KSU=y$' "$CONFIG"
           grep -q '^CONFIG_KSU_SUSFS=y$' "$CONFIG"
           ! grep -q '^CONFIG_KPM=y$' "$CONFIG"

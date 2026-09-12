@@ -1,6 +1,6 @@
 name: PCHM30 A16 Run26 SukiSU SUSFS 2.3.0
 # SukiSU line from Run25/Run24. Keep in-tree 4.14 susfs.c + 2.3 hook ABI. KPM stays on.
-# SukiSU/ReSukiSU: resolve refs/heads/main at compile time.
+# ReSukiSU: main HEAD. SukiSU: builtin HEAD (main has no in-tree SUSFS).
 
 on:
   workflow_dispatch:
@@ -73,19 +73,19 @@ jobs:
           fetch-depth: 1
           submodules: false
 
-      - name: Resolve latest ReSukiSU main and SukiSU-Ultra main at build time
+      - name: Resolve latest ReSukiSU main and SukiSU-Ultra builtin at build time
         shell: bash
         run: |
           set -Eeuo pipefail
           RSHA=$(git ls-remote https://github.com/ReSukiSU/ReSukiSU.git refs/heads/main | awk '{print $1}')
-          SSHA=$(git ls-remote https://github.com/SukiSU-Ultra/SukiSU-Ultra.git refs/heads/main | awk '{print $1}')
+          SSHA=$(git ls-remote https://github.com/SukiSU-Ultra/SukiSU-Ultra.git refs/heads/builtin | awk '{print $1}')
           test -n "$RSHA"
           test -n "$SSHA"
           echo "RESUKISU_COMMIT=$RSHA" >> "$GITHUB_ENV"
           echo "SUKISU_COMMIT=$SSHA" >> "$GITHUB_ENV"
-          echo "SUKISU_BRANCH=main" >> "$GITHUB_ENV"
+          echo "SUKISU_BRANCH=builtin" >> "$GITHUB_ENV"
           echo "Resolved ReSukiSU main: $RSHA"
-          echo "Resolved SukiSU-Ultra main: $SSHA"
+          echo "Resolved SukiSU-Ultra builtin: $SSHA"
 
       - name: Materialize Run24 runner and retarget SUSFS checks to 2.3.0
         working-directory: source/android/kernel/msm-4.14

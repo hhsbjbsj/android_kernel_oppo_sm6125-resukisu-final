@@ -1,11 +1,9 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
-# Resolve ReSukiSU / SukiSU HEAD at compile time so pins do not rot.
-# Usage: resolve-latest-ksu.sh [resukisu|sukisu|both]
-
+# Resolve ReSukiSU main / SukiSU-Ultra builtin HEAD at compile time.
+# SukiSU main is manager/LKM-only and lacks in-tree KSU_SUSFS; 4.14 must use builtin.
 mode="${1:-both}"
 env_file="${GITHUB_ENV:-}"
-
 resolve() {
   local name="$1" url="$2" ref="$3" var="$4"
   local sha
@@ -20,20 +18,19 @@ resolve() {
   fi
   export "$var=$sha"
 }
-
 case "$mode" in
   resukisu)
     resolve ReSukiSU https://github.com/ReSukiSU/ReSukiSU.git refs/heads/main RESUKISU_COMMIT
     ;;
   sukisu)
-    resolve SukiSU-Ultra https://github.com/SukiSU-Ultra/SukiSU-Ultra.git refs/heads/main SUKISU_COMMIT
-    echo "SUKISU_BRANCH=main" >> "${env_file:-/dev/null}"
+    resolve SukiSU-Ultra https://github.com/SukiSU-Ultra/SukiSU-Ultra.git refs/heads/builtin SUKISU_COMMIT
+    echo "SUKISU_BRANCH=builtin" >> "${env_file:-/dev/null}"
     ;;
   both)
     resolve ReSukiSU https://github.com/ReSukiSU/ReSukiSU.git refs/heads/main RESUKISU_COMMIT
-    resolve SukiSU-Ultra https://github.com/SukiSU-Ultra/SukiSU-Ultra.git refs/heads/main SUKISU_COMMIT
+    resolve SukiSU-Ultra https://github.com/SukiSU-Ultra/SukiSU-Ultra.git refs/heads/builtin SUKISU_COMMIT
     if [ -n "$env_file" ]; then
-      echo "SUKISU_BRANCH=main" >> "$env_file"
+      echo "SUKISU_BRANCH=builtin" >> "$env_file"
     fi
     ;;
   *)

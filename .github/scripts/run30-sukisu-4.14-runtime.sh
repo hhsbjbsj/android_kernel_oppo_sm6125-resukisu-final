@@ -17,11 +17,10 @@ import re
 
 notes = []
 
-# Use raw strings so C source keeps a real backslash-n, not a Python newline.
-# The previous run30 wrote an actual newline inside pr_err("...%d<NL>"), which
-# made pr_err an unterminated macro and killed the ksu.c unity build.
+# Do not put backslash-n in these snippets AND do not feed them to re.sub().
+# re.sub treats \n in the replacement as a real newline and breaks pr_err().
 
-SYNC_FD_REQ = r'''static int ksu_handle_fd_request(void __user *arg)
+SYNC_FD_REQ = """static int ksu_handle_fd_request(void __user *arg)
 {
 	int fd;
 
@@ -31,15 +30,15 @@ SYNC_FD_REQ = r'''static int ksu_handle_fd_request(void __user *arg)
 	if (fd < 0)
 		return fd;
 	if (copy_to_user((int __user *)arg, &fd, sizeof(fd))) {
-		pr_err("install fd copy_to_user failed\n");
+		pr_err("install fd copy_to_user failed");
 		return -EFAULT;
 	}
-	pr_info("install fd for manager (sync 4.14): %d\n", fd);
+	pr_info("install fd for manager (sync 4.14)");
 	return 0;
 }
-'''
+"""
 
-SYNC_REBOOT = r'''int ksu_supercall_reboot_handler(void __user **arg)
+SYNC_REBOOT = """int ksu_supercall_reboot_handler(void __user **arg)
 {
 	int fd;
 	void __user *outp;
@@ -53,38 +52,52 @@ SYNC_REBOOT = r'''int ksu_supercall_reboot_handler(void __user **arg)
 	if (fd < 0)
 		return 0;
 	if (copy_to_user((int __user *)outp, &fd, sizeof(fd)))
-		pr_err("install fd copy_to_user failed\n");
+		pr_err("install fd copy_to_user failed");
 	else
-		pr_info("install fd for manager (sync 4.14 reboot): %d\n", fd);
+		pr_info("install fd for manager (sync 4.14 reboot)");
 	return 0;
 }
-'''
+"""
 
 
-def strip_cloexec_and_close_helpers(t: str) -> str:
+def strip_cloexec_and_close_helpers(t):
     t = t.replace('get_unused_fd_flags(O_CLOEXEC)', 'get_unused_fd_flags(0)')
     t = t.replace('O_RDWR | O_CLOEXEC', 'O_RDWR')
     t = t.replace('O_RDWR|O_CLOEXEC', 'O_RDWR')
     t = t.replace('ksu_install_fd_with_permissions(O_CLOEXEC, 0)',
                   'ksu_install_fd_with_permissions(0, 0)')
-    # 4.14 has neither close_fd() nor ksys_close(). Leave the fd on error.
     t = re.sub(r'\bclose_fd\s*\(\s*fd\s*\)\s*;', '/* no close_fd on 4.14 */ ;', t)
     t = re.sub(r'\bksys_close\s*\(\s*fd\s*\)\s*;', '/* no ksys_close on 4.14 */ ;', t)
     return t
 
 
-def replace_fn(t: str, sig_re: str, body: str, label: str, path: Path) -> str:
-    rx = re.compile(sig_re + r'\s*\{.*?\n\}', re.S)
-    n = len(rx.findall(t))
-    if n:
-        t, cnt = rx.subn(body.rstrip(), t, count=1)
-        notes.append(label)
-        print(f'{path}: replaced {label} ({cnt} hit, {n} present)', flush=True)
-    else:
-        print(f'{path}: {label} not found', flush=True)
-    return t
+def replace_c_function(t, sig_re, body, label, path):
+    m = re.search(sig_re, t)
+    if not m:
+        print('%s: %s not found' % (path, label), flush=True)
+        return t
+    brace = t.find('{', m.end())
+    if brace < 0:
+        raise SystemExit('%s: %s has no opening brace' % (path, label))
+    depth = 0
+    i = brace
+    while i < len(t):
+        ch = t[i]
+        if ch == '{':
+            depth += 1
+        elif ch == '}':
+            depth -= 1
+            if depth == 0:
+                end = i + 1
+                t = t[:m.start()] + body.rstrip() + t[end:]
+                notes.append(label)
+                print('%s: replaced %s' % (path, label), flush=True)
+                return t
+        i += 1
+    raise SystemExit('%s: %s brace scan failed' % (path, label))
 
 
+seen = set()
 for rel in [
     'KernelSU/kernel/supercall/supercall.c',
     'drivers/kernelsu/supercall/supercall.c',
@@ -92,17 +105,22 @@ for rel in [
     p = Path(rel)
     if not p.exists():
         continue
+    key = p.resolve()
+    if key in seen:
+        print('%s: skip symlink duplicate' % p, flush=True)
+        continue
+    seen.add(key)
     t = p.read_text(errors='ignore')
     orig = t
     t = strip_cloexec_and_close_helpers(t)
-    t = replace_fn(
+    t = replace_c_function(
         t,
         r'static int ksu_handle_fd_request\s*\(\s*void __user \*arg\s*\)',
         SYNC_FD_REQ,
         'fd_request=sync',
         p,
     )
-    t = replace_fn(
+    t = replace_c_function(
         t,
         r'int ksu_supercall_reboot_handler\s*\(\s*void __user \*\*arg\s*\)',
         SYNC_REBOOT,
@@ -110,30 +128,11 @@ for rel in [
         p,
     )
     if 'TWA_RESUME' in t or 'task_work_add' in t:
-        print(f'{p}: WARN task_work still present after rewrite', flush=True)
+        print('%s: WARN task_work still present after rewrite' % p, flush=True)
         notes.append('task_work_still_present')
     if t != orig:
         p.write_text(t)
 
-# Official manager talks through sys_reboot -> dispatch.c (SUSFS) ->
-# ksu_supercall_reboot_handler. Keep a last-resort inline sync there too.
-for rel in [
-    'KernelSU/kernel/supercall/dispatch.c',
-    'drivers/kernelsu/supercall/dispatch.c',
-]:
-    p = Path(rel)
-    if not p.exists():
-        continue
-    t = p.read_text(errors='ignore')
-    orig = t
-    # If dispatch still forwards MAGIC2 to the async handler, that is fine
-    # once the handler itself is sync. Do not rewrite MAGIC2 routing.
-    if t != orig:
-        p.write_text(t)
-
-# adb su: SUSFS builtin skips TIF_SECCOMP but still require allowlist.
-# Fresh boot allowlist is empty, so shell uid 2000 never sees /system/bin/su.
-# Also keep the non-SUSFS TIF_SECCOMP relax for HEAD drift.
 for rel in [
     'KernelSU/kernel/feature/sucompat.c',
     'drivers/kernelsu/feature/sucompat.c',
@@ -143,6 +142,10 @@ for rel in [
     p = Path(rel)
     if not p.exists():
         continue
+    key = p.resolve()
+    if key in seen:
+        continue
+    seen.add(key)
     t = p.read_text(errors='ignore')
     orig = t
     t = t.replace(
@@ -157,16 +160,14 @@ for rel in [
     replacements = [
         (
             'if (!(__ksu_is_allow_uid_for_current(current_uid().val)))',
-            'if (!(__ksu_is_allow_uid_for_current(current_uid().val) ||\n'
-            '\t      current_uid().val == 0 || current_uid().val == 2000 ||\n'
-            '\t      is_manager()))',
+            'if (!(__ksu_is_allow_uid_for_current(current_uid().val) || '
+            'current_uid().val == 0 || current_uid().val == 2000 || is_manager()))',
             'sucompat_susfs_allow_shell',
         ),
         (
             'if (!ksu_is_allow_uid_for_current(current_uid().val))',
-            'if (!(ksu_is_allow_uid_for_current(current_uid().val) ||\n'
-            '\t      current_uid().val == 0 || current_uid().val == 2000 ||\n'
-            '\t      is_manager()))',
+            'if (!(ksu_is_allow_uid_for_current(current_uid().val) || '
+            'current_uid().val == 0 || current_uid().val == 2000 || is_manager()))',
             'sucompat_allow_shell_2000',
         ),
     ]
@@ -174,27 +175,28 @@ for rel in [
         if needle in t:
             t = t.replace(needle, repl, 1)
             notes.append(label)
-            print(f'{p}: allow uid 0/2000/manager ({label})', flush=True)
+            print('%s: allow uid 0/2000/manager (%s)' % (p, label), flush=True)
     if t != orig:
         p.write_text(t)
 
-# Shallow builtin clone makes rev-list --count main fail -> KSU_VERSION=13000.
-# Official SukiSU manager rejects anything below 32513.
 for rel in ['KernelSU/kernel/Makefile', 'drivers/kernelsu/Makefile']:
     p = Path(rel)
     if not p.exists():
         continue
+    key = p.resolve()
+    if key in seen:
+        continue
+    seen.add(key)
     t = p.read_text(errors='ignore')
     orig = t
     t = t.replace('REPO_BRANCH := main', 'REPO_BRANCH := HEAD')
-    if 'VERSION_BASE' in t and 'KSU_VERSION' in t:
-        if 'GITHUB_COMMITS ?=' not in t:
-            t = t.replace(
-                'VERSION_BASE    := 40000',
-                'VERSION_BASE    := 40000\nGITHUB_COMMITS ?= 40900\n',
-            )
-            notes.append('KSU_VERSION_force_40900')
-            print(f'{p}: force GITHUB_COMMITS=40900 for manager floor 32513', flush=True)
+    if 'VERSION_BASE' in t and 'KSU_VERSION' in t and 'GITHUB_COMMITS ?=' not in t:
+        t = t.replace(
+            'VERSION_BASE    := 40000',
+            'VERSION_BASE    := 40000\nGITHUB_COMMITS ?= 40900\n',
+        )
+        notes.append('KSU_VERSION_force_40900')
+        print('%s: force GITHUB_COMMITS=40900 for manager floor 32513' % p, flush=True)
     if t != orig:
         p.write_text(t)
 
@@ -223,7 +225,7 @@ fi
   echo 'task_work=bypassed'
   echo 'sucompat_shell=uid_0_2000_manager'
   echo 'ksu_version_floor=40900'
-  echo 'pr_err_newline=escaped'
+  echo 'pr_err_newline=none'
   if [[ -f /tmp/run30-notes.txt ]]; then cat /tmp/run30-notes.txt; fi
 } | tee "$GITHUB_WORKSPACE/run30-sukisu-4.14-runtime-proof.txt"
 

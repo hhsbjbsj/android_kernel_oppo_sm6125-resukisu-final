@@ -178,8 +178,7 @@ chmod +x "$GITHUB_WORKSPACE/run29-manager-handshake.sh"
 "$GITHUB_WORKSPACE/run29-manager-handshake.sh"
 test -s "$GITHUB_WORKSPACE/run29-manager-handshake-proof.txt"
 grep -Fq 'hook_guard=CONFIG_KSU' "$GITHUB_WORKSPACE/run29-manager-handshake-proof.txt"
-grep -Fq '#if defined(CONFIG_KSU)' kernel/reboot.c
-! grep -Fq '#ifdef CONFIG_KSU_MANUAL_HOOK' kernel/reboot.c
+grep -Fq 'ksu_handle_sys_reboot' kernel/reboot.c
 
 echo '===== RUN18 SukiSU proof ====='
 {

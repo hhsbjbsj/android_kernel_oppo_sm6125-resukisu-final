@@ -16,17 +16,6 @@ import re
 
 notes = []
 
-def patch_text(path: Path, old: str, new: str, label: str):
-    if not path.exists():
-        return False
-    t = path.read_text(errors='ignore')
-    if old not in t:
-        return False
-    path.write_text(t.replace(old, new))
-    print(f'{path}: {label}', flush=True)
-    notes.append(label)
-    return True
-
 # 1) Install manager fd synchronously. 4.14 task_work_add is (task, work, bool),
 #    TWA_RESUME is a 5.7+ enum. ReSukiSU-54 never used task_work here.
 for rel in [
@@ -41,7 +30,8 @@ for rel in [
     t = t.replace('get_unused_fd_flags(O_CLOEXEC)', 'get_unused_fd_flags(0)')
     t = t.replace('O_RDWR | O_CLOEXEC', 'O_RDWR')
     t = t.replace('O_RDWR|O_CLOEXEC', 'O_RDWR')
-    # Replace task_work fd request with a direct install + copy_to_user.
+    # 4.14 has sys_close, not ksys_close. Leak one fd on copy_to_user failure rather
+    # than pull in an unknown close helper.
     sync_fn = '''static int ksu_handle_fd_request(void __user *arg)
 {
 	int fd;
@@ -52,7 +42,7 @@ for rel in [
 	if (fd < 0)
 		return fd;
 	if (copy_to_user((int __user *)arg, &fd, sizeof(fd))) {
-		ksys_close(fd);
+		pr_err("install fd copy_to_user failed: %d\\n", fd);
 		return -EFAULT;
 	}
 	pr_info("install fd for manager (sync 4.14): %d\\n", fd);
@@ -71,7 +61,6 @@ for rel in [
         notes.append('fd_request=sync')
         print(f'{p}: ksu_handle_fd_request now synchronous', flush=True)
     else:
-        # Fallback: if task_work_add remains, force notify=true style is still racy.
         if 'task_work_add(current, &tw->cb, TWA_RESUME)' in t:
             print(f'{p}: WARN task_work fd path still present', flush=True)
             notes.append('fd_request=task_work_still_present')
@@ -95,7 +84,6 @@ for rel in [
     t = t.replace(
         'if (likely(test_thread_flag(TIF_SECCOMP)))\n\t\treturn false;',
         '/* PCHM30: adbd/shell run with seccomp; do not block sucompat. */\n')
-    # Make empty-allowlist shell usable: uid 0 / 2000 / manager.
     needle = 'if (!ksu_is_allow_uid_for_current(current_uid().val))'
     repl = (
         'if (!(ksu_is_allow_uid_for_current(current_uid().val) ||\n'
@@ -133,7 +121,6 @@ Path('/tmp/run30-notes.txt').write_text(
 )
 PY
 
-# Prove the deadly patterns are gone from the live SukiSU core.
 if [[ -f KernelSU/kernel/supercall/supercall.c ]]; then
   ! grep -Fq 'get_unused_fd_flags(O_CLOEXEC)' KernelSU/kernel/supercall/supercall.c
   grep -Fq 'install fd for manager (sync 4.14)' KernelSU/kernel/supercall/supercall.c \

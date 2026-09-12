@@ -1,5 +1,5 @@
 name: PCHM30 A16 Run26 ReSukiSU SUSFS 2.3.0
-# ReSukiSU line from Run17. Keep in-tree 4.14 susfs.c + 2.3 hook ABI. KPM stays off.
+# ReSukiSU line from Run17. Keep in-tree 4.14 susfs.c + 4.14 VFS ABI. KPM stays off.
 # ReSukiSU: resolve refs/heads/main at compile time (do not pin SHA).
 
 on:
@@ -165,16 +165,15 @@ jobs:
           grep -Fxq 'susfs_overlay=skipped' "$GITHUB_WORKSPACE/run25-susfs230-proof.txt"
           grep -Fxq 'kpm=disabled' "$GITHUB_WORKSPACE/run26-disable-kpm-proof.txt"
           grep -Fq '#define SUSFS_VERSION "v2.3.0"' include/linux/susfs.h
-          grep -Fq '#define TIF_PROC_NO_SU 34' include/linux/susfs_def.h
-          grep -Fq 'susfs_is_current_proc_no_su()' fs/exec.c
-          grep -Fq 'filename_lookup(dfd, fname, lookup_flags, &path, NULL)' fs/open.c
-          grep -n 'ksu_handle_stat' fs/stat.c || true
-          grep -Eq 'ksu_handle_stat\(&dfd, &fname, &(flag|flags)\)' fs/stat.c
+          grep -Fq 'user_path_at(dfd, filename, lookup_flags, &path)' fs/open.c
+          ! grep -Fq 'filename_lookup(dfd, fname' fs/open.c
+          ! grep -Fq 'filename_lookup(dfd, fname' fs/stat.c
+          grep -Fq 'hooks=4.14_user_path_at+filename_user' "$GITHUB_WORKSPACE/run25-susfs230-proof.txt"
           grep -q '^CONFIG_KSU=y$' "$CONFIG"
           grep -q '^CONFIG_KSU_SUSFS=y$' "$CONFIG"
           ! grep -q '^CONFIG_KPM=y$' "$CONFIG"
           echo "resukisu_commit=${RESUKISU_COMMIT}" | tee -a "$GITHUB_WORKSPACE/run25-susfs230-proof.txt"
-          echo '[PASS] ReSukiSU image is SUSFS 2.3.0 with KPM disabled and 2.3 VFS hooks'
+          echo '[PASS] ReSukiSU image keeps 4.14 user_path_at hooks, KPM off'
 
       - name: Package reusable PCHM30 AnyKernel3 ZIP
         working-directory: source/android/kernel/msm-4.14

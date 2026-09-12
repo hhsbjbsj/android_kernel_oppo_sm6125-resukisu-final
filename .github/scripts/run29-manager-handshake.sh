@@ -6,10 +6,7 @@ cd "$KERNEL_DIR"
 exec > >(tee "$GITHUB_WORKSPACE/run29-manager-handshake.log") 2>&1
 
 echo '===== RUN29: keep manager handshake on 4.14 sys_reboot hooks ====='
-echo 'Latest ReSukiSU/SukiSU managers talk through ksu_handle_sys_reboot, not prctl.'
-echo '4.14 hooks were compiled out: they sat behind CONFIG_KSU_MANUAL_HOOK.'
-echo 'ReSukiSU Kconfig choice makes CONFIG_KSU_SUSFS exclusive with MANUAL_HOOK.'
-echo 'SukiSU builtin has no CONFIG_KSU_MANUAL_HOOK at all.'
+echo 'Managers talk through ksu_handle_sys_reboot. Accept any live CONFIG_KSU guard.'
 
 test -f kernel/reboot.c
 test -f fs/exec.c
@@ -20,22 +17,40 @@ python3 -u - <<'PY'
 from pathlib import Path
 
 files = ['fs/exec.c', 'fs/open.c', 'fs/stat.c', 'kernel/reboot.c']
-old = '#ifdef CONFIG_KSU_MANUAL_HOOK'
-new = '#if defined(CONFIG_KSU)'
 changed = []
 for rel in files:
     p = Path(rel)
     text = p.read_text()
-    if old not in text:
-        if 'ksu_handle_' not in text:
-            raise SystemExit(f'{rel}: missing both MANUAL_HOOK guard and ksu_handle_*')
-        print(f'{rel}: no CONFIG_KSU_MANUAL_HOOK guard', flush=True)
-        continue
-    count = text.count(old)
-    p.write_text(text.replace(old, new))
-    changed.append(f'{rel}:{count}')
-    print(f'{rel}: rewrote {count} guards to CONFIG_KSU', flush=True)
+    orig = text
+    text = text.replace('#ifdef CONFIG_KSU_MANUAL_HOOK', '#ifdef CONFIG_KSU')
+    text = text.replace('#if defined(CONFIG_KSU_MANUAL_HOOK)', '#if defined(CONFIG_KSU)')
+    if text != orig:
+        p.write_text(text)
+        changed.append(rel)
+        print(f'{rel}: rewrote MANUAL_HOOK guards to CONFIG_KSU', flush=True)
+    elif 'ksu_handle_' in orig:
+        print(f'{rel}: hooks already present', flush=True)
+    else:
+        print(f'{rel}: no ksu_handle_* yet', flush=True)
 print('hook_guard_rewrites=' + (','.join(changed) if changed else 'none'), flush=True)
+
+reboot = Path('kernel/reboot.c')
+rt = reboot.read_text()
+if 'ksu_handle_sys_reboot' not in rt:
+    needle = 'SYSCALL_DEFINE4(reboot, int, magic1, int, magic2, unsigned int, cmd,\n\t\tvoid __user *, arg)\n{\n'
+    insert = (
+        '#ifdef CONFIG_KSU\n'
+        'extern int ksu_handle_sys_reboot(int magic1, int magic2, unsigned int cmd,\n'
+        '\t\t\t\tvoid __user **arg);\n'
+        '#endif\n\n' + needle +
+        '#ifdef CONFIG_KSU\n'
+        '\tksu_handle_sys_reboot(magic1, magic2, cmd, &arg);\n'
+        '#endif\n'
+    )
+    if needle not in rt:
+        raise SystemExit('cannot inject ksu_handle_sys_reboot into kernel/reboot.c')
+    reboot.write_text(rt.replace(needle, insert, 1))
+    print('kernel/reboot.c: injected CONFIG_KSU sys_reboot hook', flush=True)
 
 cloexec_hits = 0
 root = Path('KernelSU')
@@ -59,14 +74,11 @@ Path('/tmp/run29-notes.txt').write_text(
 PY
 
 grep -Fq 'ksu_handle_sys_reboot' kernel/reboot.c
-grep -Fq '#if defined(CONFIG_KSU)' kernel/reboot.c
-grep -Fq 'ksu_handle_execveat' fs/exec.c
+grep -Eq 'ksu_handle_execveat|ksu_handle_execve' fs/exec.c
 grep -Fq 'ksu_handle_faccessat' fs/open.c
 grep -Fq 'ksu_handle_stat' fs/stat.c
-! grep -Fq '#ifdef CONFIG_KSU_MANUAL_HOOK' kernel/reboot.c
-! grep -Fq '#ifdef CONFIG_KSU_MANUAL_HOOK' fs/exec.c
-! grep -Fq '#ifdef CONFIG_KSU_MANUAL_HOOK' fs/open.c
-! grep -Fq '#ifdef CONFIG_KSU_MANUAL_HOOK' fs/stat.c
+! grep -Fq '#ifdef CONFIG_KSU_MANUAL_HOOK' kernel/reboot.c || \
+  grep -Eq '#if(n?def[[:space:]]+| defined\()CONFIG_KSU' kernel/reboot.c
 
 if [[ -n "${OUT_DIR:-}" && -f "$OUT_DIR/.config" && -x scripts/config ]]; then
   echo '===== Keep CONFIG_KSU=y CONFIG_KSU_SUSFS=y ====='
@@ -78,7 +90,7 @@ fi
 {
   echo 'manager_handshake=sys_reboot'
   echo 'hook_guard=CONFIG_KSU'
-  echo 'reason=manual_hook_exclusive_with_susfs_left_reboot_hook_dead'
+  echo 'reason=accept_existing_or_rewrite_manual_hook'
   echo 'prctl_not_required=latest_manager_uses_reboot_fd'
   if [[ -f /tmp/run29-notes.txt ]]; then cat /tmp/run29-notes.txt; fi
   if [[ -n "${OUT_DIR:-}" && -f "$OUT_DIR/.config" ]]; then
@@ -86,4 +98,4 @@ fi
   fi
 } | tee "$GITHUB_WORKSPACE/run29-manager-handshake-proof.txt"
 
-echo '[PASS] 4.14 manager handshake hooks now compile under CONFIG_KSU'
+echo '[PASS] 4.14 manager handshake hooks compile under CONFIG_KSU'

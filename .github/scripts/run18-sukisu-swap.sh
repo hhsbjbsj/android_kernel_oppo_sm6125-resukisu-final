@@ -180,6 +180,13 @@ test -s "$GITHUB_WORKSPACE/run29-manager-handshake-proof.txt"
 grep -Fq 'hook_guard=CONFIG_KSU' "$GITHUB_WORKSPACE/run29-manager-handshake-proof.txt"
 grep -Fq 'ksu_handle_sys_reboot' kernel/reboot.c
 
+echo '===== RUN30: 4.14 sync manager fd + adb su ====='
+git show "$GITHUB_SHA:.github/scripts/run30-sukisu-4.14-runtime.sh" > "$GITHUB_WORKSPACE/run30-sukisu-4.14-runtime.sh"
+chmod +x "$GITHUB_WORKSPACE/run30-sukisu-4.14-runtime.sh"
+"$GITHUB_WORKSPACE/run30-sukisu-4.14-runtime.sh"
+test -s "$GITHUB_WORKSPACE/run30-sukisu-4.14-runtime-proof.txt"
+grep -Fq 'sukisu_runtime=4.14_sync_fd' "$GITHUB_WORKSPACE/run30-sukisu-4.14-runtime-proof.txt"
+
 echo '===== RUN18 SukiSU proof ====='
 {
   echo "kernel_base=$(git rev-parse HEAD)"
@@ -191,6 +198,7 @@ echo '===== RUN18 SukiSU proof ====='
   echo 'kpm=disabled'
   echo 'run17_bpf_builtin_stack=preserved'
   echo 'manager_handshake=sys_reboot_under_CONFIG_KSU'
+  echo 'manager_fd=sync_4.14'
 } | tee "$GITHUB_WORKSPACE/run18-sukisu-proof.txt"
 
 echo '[PASS] Run18 replaced only the KSU core with pinned SukiSU; SUSFS 2.3.0 keeps 4.14 user_path_at hooks'

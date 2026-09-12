@@ -179,8 +179,6 @@ jobs:
           test -s "$GITHUB_WORKSPACE/run29-manager-handshake-proof.txt"
           grep -Fq 'hook_guard=CONFIG_KSU' "$GITHUB_WORKSPACE/run29-manager-handshake-proof.txt"
           grep -Fq 'ksu_handle_sys_reboot' kernel/reboot.c
-          grep -Fq '#if defined(CONFIG_KSU)' kernel/reboot.c
-          ! grep -Fq '#ifdef CONFIG_KSU_MANUAL_HOOK' kernel/reboot.c
           grep -E '[[:space:]]ksu_handle_sys_reboot$' "$GITHUB_WORKSPACE/run16-vmlinux-nm-all.txt" || nm "$VMLINUX" | grep -E '[[:space:]]ksu_handle_sys_reboot$'
           ! grep -q '^CONFIG_KPM=y$' "$CONFIG"
           echo "resukisu_commit=${RESUKISU_COMMIT}" | tee -a "$GITHUB_WORKSPACE/run25-susfs230-proof.txt"

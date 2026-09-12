@@ -172,6 +172,15 @@ grep -q '^CONFIG_KSU_SUSFS=y$' "$OUT_DIR/.config"
 ! grep -q '^CONFIG_KPM=y$' "$OUT_DIR/.config"
 grep -Fq '#define SUSFS_VERSION "v2.3.0"' include/linux/susfs.h
 
+echo '===== RUN29: compile manager sys_reboot handshake under CONFIG_KSU ====='
+git show "$GITHUB_SHA:.github/scripts/run29-manager-handshake.sh" > "$GITHUB_WORKSPACE/run29-manager-handshake.sh"
+chmod +x "$GITHUB_WORKSPACE/run29-manager-handshake.sh"
+"$GITHUB_WORKSPACE/run29-manager-handshake.sh"
+test -s "$GITHUB_WORKSPACE/run29-manager-handshake-proof.txt"
+grep -Fq 'hook_guard=CONFIG_KSU' "$GITHUB_WORKSPACE/run29-manager-handshake-proof.txt"
+grep -Fq '#if defined(CONFIG_KSU)' kernel/reboot.c
+! grep -Fq '#ifdef CONFIG_KSU_MANUAL_HOOK' kernel/reboot.c
+
 echo '===== RUN18 SukiSU proof ====='
 {
   echo "kernel_base=$(git rev-parse HEAD)"
@@ -182,6 +191,7 @@ echo '===== RUN18 SukiSU proof ====='
   echo 'sucompat=realigned_after_swap'
   echo 'kpm=disabled'
   echo 'run17_bpf_builtin_stack=preserved'
+  echo 'manager_handshake=sys_reboot_under_CONFIG_KSU'
 } | tee "$GITHUB_WORKSPACE/run18-sukisu-proof.txt"
 
 echo '[PASS] Run18 replaced only the KSU core with pinned SukiSU; SUSFS 2.3.0 keeps 4.14 user_path_at hooks'

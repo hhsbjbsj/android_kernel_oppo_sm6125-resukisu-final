@@ -100,4 +100,4 @@ jobs:
           sed -i 's/v2\.2\.0/v2.3.0/g' "$GITHUB_WORKSPACE/run19-source.yml"
           grep -Fq 'SUSFS_VERSION "v2.3.0"' "$GITHUB_WORKSPACE/run19-source.yml"
           ! grep -Fq 'v2.2.0' "$GITHUB_WORKSPACE/run19-source.yml"
-          echo reuse-runner-kept
+          python3 "$GITHUB_WORKSPACE/run-run24-step.py" 'Install BTF host tooling without Azure mirror hang' || true

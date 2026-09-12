@@ -1,5 +1,5 @@
 name: PCHM30 A16 Run26 ReSukiSU SUSFS 2.3.0
-# ReSukiSU line from Run17. Full GKI 2.3 overlay + 4.14 hook rewrite. KPM stays off.
+# ReSukiSU line from Run17. Keep in-tree 4.14 susfs.c + 2.3 hook ABI. KPM stays off.
 # ReSukiSU pin: main @ 1e25a4c5c0e7eb71292f1fa4f48704e5490f1b82 (2026-09-10).
 
 on:
@@ -9,6 +9,7 @@ on:
     paths:
       - '.github/workflows/pchm30-a16-run26-resukisu-susfs230.yml'
       - '.github/scripts/run25-susfs230-adapt.sh'
+      - '.github/scripts/package-pchm30-run17-ak3.sh'
       - '.github/scripts/run26-disable-kpm.sh'
       - '.github/scripts/rewrite-susfs230-hooks.py'
       - '.github/scripts/adapt-ksu-sucompat230.sh'
@@ -151,12 +152,10 @@ jobs:
           grep -Fq 'network_enhance=y' "$GITHUB_WORKSPACE/run28-extra-features-proof.txt"
           grep -Fxq 'susfs_to=v2.3.0' "$GITHUB_WORKSPACE/run25-susfs230-proof.txt"
           grep -Fxq 'flag_storage=inode_i_state' "$GITHUB_WORKSPACE/run25-susfs230-proof.txt"
+          grep -Fxq 'susfs_overlay=skipped' "$GITHUB_WORKSPACE/run25-susfs230-proof.txt"
           grep -Fxq 'kpm=disabled' "$GITHUB_WORKSPACE/run26-disable-kpm-proof.txt"
           grep -Fq '#define SUSFS_VERSION "v2.3.0"' include/linux/susfs.h
           grep -Fq '#define TIF_PROC_NO_SU 34' include/linux/susfs_def.h
-          grep -Fq 'susfs_open_redirect_spoof_show_map_vma_srcu' fs/susfs.c
-          grep -Fq '&inode->i_state' fs/susfs.c
-          ! grep -Fq 'i_mapping->flags' fs/susfs.c
           grep -Fq 'susfs_is_current_proc_no_su()' fs/exec.c
           grep -Fq 'filename_lookup(dfd, fname, lookup_flags, &path, NULL)' fs/open.c
           grep -n 'ksu_handle_stat' fs/stat.c || true

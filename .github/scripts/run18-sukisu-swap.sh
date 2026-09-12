@@ -27,8 +27,9 @@ git show "$GITHUB_SHA:.github/scripts/run25-susfs230-adapt.sh" > "$GITHUB_WORKSP
 chmod +x "$GITHUB_WORKSPACE/run25-susfs230-adapt.sh"
 "$GITHUB_WORKSPACE/run25-susfs230-adapt.sh"
 grep -Fq '#define SUSFS_VERSION "v2.3.0"' include/linux/susfs.h
-grep -Fq 'susfs_is_current_proc_no_su()' fs/exec.c
-grep -Fq 'filename_lookup(dfd, fname, lookup_flags, &path, NULL)' fs/open.c
+grep -Fq 'user_path_at(dfd, filename, lookup_flags, &path)' fs/open.c
+! grep -Fq 'filename_lookup(dfd, fname' fs/open.c
+! grep -Fq 'filename_lookup(dfd, fname' fs/stat.c
 
 echo '===== Fetch PCHM30 SukiSU 4.14 compatibility patch for current builtin pin ====='
 PATCH="$GITHUB_WORKSPACE/sukisu-builtin-4.14-compat.patch"
@@ -56,8 +57,7 @@ test -f KernelSU/kernel/Makefile
 grep -q '^config KSU_SUSFS$' KernelSU/kernel/Kconfig
 grep -q 'SUSFS_INLINE_HOOK' KernelSU/kernel/Makefile
 
-# SukiSU v4.2 builtin already has SUSFS filename** prototypes and zygote_next
-# setresuid. Apply the 4.14 compat hunks that still match; skip stale ones.
+# SukiSU builtin already has SUSFS handlers. Apply 4.14 compat hunks that still match.
 if git -C KernelSU apply --check "$PATCH"; then
   git -C KernelSU apply "$PATCH"
 else
@@ -178,10 +178,10 @@ echo '===== RUN18 SukiSU proof ====='
   echo "sukisu_commit=$(git -C KernelSU rev-parse HEAD)"
   echo "sukisu_origin=$(git -C KernelSU remote get-url origin)"
   echo 'susfs_version=v2.3.0'
-  echo 'hooks=exec_no_su+open_filename_lookup+stat_filename'
+  echo 'hooks=4.14_user_path_at+filename_user'
   echo 'sucompat=realigned_after_swap'
   echo 'kpm=disabled'
   echo 'run17_bpf_builtin_stack=preserved'
 } | tee "$GITHUB_WORKSPACE/run18-sukisu-proof.txt"
 
-echo '[PASS] Run18 replaced only the KSU core with pinned SukiSU; SUSFS 2.3.0 hooks and sucompat remain intact'
+echo '[PASS] Run18 replaced only the KSU core with pinned SukiSU; SUSFS 2.3.0 keeps 4.14 user_path_at hooks'

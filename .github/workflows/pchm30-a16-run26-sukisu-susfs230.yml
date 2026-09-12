@@ -1,6 +1,7 @@
 name: PCHM30 A16 Run26 SukiSU SUSFS 2.3.0
-# SukiSU line from Run25/Run24. Keep in-tree 4.14 susfs.c + 2.3 hook ABI. KPM stays on.
+# SukiSU line from Run25/Run24. Keep in-tree 4.14 susfs.c + 4.14 VFS ABI. KPM stays on.
 # ReSukiSU: main HEAD. SukiSU: builtin HEAD (main has no in-tree SUSFS).
+# Do NOT copy SM8250/GKI getname_flags+filename_lookup; that hangs first splash on 4.14.
 
 on:
   workflow_dispatch:
@@ -14,6 +15,8 @@ on:
       - '.github/scripts/run19-kpm-enable.sh'
       - '.github/scripts/run24-selinux-hide-compat.sh'
       - '.github/scripts/run25-susfs230-adapt.sh'
+      - '.github/scripts/rewrite-susfs230-hooks.py'
+      - '.github/scripts/adapt-ksu-sucompat230.sh'
       - '.github/scripts/package-pchm30-run17-ak3.sh'
       - '.github/scripts/run28-extra-features.sh'
       - '.github/scripts/inject-run28-sukisu.py'
@@ -174,6 +177,7 @@ jobs:
           grep -Fxq 'susfs_to=v2.3.0' "$GITHUB_WORKSPACE/run25-susfs230-proof.txt"
           grep -Fxq 'flag_storage=inode_i_state' "$GITHUB_WORKSPACE/run25-susfs230-proof.txt"
           grep -Fxq 'susfs_overlay=skipped' "$GITHUB_WORKSPACE/run25-susfs230-proof.txt"
+          grep -Fxq 'hooks=4.14_user_path_at+filename_user' "$GITHUB_WORKSPACE/run25-susfs230-proof.txt"
           test -s "$GITHUB_WORKSPACE/run28-extra-features-proof.txt"
           grep -Fq 'droidspaces=off' "$GITHUB_WORKSPACE/run28-extra-features-proof.txt"
           grep -Fq 'network_enhance=y' "$GITHUB_WORKSPACE/run28-extra-features-proof.txt"
@@ -181,10 +185,9 @@ jobs:
           grep -Fq 'tcp_brutal=y' "$GITHUB_WORKSPACE/run28-extra-features-proof.txt"
           grep -Fq 'adios=mq-deadline-4.14-port' "$GITHUB_WORKSPACE/run28-extra-features-proof.txt"
           grep -Fq '#define SUSFS_VERSION "v2.3.0"' include/linux/susfs.h
-          grep -Fq '#define TIF_PROC_NO_SU 34' include/linux/susfs_def.h
-          grep -Fq '#define TIF_PROC_UMOUNTED_FOR_ZYGOTE_NEXT 35' include/linux/susfs_def.h
-          grep -Fq 'susfs_is_current_proc_no_su()' fs/exec.c
-          grep -Fq 'filename_lookup(dfd, fname, lookup_flags, &path, NULL)' fs/open.c
+          grep -Fq 'user_path_at(dfd, filename, lookup_flags, &path)' fs/open.c
+          ! grep -Fq 'filename_lookup(dfd, fname' fs/open.c
+          ! grep -Fq 'filename_lookup(dfd, fname' fs/stat.c
           grep -q '^CONFIG_KPM=y$' "$OUT_DIR/.config"
           python3 "$GITHUB_WORKSPACE/run-run24-step.py" 'Verify KPM runtime fix reached generated source'
 
@@ -198,7 +201,7 @@ jobs:
           python3 "$GITHUB_WORKSPACE/run-run19-step.py" 'Patch final Image with pinned SukiSU KPM patcher'
           python3 "$GITHUB_WORKSPACE/run-run19-step.py" 'Package reusable PCHM30 Run19 KPM AnyKernel3 ZIP'
           grep -Fq '#define SUSFS_VERSION "v2.3.0"' "$GITHUB_WORKSPACE/$KERNEL_REL/include/linux/susfs.h"
-          echo '[PASS] Run26 compiled SukiSU + SUSFS 2.3.0 with KPM'
+          echo '[PASS] Run26 compiled SukiSU + SUSFS 2.3.0 with 4.14 user_path_at hooks and KPM'
 
       - name: Upload Run26 SukiSU artifact
         if: always()

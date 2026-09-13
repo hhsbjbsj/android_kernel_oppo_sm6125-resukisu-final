@@ -31,22 +31,6 @@ index f4083653..a1e3ac4f 100644
      pr_info("su_compat: set to %d\n", enable);
      return 0;
  }
-diff --git a/kernel/feature/sucompat.h b/kernel/feature/sucompat.h
-index 2dcfe278..c85e61d6 100644
---- a/kernel/feature/sucompat.h
-+++ b/kernel/feature/sucompat.h
-@@ -1,9 +1,10 @@
- #ifndef __KSU_H_SUCOMPAT
- #define __KSU_H_SUCOMPAT
- #include <asm/ptrace.h>
-+#include <linux/jump_label.h>
- #include <linux/types.h>
- 
--extern bool ksu_su_compat_enabled;
-+extern struct static_key_true ksu_su_compat_enabled;
- 
- int ksu_handle_faccessat(int *dfd, const char __user **filename_user, int *mode, int *__unused_flags);
- #if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 1, 0) && defined(CONFIG_KSU_SUSFS)
 diff --git a/kernel/policy/allowlist.c b/kernel/policy/allowlist.c
 index fa32ac15..51613c9c 100644
 --- a/kernel/policy/allowlist.c

@@ -58,14 +58,21 @@ grep -q '^config KSU_SUSFS$' KernelSU/kernel/Kconfig
 grep -q 'SUSFS_INLINE_HOOK' KernelSU/kernel/Makefile
 
 # SukiSU builtin already has SUSFS handlers. Apply 4.14 compat hunks that still match.
+# lsm_hook manager path is rewritten by run31; this patch must apply cleanly.
 if git -C KernelSU apply --check "$PATCH"; then
   git -C KernelSU apply "$PATCH"
 else
-  echo '[WARN] exact 4.14 compat patch no longer applies cleanly to this SukiSU pin'
+  echo '[FAIL] 4.14 compat patch does not apply cleanly to this SukiSU pin'
   git -C KernelSU apply --reject --whitespace=nowarn "$PATCH" || true
+  find KernelSU -name '*.rej' -print || true
+  exit 1
 fi
 git -C KernelSU diff --check || true
-find KernelSU -name '*.rej' -print || true
+if find KernelSU -name '*.rej' | grep -q .; then
+  echo '[FAIL] KernelSU reject files after compat patch'
+  find KernelSU -name '*.rej' -print
+  exit 1
+fi
 
 python3 - <<'FIX'
 from pathlib import Path
@@ -91,7 +98,6 @@ if h.exists():
                       'extern struct static_key_true ksu_su_compat_enabled;')
         h.write_text(t)
         print('sucompat.h: static_key declaration', flush=True)
-# SukiSU v4.2.0 builtin references kernel_umount_feature_set but never defines it.
 um = Path('KernelSU/kernel/feature/kernel_umount.c')
 if um.exists():
     t = um.read_text()
@@ -119,8 +125,22 @@ grep -Fq '#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0)' KernelSU/kernel/ru
   ! grep -Fq 'ksu_selinux_hide_handle_post_fs_data' KernelSU/kernel/runtime/ksud.c
 ! grep -q '^[[:space:]]*fallthrough;' KernelSU/kernel/policy/allowlist.c || true
 grep -Eq 'DEFINE_STATIC_KEY_TRUE\(ksu_su_compat_enabled\)|bool ksu_su_compat_enabled' KernelSU/kernel/feature/sucompat.c
-grep -Eq 'handle_zygote_setresuid|manager spawn zygote SID mismatch|susfs_is_sid_equal' KernelSU/kernel/hook/lsm_hook.c
+grep -Fq 'handle_zygote_setresuid' KernelSU/kernel/hook/lsm_hook.c
+grep -Fq 'ksu_handle_setresuid' KernelSU/kernel/hook/lsm_hook.c
 grep -Fq 'static int kernel_umount_feature_set' KernelSU/kernel/feature/kernel_umount.c
+
+echo '===== RUN31: manager UID install_fd before zygote SID ====='
+git show "$GITHUB_SHA:.github/scripts/run31-sukisu-lsm-manager.sh" > "$GITHUB_WORKSPACE/run31-sukisu-lsm-manager.sh"
+chmod +x "$GITHUB_WORKSPACE/run31-sukisu-lsm-manager.sh"
+"$GITHUB_WORKSPACE/run31-sukisu-lsm-manager.sh"
+test -s "$GITHUB_WORKSPACE/run31-sukisu-lsm-manager-proof.txt"
+grep -Fq 'manager_path=setresuid_ksu_install_fd' "$GITHUB_WORKSPACE/run31-sukisu-lsm-manager-proof.txt"
+grep -Fq 'manager_uid_before_zygote_sid=y' "$GITHUB_WORKSPACE/run31-sukisu-lsm-manager-proof.txt"
+if find KernelSU -name '*.rej' | grep -q .; then
+  echo '[FAIL] KernelSU reject files after run31'
+  find KernelSU -name '*.rej' -print
+  exit 1
+fi
 
 echo '===== Re-align SukiSU sucompat after swap overwrote ReSukiSU handlers ====='
 git show "$GITHUB_SHA:.github/scripts/adapt-ksu-sucompat230.sh" > "$GITHUB_WORKSPACE/adapt-ksu-sucompat230.sh"
@@ -132,14 +152,7 @@ cat > include/linux/pchm30_sukisu_4_14_compat.h <<'EOF'
 /* SPDX-License-Identifier: GPL-2.0 */
 #ifndef _LINUX_PCHM30_SUKISU_4_14_COMPAT_H
 #define _LINUX_PCHM30_SUKISU_4_14_COMPAT_H
-
-/*
- * PCHM30 / SukiSU Linux 4.14 compatibility marker.
- * Keep this header intentionally free of global compatibility macros.
- * The pinned SukiSU builtin tree is adapted only by the validated patch.
- */
-
-#endif /* _LINUX_PCHM30_SUKISU_4_14_COMPAT_H */
+#endif
 EOF
 
 python3 - <<'PY'
@@ -172,20 +185,15 @@ grep -q '^CONFIG_KSU_SUSFS=y$' "$OUT_DIR/.config"
 ! grep -q '^CONFIG_KPM=y$' "$OUT_DIR/.config"
 grep -Fq '#define SUSFS_VERSION "v2.3.0"' include/linux/susfs.h
 
-echo '===== RUN29: compile manager sys_reboot handshake under CONFIG_KSU ====='
+echo '===== RUN29: keep sys_reboot hook compiled (optional helper) ====='
 git show "$GITHUB_SHA:.github/scripts/run29-manager-handshake.sh" > "$GITHUB_WORKSPACE/run29-manager-handshake.sh"
 chmod +x "$GITHUB_WORKSPACE/run29-manager-handshake.sh"
-"$GITHUB_WORKSPACE/run29-manager-handshake.sh"
-test -s "$GITHUB_WORKSPACE/run29-manager-handshake-proof.txt"
-grep -Fq 'hook_guard=CONFIG_KSU' "$GITHUB_WORKSPACE/run29-manager-handshake-proof.txt"
-grep -Fq 'ksu_handle_sys_reboot' kernel/reboot.c
+"$GITHUB_WORKSPACE/run29-manager-handshake.sh" || true
 
-echo '===== RUN30: 4.14 sync manager fd + adb su ====='
+echo '===== RUN30: optional reboot fd helper (not manager detection) ====='
 git show "$GITHUB_SHA:.github/scripts/run30-sukisu-4.14-runtime.sh" > "$GITHUB_WORKSPACE/run30-sukisu-4.14-runtime.sh"
 chmod +x "$GITHUB_WORKSPACE/run30-sukisu-4.14-runtime.sh"
-"$GITHUB_WORKSPACE/run30-sukisu-4.14-runtime.sh"
-test -s "$GITHUB_WORKSPACE/run30-sukisu-4.14-runtime-proof.txt"
-grep -Fq 'sukisu_runtime=4.14_sync_fd' "$GITHUB_WORKSPACE/run30-sukisu-4.14-runtime-proof.txt"
+"$GITHUB_WORKSPACE/run30-sukisu-4.14-runtime.sh" || echo '[WARN] run30 reboot helper failed; manager path is setresuid'
 
 echo '===== RUN18 SukiSU proof ====='
 {
@@ -197,8 +205,8 @@ echo '===== RUN18 SukiSU proof ====='
   echo 'sucompat=realigned_after_swap'
   echo 'kpm=disabled'
   echo 'run17_bpf_builtin_stack=preserved'
-  echo 'manager_handshake=sys_reboot_under_CONFIG_KSU'
-  echo 'manager_fd=sync_4.14'
+  echo 'manager_path=setresuid_ksu_install_fd'
+  echo 'reboot_handshake=optional'
 } | tee "$GITHUB_WORKSPACE/run18-sukisu-proof.txt"
 
 echo '[PASS] Run18 replaced only the KSU core with pinned SukiSU; SUSFS 2.3.0 keeps 4.14 user_path_at hooks'

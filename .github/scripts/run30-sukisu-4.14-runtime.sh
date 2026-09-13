@@ -13,6 +13,8 @@ echo '     instead of ksu_handle_sys_reboot, which is what reboot.c actually cal
 echo '  2) fd install is deferred to task_work TWA_RESUME so userspace reads fd=-1'
 echo '  3) KSU_VERSION falls back to 13000 (manager floor 32513)'
 echo '  4) KSU_VERSION_FULL is missing v4.x (manager also checks full string)'
+echo 'Run62 Image had v4.2.0-pchm30@builtin but NOT the official sys_reboot string,'
+echo 'because ksu_handle_sys_reboot stayed inside #else CONFIG_KSU_SUSFS.'
 
 python3 -u - <<'PY'
 from pathlib import Path
@@ -121,19 +123,20 @@ def replace_c_function(t, sig_re, body, label, path):
     raise SystemExit('%s: %s brace scan failed' % (path, label))
 
 
-def ensure_handle_sys_reboot(t, path):
-    if re.search(r'\bint\s+ksu_handle_sys_reboot\s*\(', t):
-        t = replace_c_function(
-            t,
-            r'int ksu_handle_sys_reboot\s*\(\s*int magic1,\s*int magic2,\s*unsigned int cmd,\s*void __user \*\*arg\s*\)',
-            HANDLE_SYS_REBOOT,
-            'sys_reboot=sync_official',
-            path,
-        )
+def force_sys_reboot_always_compiled(t, path):
+    marker = 'PCHM30_FORCE_KSU_HANDLE_SYS_REBOOT'
+    if marker in t:
+        print('%s: force sys_reboot already present' % path, flush=True)
+        notes.append('sys_reboot=already_forced')
         return t
-    t = t.rstrip() + '\n\n' + HANDLE_SYS_REBOOT
-    notes.append('sys_reboot=added_missing')
-    print('%s: added missing ksu_handle_sys_reboot for official manager' % path, flush=True)
+    t = re.sub(
+        r'\bint\s+ksu_handle_sys_reboot\s*\(',
+        'int ksu_handle_sys_reboot_sukisu_susfs_else(',
+        t,
+    )
+    t = t.rstrip() + '\n\n/* ' + marker + ' */\n' + HANDLE_SYS_REBOOT + '\n'
+    notes.append('sys_reboot=forced_outside_susfs_else')
+    print('%s: forced ksu_handle_sys_reboot outside CONFIG_KSU_SUSFS' % path, flush=True)
     return t
 
 
@@ -167,7 +170,7 @@ for rel in [
         'reboot_handler=sync',
         p,
     )
-    t = ensure_handle_sys_reboot(t, p)
+    t = force_sys_reboot_always_compiled(t, p)
     if 'TWA_RESUME' in t or 'task_work_add' in t:
         print('%s: WARN task_work still present after rewrite' % p, flush=True)
         notes.append('task_work_still_present')
@@ -178,30 +181,45 @@ reboot = Path('kernel/reboot.c')
 if reboot.exists():
     t = reboot.read_text(errors='ignore')
     orig = t
-    old_calls = [
-        '#if defined(CONFIG_KSU)\n\tksu_handle_sys_reboot(magic1, magic2, cmd, &arg);\n#endif',
-        '#ifdef CONFIG_KSU\n\tksu_handle_sys_reboot(magic1, magic2, cmd, &arg);\n#endif',
-        '#ifdef CONFIG_KSU_MANUAL_HOOK\n\tksu_handle_sys_reboot(magic1, magic2, cmd, &arg);\n#endif',
-    ]
-    new_call = (
-        '#if defined(CONFIG_KSU)\n'
-        '\tif (!ksu_handle_sys_reboot(magic1, magic2, cmd, &arg))\n'
-        '\t\treturn 0;\n'
-        '#endif'
-    )
-    for old in old_calls:
-        if old in t:
-            t = t.replace(old, new_call, 1)
+    if 'if (!ksu_handle_sys_reboot(magic1, magic2, cmd, &arg))' in t:
+        print('kernel/reboot.c: early-return handshake already present', flush=True)
+        notes.append('reboot_c=already_return0')
+    else:
+        new_t, n = re.subn(
+            r'[ \t]*ksu_handle_sys_reboot\s*\(\s*magic1\s*,\s*magic2\s*,\s*cmd\s*,\s*&arg\s*\)\s*;',
+            '\tif (!ksu_handle_sys_reboot(magic1, magic2, cmd, &arg))\n\t\treturn 0;',
+            t,
+            count=1,
+        )
+        if n:
+            t = new_t
             notes.append('reboot_c=return0')
             print('kernel/reboot.c: handshake now returns 0 to official manager', flush=True)
-            break
-    else:
-        if 'if (!ksu_handle_sys_reboot(magic1, magic2, cmd, &arg))' in t:
-            print('kernel/reboot.c: early-return handshake already present', flush=True)
-            notes.append('reboot_c=already_return0')
         else:
-            print('kernel/reboot.c: WARN did not rewrite handshake return', flush=True)
-            notes.append('reboot_c=unchanged')
+            needle = 'SYSCALL_DEFINE4(reboot, int, magic1, int, magic2, unsigned int, cmd,\n\t\tvoid __user *, arg)\n{\n'
+            insert = (
+                needle +
+                '#if defined(CONFIG_KSU)\n'
+                '\tif (!ksu_handle_sys_reboot(magic1, magic2, cmd, &arg))\n'
+                '\t\treturn 0;\n'
+                '#endif\n'
+            )
+            if needle in t:
+                t = t.replace(needle, insert, 1)
+                notes.append('reboot_c=injected_return0')
+                print('kernel/reboot.c: injected early-return handshake', flush=True)
+            else:
+                print('kernel/reboot.c: WARN did not rewrite handshake return', flush=True)
+                notes.append('reboot_c=unchanged')
+    if 'extern int ksu_handle_sys_reboot' not in t:
+        t = (
+            '#if defined(CONFIG_KSU)\n'
+            'extern int ksu_handle_sys_reboot(int magic1, int magic2, unsigned int cmd,\n'
+            '\t\t\t\tvoid __user **arg);\n'
+            '#endif\n\n' + t
+        )
+        notes.append('reboot_c=extern')
+        print('kernel/reboot.c: added extern ksu_handle_sys_reboot', flush=True)
     if t != orig:
         reboot.write_text(t)
 
@@ -289,14 +307,14 @@ elif [[ -f drivers/kernelsu/supercall/supercall.c ]]; then
   sc=drivers/kernelsu/supercall/supercall.c
 fi
 if [[ -n "$sc" ]]; then
+  grep -Fq 'PCHM30_FORCE_KSU_HANDLE_SYS_REBOOT' "$sc"
   grep -Fq 'int ksu_handle_sys_reboot' "$sc"
   grep -Fq 'install fd for official manager (sync 4.14 sys_reboot)' "$sc"
   ! grep -Fq 'get_unused_fd_flags(O_CLOEXEC)' "$sc"
   ! grep -Fq 'TWA_RESUME' "$sc" || echo '[WARN] TWA_RESUME still in supercall.c'
 fi
 grep -Fq 'ksu_handle_sys_reboot' kernel/reboot.c
-grep -Fq 'if (!ksu_handle_sys_reboot(magic1, magic2, cmd, &arg))' kernel/reboot.c || \
-  echo '[WARN] reboot.c did not get early-return handshake'
+grep -Fq 'if (!ksu_handle_sys_reboot(magic1, magic2, cmd, &arg))' kernel/reboot.c
 
 mk=""
 if [[ -f KernelSU/kernel/Makefile ]]; then
@@ -311,7 +329,7 @@ fi
 
 {
   echo 'sukisu_runtime=4.14_sync_fd'
-  echo 'official_handshake=ksu_handle_sys_reboot'
+  echo 'official_handshake=ksu_handle_sys_reboot_forced_outside_susfs'
   echo 'reboot_return=0_on_magic'
   echo 'cloexec=stripped_in_install_fd'
   echo 'task_work=bypassed'
@@ -324,4 +342,4 @@ fi
   if [[ -f /tmp/run30-notes.txt ]]; then cat /tmp/run30-notes.txt; fi
 } | tee "$GITHUB_WORKSPACE/run30-sukisu-4.14-runtime-proof.txt"
 
-echo '[PASS] official SukiSU manager handshake is now ksu_handle_sys_reboot + version 40900/v4.2.0'
+echo '[PASS] official SukiSU manager handshake is now always-compiled ksu_handle_sys_reboot + version 40900/v4.2.0'

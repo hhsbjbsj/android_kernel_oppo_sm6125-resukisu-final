@@ -1,0 +1,128 @@
+diff --git a/include/linux/bpf.h b/include/linux/bpf.h
+index c7f827a537d31fe3a83e546b035d9eda498813cd..811b4bb78d7ddaae940a40b74ee2875891e8ad91 100644
+--- a/include/linux/bpf.h
++++ b/include/linux/bpf.h
+@@ -88,6 +88,7 @@ struct bpf_map {
+ 	struct btf *btf;
+ 	u32 pages;
+ 	bool unpriv_array;
++	bool frozen;
+ 	/* 51 bytes hole */
+ 
+ 	/* The 3rd and 4th cacheline with misc members to avoid false sharing
+diff --git a/include/uapi/linux/bpf.h b/include/uapi/linux/bpf.h
+index 9e6816912da1c737b7844275e8b4031e3dad7249..de55e6ed3b4713e50a782b7521fc217ecb10feb5 100644
+--- a/include/uapi/linux/bpf.h
++++ b/include/uapi/linux/bpf.h
+@@ -102,6 +102,8 @@ enum bpf_cmd {
+ 	BPF_RAW_TRACEPOINT_OPEN,
+ 	BPF_BTF_LOAD = 18,
+ 	BPF_BTF_GET_FD_BY_ID = 19,
++	/* Keep the upstream UAPI number; commands 20 and 21 are not backported. */
++	BPF_MAP_FREEZE = 22,
+ };
+ 
+ enum bpf_map_type {
+diff --git a/kernel/bpf/syscall.c b/kernel/bpf/syscall.c
+index 5faf955fbb47ccabcd3eb73fa2d43f287eec0f5a..328e7d0179f3a3f8e9a80a3a7ad52e185fda049c 100644
+--- a/kernel/bpf/syscall.c
++++ b/kernel/bpf/syscall.c
+@@ -325,6 +325,15 @@ static int bpf_map_release(struct inode *inode, struct file *filp)
+ 	return 0;
+ }
+ 
++static fmode_t map_get_sys_perms(struct bpf_map *map, struct fd f)
++{
++	fmode_t mode = f.file->f_mode;
++
++	if (READ_ONCE(map->frozen))
++		mode &= ~FMODE_CAN_WRITE;
++	return mode;
++}
++
+ #ifdef CONFIG_PROC_FS
+ static void bpf_map_show_fdinfo(struct seq_file *m, struct file *filp)
+ {
+@@ -682,7 +691,7 @@ static int map_lookup_elem(union bpf_attr *attr)
+ 	if (IS_ERR(map))
+ 		return PTR_ERR(map);
+ 
+-	if (!(f.file->f_mode & FMODE_CAN_READ)) {
++	if (!(map_get_sys_perms(map, f) & FMODE_CAN_READ)) {
+ 		err = -EPERM;
+ 		goto err_put;
+ 	}
+@@ -802,7 +811,7 @@ static int map_update_elem(union bpf_attr *attr)
+ 	if (IS_ERR(map))
+ 		return PTR_ERR(map);
+ 
+-	if (!(f.file->f_mode & FMODE_CAN_WRITE)) {
++	if (!(map_get_sys_perms(map, f) & FMODE_CAN_WRITE)) {
+ 		err = -EPERM;
+ 		goto err_put;
+ 	}
+@@ -908,7 +917,7 @@ static int map_delete_elem(union bpf_attr *attr)
+ 	if (IS_ERR(map))
+ 		return PTR_ERR(map);
+ 
+-	if (!(f.file->f_mode & FMODE_CAN_WRITE)) {
++	if (!(map_get_sys_perms(map, f) & FMODE_CAN_WRITE)) {
+ 		err = -EPERM;
+ 		goto err_put;
+ 	}
+@@ -963,7 +972,7 @@ static int map_get_next_key(union bpf_attr *attr)
+ 	if (IS_ERR(map))
+ 		return PTR_ERR(map);
+ 
+-	if (!(f.file->f_mode & FMODE_CAN_READ)) {
++	if (!(map_get_sys_perms(map, f) & FMODE_CAN_READ)) {
+ 		err = -EPERM;
+ 		goto err_put;
+ 	}
+@@ -1011,6 +1020,36 @@ static int map_get_next_key(union bpf_attr *attr)
+ 	return err;
+ }
+ 
++#define BPF_MAP_FREEZE_LAST_FIELD map_fd
++
++static int map_freeze(const union bpf_attr *attr)
++{
++	int err = 0, ufd = attr->map_fd;
++	struct bpf_map *map;
++	struct fd f;
++
++	if (CHECK_ATTR(BPF_MAP_FREEZE))
++		return -EINVAL;
++
++	f = fdget(ufd);
++	map = __bpf_map_get(f);
++	if (IS_ERR(map))
++		return PTR_ERR(map);
++	if (READ_ONCE(map->frozen)) {
++		err = -EBUSY;
++		goto err_put;
++	}
++	if (!capable(CAP_SYS_ADMIN)) {
++		err = -EPERM;
++		goto err_put;
++	}
++
++	WRITE_ONCE(map->frozen, true);
++err_put:
++	fdput(f);
++	return err;
++}
++
+ static const struct bpf_prog_ops * const bpf_prog_types[] = {
+ #define BPF_PROG_TYPE(_id, _name) \
+ 	[_id] = & _name ## _prog_ops,
+@@ -2411,6 +2450,9 @@ SYSCALL_DEFINE3(bpf, int, cmd, union bpf_attr __user *, uattr, unsigned int, siz
+ 	case BPF_MAP_GET_NEXT_KEY:
+ 		err = map_get_next_key(&attr);
+ 		break;
++	case BPF_MAP_FREEZE:
++		err = map_freeze(&attr);
++		break;
+ 	case BPF_PROG_LOAD:
+ 		err = bpf_prog_load(&attr, uattr);
+ 		break;

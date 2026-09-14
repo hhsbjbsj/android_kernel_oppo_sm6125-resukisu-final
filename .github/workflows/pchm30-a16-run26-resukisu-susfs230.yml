@@ -8,7 +8,7 @@ name: PCHM30 A16 Xiaomi BPF MAP_FREEZE EXP1
 on:
   workflow_dispatch:
   push:
-    branches: [pchm30-a16-xiaomi-bpf-map-freeze-exp1]
+    branches: [pchm30-a16-xiaomi-bpf-map-freeze-exp1, pchm30-a16-xiaomi-bpf-combo-bootfix1]
     paths:
       - '.github/workflows/pchm30-a16-run26-resukisu-susfs230.yml'
       - '.github/scripts/run16-orchestrate.sh'

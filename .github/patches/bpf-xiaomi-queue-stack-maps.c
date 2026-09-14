@@ -2,6 +2,9 @@
 /*
  * Isolated 4.14 backport of BPF queue/stack maps.
  * Adapted from Linux 4.20 without replacing kernel/bpf/.
+ *
+ * stack_map_ops is already used by BPF_MAP_TYPE_STACK_TRACE, so the
+ * LIFO map type is exported as queue_stack_map_ops.
  */
 #include <linux/bpf.h>
 #include <linux/slab.h>
@@ -210,7 +213,7 @@ static void *queue_stack_map_lookup_elem(struct bpf_map *map, void *key)
 static int queue_stack_map_update_elem(struct bpf_map *map, void *key,
 				       void *value, u64 flags)
 {
-	return -EINVAL;
+	return queue_stack_map_push_elem(map, value, flags);
 }
 
 static int queue_stack_map_delete_elem(struct bpf_map *map, void *key)
@@ -236,7 +239,7 @@ const struct bpf_map_ops queue_map_ops = {
 	.map_get_next_key = queue_stack_map_get_next_key,
 };
 
-const struct bpf_map_ops stack_map_ops = {
+const struct bpf_map_ops queue_stack_map_ops = {
 	.map_alloc = queue_stack_map_alloc,
 	.map_free = queue_stack_map_free,
 	.map_lookup_elem = queue_stack_map_lookup_elem,

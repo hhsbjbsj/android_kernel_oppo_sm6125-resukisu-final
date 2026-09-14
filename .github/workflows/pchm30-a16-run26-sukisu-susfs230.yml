@@ -1,16 +1,27 @@
-name: PCHM30 A16 Run26 SukiSU SUSFS 2.3.0
-# SukiSU line from Run25/Run24. Keep in-tree 4.14 susfs.c + 4.14 VFS ABI. KPM stays on.
-# ReSukiSU: main HEAD. SukiSU: builtin HEAD (main has no in-tree SUSFS).
+name: PCHM30 A16 SukiSU Xiaomi BPF Combo
+# SukiSU line from successful run 34754068331 (pchm30-a16-run26-susfs230-split @ c230409).
+# Keep in-tree 4.14 susfs.c + 4.14 VFS ABI. KPM stays on.
+# Isolated Xiaomi BPF combo on the same branch: MAP_FREEZE=22, LOOKUP_AND_DELETE=21,
+# queue/stack maps, BTF_GET_NEXT_ID=23, JMP32, bounded loops. No full kernel/bpf overwrite.
 # Do NOT copy SM8250/GKI getname_flags+filename_lookup; that hangs first splash on 4.14.
 
 on:
   workflow_dispatch:
   push:
-    branches: [pchm30-a16-run26-susfs230-split]
+    branches: [pchm30-a16-sukisu-xiaomi-bpf-combo]
     paths:
       - '.github/workflows/pchm30-a16-run26-sukisu-susfs230.yml'
       - '.github/workflows/pchm30-a16-run24-selinux-hide.yml'
       - '.github/workflows/pchm30-a16-run19-kpm-exp1.yml'
+      - '.github/scripts/run16-orchestrate.sh'
+      - '.github/scripts/check-bpf-v414236-spectre.py'
+      - '.github/patches/bpf-v414236-spectre-clean.patch'
+      - '.github/patches/bpf-v414236-spectre-clean.series'
+      - '.github/scripts/check-bpf-xiaomi-map-freeze.py'
+      - '.github/patches/bpf-xiaomi-map-freeze-exp1.patch'
+      - '.github/patches/bpf-xiaomi-queue-stack-maps.c'
+      - '.github/scripts/apply-xiaomi-bpf-combo.py'
+      - '.github/scripts/check-bpf-xiaomi-combo.py'
       - '.github/scripts/run18-sukisu-swap.sh'
       - '.github/scripts/run19-kpm-enable.sh'
       - '.github/scripts/run24-selinux-hide-compat.sh'
@@ -190,6 +201,10 @@ jobs:
           ! grep -Fq 'filename_lookup(dfd, fname' fs/stat.c
           grep -q '^CONFIG_KPM=y$' "$OUT_DIR/.config"
           python3 "$GITHUB_WORKSPACE/run-run24-step.py" 'Verify KPM runtime fix reached generated source'
+          test -s "$GITHUB_WORKSPACE/run16-vmlinux-nm-all.txt"
+          grep -q ' queue_map_ops$' "$GITHUB_WORKSPACE/run16-vmlinux-nm-all.txt"
+          grep -q ' queue_stack_map_ops$' "$GITHUB_WORKSPACE/run16-vmlinux-nm-all.txt"
+          echo '[PASS] SukiSU image contains isolated Xiaomi queue/stack map_ops'
 
       - name: Apply Run17 BTF Kprobe fix, verify, patch and package
         shell: bash

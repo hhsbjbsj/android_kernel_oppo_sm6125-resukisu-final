@@ -44,7 +44,7 @@ require("queue_stack_maps.o" in makefile, "Makefile missing queue_stack_maps.o")
 require("const struct bpf_map_ops queue_map_ops" in qs, "queue_map_ops missing")
 require("const struct bpf_map_ops queue_stack_map_ops" in qs,
         "queue_stack_map_ops missing")
-require("stack_map_ops =" not in qs,
+require("const struct bpf_map_ops stack_map_ops" not in qs,
         "do not reuse STACK_TRACE symbol stack_map_ops")
 
 require("static int map_lookup_and_delete_elem" in syscall,

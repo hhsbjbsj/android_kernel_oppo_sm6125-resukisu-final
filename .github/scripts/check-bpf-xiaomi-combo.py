@@ -60,15 +60,14 @@ require(re.search(r"case BPF_MAP_FREEZE:\s*\n\s*err = map_freeze", syscall),
 
 require("class == BPF_JMP || class == BPF_JMP32" in verifier,
         "verifier does not accept JMP32")
-require("bounded-loop back-edge" in verifier,
-        "verifier missing bounded-loop marker")
-require(
-    'bounded-loop back-edge from insn %d to %d\\n", t, w);' in verifier,
-    "bounded-loop verbose() string must stay on one line with C \\n escape",
-)
-require("return -EINVAL" not in verifier.split("bounded-loop back-edge")[1][:180],
-        "bounded-loop path still rejects back-edges")
-
+require("bounded-loop back-edge" not in verifier,
+        "unsafe pseudo bounded-loop acceptance must not be present")
+require("back-edge from insn %d to %d\\n" in verifier,
+        "verifier must report backward CFG edges")
+back_edge_tail = verifier.split("back-edge from insn %d to %d\\n", 1)[1][:240]
+require("return -EINVAL;" in back_edge_tail,
+        "backward CFG edges must stay rejected until the complete upstream "
+        "bounded-loop verifier state machine is backported")
 require("[BPF_JMP32 | BPF_JEQ | BPF_X]" in core, "interpreter missing JMP32 jumptable")
 require("JMP32_JEQ_X:" in core and "JMP32_JSET_K:" in core,
         "interpreter missing JMP32 labels")

@@ -1,5 +1,5 @@
 diff --git a/include/linux/bpf_verifier.h b/include/linux/bpf_verifier.h
-index 0deadab8f..e1894acfb 100644
+index 0deadab8f9ed573ba82f5ca67e7295548674c350..e1894acfb7414a481c4df961ed7942850f5866bf 100644
 --- a/include/linux/bpf_verifier.h
 +++ b/include/linux/bpf_verifier.h
 @@ -168,10 +168,11 @@ struct bpf_verifier_state_list {
@@ -17,7 +17,7 @@ index 0deadab8f..e1894acfb 100644
  					 BPF_ALU_SANITIZE_DST)
  
 diff --git a/kernel/bpf/verifier.c b/kernel/bpf/verifier.c
-index 440c7bfcd..b44dba987 100644
+index 440c7bfcd8243adace9b970be92d6a5d0d248c21..bf38e76d9c129eab1f6547f08e62b84199e43663 100644
 --- a/kernel/bpf/verifier.c
 +++ b/kernel/bpf/verifier.c
 @@ -3184,32 +3184,43 @@ static struct bpf_insn_aux_data *cur_aux(struct bpf_verifier_env *env)
@@ -182,7 +182,7 @@ index 440c7bfcd..b44dba987 100644
  	/* Simulate and find potential out-of-bounds access under
  	 * speculative execution from truncation as a result of
  	 * masking when off was not within expected range. If off
-@@ -3295,7 +3353,81 @@ do_sim:
+@@ -3295,7 +3353,81 @@ static int sanitize_ptr_alu(struct bpf_verifier_env *env,
  	ret = push_stack(env, env->insn_idx + 1, env->insn_idx, true);
  	if (!ptr_is_dst_reg && ret)
  		*dst_reg = tmp;
@@ -288,7 +288,7 @@ index 440c7bfcd..b44dba987 100644
  		return -EACCES;
  	}
  
-@@ -3356,15 +3488,15 @@ static int adjust_ptr_min_max_vals(struct bpf_verifier_env *env,
+@@ -3356,16 +3488,9 @@ static int adjust_ptr_min_max_vals(struct bpf_verifier_env *env,
  			dst, reg_type_str[ptr_reg->type]);
  		return -EACCES;
  	case PTR_TO_MAP_VALUE:
@@ -301,16 +301,11 @@ index 440c7bfcd..b44dba987 100644
  	default:
  		break;
  	}
-+	if (!env->allow_ptr_leaks && !known &&
-+	    (smin_val < 0) != (smax_val < 0)) {
-+		verbose(env, "R%d has unknown scalar with mixed signed bounds, pointer arithmetic with it prohibited for !root\n",
-+			off_reg == dst_reg ? dst : src);
-+		return -EACCES;
-+	}
- 
+-
  	/* In case of 'scalar += pointer', dst_reg inherits pointer type and id.
  	 * The id may be overwritten later if we create a new variable offset.
-@@ -3376,13 +3508,15 @@ static int adjust_ptr_min_max_vals(struct bpf_verifier_env *env,
+ 	 */
+@@ -3376,13 +3501,15 @@ static int adjust_ptr_min_max_vals(struct bpf_verifier_env *env,
  	    !check_reg_sane_offset(env, ptr_reg, ptr_reg->type))
  		return -EINVAL;
  
@@ -331,7 +326,7 @@ index 440c7bfcd..b44dba987 100644
  		/* We can take a fixed offset as long as it doesn't overflow
  		 * the s32 'off' field
  		 */
-@@ -3433,16 +3567,10 @@ static int adjust_ptr_min_max_vals(struct bpf_verifier_env *env,
+@@ -3433,16 +3560,10 @@ static int adjust_ptr_min_max_vals(struct bpf_verifier_env *env,
  		}
  		break;
  	case BPF_SUB:
@@ -350,7 +345,7 @@ index 440c7bfcd..b44dba987 100644
  			return -EACCES;
  		}
  		/* We don't allow subtraction from FP, because (according to
-@@ -3450,9 +3578,8 @@ static int adjust_ptr_min_max_vals(struct bpf_verifier_env *env,
+@@ -3450,9 +3571,8 @@ static int adjust_ptr_min_max_vals(struct bpf_verifier_env *env,
  		 * be able to deal with it.
  		 */
  		if (ptr_reg->type == PTR_TO_STACK) {
@@ -362,7 +357,7 @@ index 440c7bfcd..b44dba987 100644
  			return -EACCES;
  		}
  		if (known && (ptr_reg->off - smin_val ==
-@@ -3502,26 +3629,14 @@ static int adjust_ptr_min_max_vals(struct bpf_verifier_env *env,
+@@ -3502,26 +3622,14 @@ static int adjust_ptr_min_max_vals(struct bpf_verifier_env *env,
  	case BPF_AND:
  	case BPF_OR:
  	case BPF_XOR:
@@ -394,7 +389,7 @@ index 440c7bfcd..b44dba987 100644
  		return -EACCES;
  	}
  
-@@ -3532,22 +3647,13 @@ static int adjust_ptr_min_max_vals(struct bpf_verifier_env *env,
+@@ -3532,22 +3640,13 @@ static int adjust_ptr_min_max_vals(struct bpf_verifier_env *env,
  	__reg_deduce_bounds(dst_reg);
  	__reg_bound_offset(dst_reg);
  
@@ -424,7 +419,7 @@ index 440c7bfcd..b44dba987 100644
  	}
  
  	return 0;
-@@ -3568,7 +3674,6 @@ static int adjust_scalar_min_max_vals(struct bpf_verifier_env *env,
+@@ -3568,7 +3667,6 @@ static int adjust_scalar_min_max_vals(struct bpf_verifier_env *env,
  	s64 smin_val, smax_val;
  	u64 umin_val, umax_val;
  	u64 insn_bitness = (BPF_CLASS(insn->code) == BPF_ALU64) ? 64 : 32;
@@ -432,7 +427,7 @@ index 440c7bfcd..b44dba987 100644
  	int ret;
  
  	if (insn_bitness == 32) {
-@@ -3602,13 +3707,14 @@ static int adjust_scalar_min_max_vals(struct bpf_verifier_env *env,
+@@ -3602,13 +3700,14 @@ static int adjust_scalar_min_max_vals(struct bpf_verifier_env *env,
  		return 0;
  	}
  
@@ -452,7 +447,7 @@ index 440c7bfcd..b44dba987 100644
  		if (signed_add_overflows(dst_reg->smin_value, smin_val) ||
  		    signed_add_overflows(dst_reg->smax_value, smax_val)) {
  			dst_reg->smin_value = S64_MIN;
-@@ -3628,11 +3734,6 @@ static int adjust_scalar_min_max_vals(struct bpf_verifier_env *env,
+@@ -3628,11 +3727,6 @@ static int adjust_scalar_min_max_vals(struct bpf_verifier_env *env,
  		dst_reg->var_off = tnum_add(dst_reg->var_off, src_reg.var_off);
  		break;
  	case BPF_SUB:
@@ -464,7 +459,7 @@ index 440c7bfcd..b44dba987 100644
  		if (signed_sub_overflows(dst_reg->smin_value, smax_val) ||
  		    signed_sub_overflows(dst_reg->smax_value, smin_val)) {
  			/* Overflow possible, we know nothing */
-@@ -3827,7 +3928,6 @@ static int adjust_reg_min_max_vals(struct bpf_verifier_env *env,
+@@ -3827,7 +3921,6 @@ static int adjust_reg_min_max_vals(struct bpf_verifier_env *env,
  	struct bpf_reg_state *regs = state->regs, *dst_reg, *src_reg;
  	struct bpf_reg_state *ptr_reg = NULL, off_reg = {0};
  	u8 opcode = BPF_OP(insn->code);
@@ -472,7 +467,7 @@ index 440c7bfcd..b44dba987 100644
  
  	dst_reg = &regs[insn->dst_reg];
  	src_reg = NULL;
-@@ -3837,44 +3937,29 @@ static int adjust_reg_min_max_vals(struct bpf_verifier_env *env,
+@@ -3837,44 +3930,29 @@ static int adjust_reg_min_max_vals(struct bpf_verifier_env *env,
  		src_reg = &regs[insn->src_reg];
  		if (src_reg->type != SCALAR_VALUE) {
  			if (dst_reg->type != SCALAR_VALUE) {
@@ -530,7 +525,7 @@ index 440c7bfcd..b44dba987 100644
  		}
  	} else {
  		/* Pretend the src is a reg with a known value, since we only
-@@ -3883,17 +3968,9 @@ static int adjust_reg_min_max_vals(struct bpf_verifier_env *env,
+@@ -3883,17 +3961,9 @@ static int adjust_reg_min_max_vals(struct bpf_verifier_env *env,
  		off_reg.type = SCALAR_VALUE;
  		__mark_reg_known(&off_reg, insn->imm);
  		src_reg = &off_reg;
@@ -551,7 +546,7 @@ index 440c7bfcd..b44dba987 100644
  	}
  
  	/* Got here implies adding two SCALAR_VALUEs */
-@@ -6804,7 +6881,7 @@ static int fixup_bpf_calls(struct bpf_verifier_env *env)
+@@ -6804,7 +6874,7 @@ static int fixup_bpf_calls(struct bpf_verifier_env *env)
  			const u8 code_sub = BPF_ALU64 | BPF_SUB | BPF_X;
  			struct bpf_insn insn_buf[16];
  			struct bpf_insn *patch = &insn_buf[0];
@@ -560,7 +555,7 @@ index 440c7bfcd..b44dba987 100644
  			u32 off_reg;
  
  			aux = &env->insn_aux_data[i + delta];
-@@ -6815,28 +6892,29 @@ static int fixup_bpf_calls(struct bpf_verifier_env *env)
+@@ -6815,28 +6885,29 @@ static int fixup_bpf_calls(struct bpf_verifier_env *env)
  			isneg = aux->alu_state & BPF_ALU_NEG_VALUE;
  			issrc = (aux->alu_state & BPF_ALU_SANITIZE) ==
  				BPF_ALU_SANITIZE_SRC;
@@ -605,7 +600,7 @@ index 440c7bfcd..b44dba987 100644
  			cnt = patch - insn_buf;
  
 diff --git a/tools/testing/selftests/bpf/test_verifier.c b/tools/testing/selftests/bpf/test_verifier.c
-index e3eee2db6..9323adf02 100644
+index e3eee2db6d75ed9088c12cb15cdb6701df47c456..9323adf02a1274a767ab8fd2d977320b3e372ff9 100644
 --- a/tools/testing/selftests/bpf/test_verifier.c
 +++ b/tools/testing/selftests/bpf/test_verifier.c
 @@ -462,9 +462,7 @@ static struct bpf_test tests[] = {
@@ -917,4 +912,3 @@ index e3eee2db6..9323adf02 100644
  	},
  	{
  		"XDP pkt read, pkt_end <= pkt_data', bad access 2",
-

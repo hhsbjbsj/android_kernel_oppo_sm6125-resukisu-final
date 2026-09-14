@@ -87,7 +87,7 @@ git show "$GITHUB_SHA:.github/patches/bpf-v414236-spectre-clean.patch" > \
   "$GITHUB_WORKSPACE/bpf-v414236-spectre-clean.patch"
 git show "$GITHUB_SHA:.github/scripts/check-bpf-v414236-spectre.py" > \
   "$GITHUB_WORKSPACE/check-bpf-v414236-spectre.py"
-echo '7d3a1969761ca092badf5f13a27640b07a5ce81cc5b21cb76112e6a832623484  bpf-v414236-spectre-clean.patch' | \
+echo 'd9c82e5c8116c5314fffe67e1b65497f350b787fa0b6906317d5a3fd6fcb61ea  bpf-v414236-spectre-clean.patch' | \
   (cd "$GITHUB_WORKSPACE" && sha256sum -c -)
 git apply --check "$GITHUB_WORKSPACE/bpf-v414236-spectre-clean.patch"
 git apply "$GITHUB_WORKSPACE/bpf-v414236-spectre-clean.patch"

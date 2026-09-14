@@ -48,6 +48,10 @@ for token in ("off_reg", "commit_window", "info->mask_to_left"):
 
 adjust = function_body(verifier, "adjust_ptr_min_max_vals")
 require(
+    "off_reg == dst_reg ? dst : src" not in adjust,
+    "legacy mixed-bounds check uses removed src variable",
+)
+require(
     re.search(r"sanitize_ptr_alu\s*\([^;]*\bfalse\s*\)", adjust, re.S) is not None,
     "missing pre-arithmetic sanitizer observation",
 )
@@ -72,4 +76,3 @@ for marker in ("<-- 添加此行", "新增下面这一行"):
     require(marker not in verifier, f"temporary LF edit marker remains: {marker}")
 
 print("[PASS] Linux 4.14.236 BPF speculative-pointer hardening invariants")
-

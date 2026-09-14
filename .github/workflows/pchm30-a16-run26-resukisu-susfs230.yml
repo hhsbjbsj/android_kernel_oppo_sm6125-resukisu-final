@@ -1,19 +1,22 @@
-name: PCHM30 A16 Run26 + Clean BPF 4.14.236
+name: PCHM30 A16 Xiaomi BPF MAP_FREEZE EXP1
 # ReSukiSU line from Run17. Keep in-tree 4.14 susfs.c + 4.14 VFS ABI. KPM stays off.
 # ReSukiSU: resolve refs/heads/main at compile time (do not pin SHA).
 # BPF verifier hardening: pinned Linux 4.14.236 stable series, excluding the
 # unrelated and broken hashtab changes from LF-Repo 013514ce.
+# Xiaomi EXP1: isolated BPF_MAP_FREEZE only, preserving upstream UAPI id 22.
 
 on:
   workflow_dispatch:
   push:
-    branches: [pchm30-a16-run26-bpf414236-clean]
+    branches: [pchm30-a16-xiaomi-bpf-map-freeze-exp1]
     paths:
       - '.github/workflows/pchm30-a16-run26-resukisu-susfs230.yml'
       - '.github/scripts/run16-orchestrate.sh'
       - '.github/scripts/check-bpf-v414236-spectre.py'
       - '.github/patches/bpf-v414236-spectre-clean.patch'
       - '.github/patches/bpf-v414236-spectre-clean.series'
+      - '.github/scripts/check-bpf-xiaomi-map-freeze.py'
+      - '.github/patches/bpf-xiaomi-map-freeze-exp1.patch'
       - '.github/scripts/run25-susfs230-adapt.sh'
       - '.github/scripts/package-pchm30-run17-ak3.sh'
       - '.github/scripts/run26-disable-kpm.sh'

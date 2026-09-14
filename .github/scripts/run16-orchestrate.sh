@@ -100,6 +100,22 @@ git add \
 git commit -m 'bpf: backport clean Linux 4.14.236 speculative-pointer hardening'
 echo '[PASS] pinned clean 4.14.236 BPF hardening applied; LF hashtab changes excluded'
 
+echo '===== APPLY XIAOMI-DERIVED BPF_MAP_FREEZE EXP1 ====='
+git show "$GITHUB_SHA:.github/patches/bpf-xiaomi-map-freeze-exp1.patch" > \
+  "$GITHUB_WORKSPACE/bpf-xiaomi-map-freeze-exp1.patch"
+git show "$GITHUB_SHA:.github/scripts/check-bpf-xiaomi-map-freeze.py" > \
+  "$GITHUB_WORKSPACE/check-bpf-xiaomi-map-freeze.py"
+echo 'e34332336e9c3057835518c94681a4b0e91b22e24eb33f0c70622bf6796f8b71  bpf-xiaomi-map-freeze-exp1.patch' | \
+  (cd "$GITHUB_WORKSPACE" && sha256sum -c -)
+git apply --check "$GITHUB_WORKSPACE/bpf-xiaomi-map-freeze-exp1.patch"
+git apply "$GITHUB_WORKSPACE/bpf-xiaomi-map-freeze-exp1.patch"
+python3 "$GITHUB_WORKSPACE/check-bpf-v414236-spectre.py" .
+python3 "$GITHUB_WORKSPACE/check-bpf-xiaomi-map-freeze.py" .
+git diff --check
+git add include/uapi/linux/bpf.h include/linux/bpf.h kernel/bpf/syscall.c
+git commit -m 'bpf: add Xiaomi-derived BPF_MAP_FREEZE experiment'
+echo '[PASS] isolated Xiaomi BPF_MAP_FREEZE EXP1 applied with upstream command number 22'
+
 run_step 'Layer verified ReSukiSU SUSFS hooks'
 run_step 'Patch netbpfload uname compatibility'
 run_step 'Prepare proven A16 root config'

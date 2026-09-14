@@ -80,6 +80,26 @@ run_step 'Prepare successful EXP1 step runner'
 run_step 'Prepare proven root step runner'
 run_step 'Pin rootless baseline and prepare A16 step runner'
 run_step 'Reproduce exact successful A16 source state'
+
+echo '===== APPLY PINNED LINUX 4.14.236 BPF SPECULATIVE-POINTER HARDENING ====='
+git fetch --no-tags --depth=1 origin "$GITHUB_SHA"
+git show "$GITHUB_SHA:.github/patches/bpf-v414236-spectre-clean.patch" > \
+  "$GITHUB_WORKSPACE/bpf-v414236-spectre-clean.patch"
+git show "$GITHUB_SHA:.github/scripts/check-bpf-v414236-spectre.py" > \
+  "$GITHUB_WORKSPACE/check-bpf-v414236-spectre.py"
+echo '7d3a1969761ca092badf5f13a27640b07a5ce81cc5b21cb76112e6a832623484  bpf-v414236-spectre-clean.patch' | \
+  (cd "$GITHUB_WORKSPACE" && sha256sum -c -)
+git apply --check "$GITHUB_WORKSPACE/bpf-v414236-spectre-clean.patch"
+git apply "$GITHUB_WORKSPACE/bpf-v414236-spectre-clean.patch"
+python3 "$GITHUB_WORKSPACE/check-bpf-v414236-spectre.py" .
+git diff --check
+git add \
+  include/linux/bpf_verifier.h \
+  kernel/bpf/verifier.c \
+  tools/testing/selftests/bpf/test_verifier.c
+git commit -m 'bpf: backport clean Linux 4.14.236 speculative-pointer hardening'
+echo '[PASS] pinned clean 4.14.236 BPF hardening applied; LF hashtab changes excluded'
+
 run_step 'Layer verified ReSukiSU SUSFS hooks'
 run_step 'Patch netbpfload uname compatibility'
 run_step 'Prepare proven A16 root config'

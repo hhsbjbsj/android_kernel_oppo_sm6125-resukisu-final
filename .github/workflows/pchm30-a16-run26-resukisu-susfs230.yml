@@ -1,13 +1,19 @@
-name: PCHM30 A16 Run26 ReSukiSU SUSFS 2.3.0
+name: PCHM30 A16 Run26 + Clean BPF 4.14.236
 # ReSukiSU line from Run17. Keep in-tree 4.14 susfs.c + 4.14 VFS ABI. KPM stays off.
 # ReSukiSU: resolve refs/heads/main at compile time (do not pin SHA).
+# BPF verifier hardening: pinned Linux 4.14.236 stable series, excluding the
+# unrelated and broken hashtab changes from LF-Repo 013514ce.
 
 on:
   workflow_dispatch:
   push:
-    branches: [pchm30-a16-run26-susfs230-split]
+    branches: [pchm30-a16-run26-bpf414236-clean]
     paths:
       - '.github/workflows/pchm30-a16-run26-resukisu-susfs230.yml'
+      - '.github/scripts/run16-orchestrate.sh'
+      - '.github/scripts/check-bpf-v414236-spectre.py'
+      - '.github/patches/bpf-v414236-spectre-clean.patch'
+      - '.github/patches/bpf-v414236-spectre-clean.series'
       - '.github/scripts/run25-susfs230-adapt.sh'
       - '.github/scripts/package-pchm30-run17-ak3.sh'
       - '.github/scripts/run26-disable-kpm.sh'
@@ -48,7 +54,7 @@ env:
 
 jobs:
   build:
-    name: Run26 ReSukiSU + SUSFS 2.3.0, KPM off
+    name: Run26 ReSukiSU + SUSFS 2.3.0 + clean BPF hardening
     runs-on: ubuntu-22.04
     timeout-minutes: 360
     steps:

@@ -24,7 +24,7 @@ require(re.search(r"struct bpf_map\s*\{.*?\bbool frozen;", header, re.S) is not 
 require("static fmode_t map_get_sys_perms" in syscall,
         "syscall-side map permissions are not centralized")
 for function in ("map_update_elem", "map_delete_elem"):
-    match = re.search(rf"static int {function}\b.*?\n\}", syscall, re.S)
+    match = re.search(rf"static int {function}\b.*?\n\}}", syscall, re.S)
     require(match is not None and "map_get_sys_perms(map, f)" in match.group(0),
             f"{function} does not enforce frozen map permissions")
 require("static int map_freeze" in syscall, "missing map_freeze syscall handler")

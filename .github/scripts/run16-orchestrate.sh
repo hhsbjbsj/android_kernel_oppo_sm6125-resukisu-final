@@ -80,6 +80,69 @@ run_step 'Prepare successful EXP1 step runner'
 run_step 'Prepare proven root step runner'
 run_step 'Pin rootless baseline and prepare A16 step runner'
 run_step 'Reproduce exact successful A16 source state'
+
+echo '===== APPLY PINNED LINUX 4.14.236 BPF SPECULATIVE-POINTER HARDENING ====='
+git fetch --no-tags --depth=1 origin "$GITHUB_SHA"
+git show "$GITHUB_SHA:.github/scripts/check-bpf-v414236-spectre.py" > \
+  "$GITHUB_WORKSPACE/check-bpf-v414236-spectre.py"
+# Same pinned blob as successful ReSukiSU EXP1 (sha256 checked below).
+git fetch --no-tags --depth=1 origin pchm30-a16-xiaomi-bpf-map-freeze-exp1
+git show "FETCH_HEAD:.github/patches/bpf-v414236-spectre-clean.patch" > \
+  "$GITHUB_WORKSPACE/bpf-v414236-spectre-clean.patch"
+echo 'd9c82e5c8116c5314fffe67e1b65497f350b787fa0b6906317d5a3fd6fcb61ea  bpf-v414236-spectre-clean.patch' | \
+  (cd "$GITHUB_WORKSPACE" && sha256sum -c -)
+git apply --check "$GITHUB_WORKSPACE/bpf-v414236-spectre-clean.patch"
+git apply "$GITHUB_WORKSPACE/bpf-v414236-spectre-clean.patch"
+python3 "$GITHUB_WORKSPACE/check-bpf-v414236-spectre.py" .
+git diff --check
+git add \
+  include/linux/bpf_verifier.h \
+  kernel/bpf/verifier.c \
+  tools/testing/selftests/bpf/test_verifier.c
+git commit -m 'bpf: backport clean Linux 4.14.236 speculative-pointer hardening'
+echo '[PASS] pinned clean 4.14.236 BPF hardening applied; LF hashtab changes excluded'
+
+echo '===== APPLY XIAOMI-DERIVED BPF_MAP_FREEZE EXP1 ====='
+git show "$GITHUB_SHA:.github/patches/bpf-xiaomi-map-freeze-exp1.patch" > \
+  "$GITHUB_WORKSPACE/bpf-xiaomi-map-freeze-exp1.patch"
+git show "$GITHUB_SHA:.github/scripts/check-bpf-xiaomi-map-freeze.py" > \
+  "$GITHUB_WORKSPACE/check-bpf-xiaomi-map-freeze.py"
+echo 'e34332336e9c3057835518c94681a4b0e91b22e24eb33f0c70622bf6796f8b71  bpf-xiaomi-map-freeze-exp1.patch' | \
+  (cd "$GITHUB_WORKSPACE" && sha256sum -c -)
+git apply --check "$GITHUB_WORKSPACE/bpf-xiaomi-map-freeze-exp1.patch"
+git apply "$GITHUB_WORKSPACE/bpf-xiaomi-map-freeze-exp1.patch"
+python3 "$GITHUB_WORKSPACE/check-bpf-v414236-spectre.py" .
+python3 "$GITHUB_WORKSPACE/check-bpf-xiaomi-map-freeze.py" .
+git diff --check
+git add include/uapi/linux/bpf.h include/linux/bpf.h kernel/bpf/syscall.c
+git commit -m 'bpf: add Xiaomi-derived BPF_MAP_FREEZE experiment'
+echo '[PASS] isolated Xiaomi BPF_MAP_FREEZE EXP1 applied with upstream command number 22'
+
+echo '===== APPLY XIAOMI BPF COMBO ON SAME BRANCH ====='
+git show "$GITHUB_SHA:.github/patches/bpf-xiaomi-queue-stack-maps.c" > \
+  "$GITHUB_WORKSPACE/bpf-xiaomi-queue-stack-maps.c"
+git show "$GITHUB_SHA:.github/scripts/apply-xiaomi-bpf-combo.py" > \
+  "$GITHUB_WORKSPACE/apply-xiaomi-bpf-combo.py"
+git show "$GITHUB_SHA:.github/scripts/check-bpf-xiaomi-combo.py" > \
+  "$GITHUB_WORKSPACE/check-bpf-xiaomi-combo.py"
+python3 "$GITHUB_WORKSPACE/apply-xiaomi-bpf-combo.py" . \
+  "$GITHUB_WORKSPACE/bpf-xiaomi-queue-stack-maps.c"
+python3 "$GITHUB_WORKSPACE/check-bpf-v414236-spectre.py" .
+python3 "$GITHUB_WORKSPACE/check-bpf-xiaomi-map-freeze.py" .
+python3 "$GITHUB_WORKSPACE/check-bpf-xiaomi-combo.py" .
+git diff --check
+git add \
+  include/uapi/linux/bpf.h \
+  include/linux/bpf.h \
+  include/linux/bpf_types.h \
+  kernel/bpf/Makefile \
+  kernel/bpf/queue_stack_maps.c \
+  kernel/bpf/syscall.c \
+  kernel/bpf/verifier.c \
+  kernel/bpf/core.c
+git commit -m 'bpf: add isolated Xiaomi combo on MAP_FREEZE EXP1'
+echo '[PASS] isolated Xiaomi BPF combo applied on the same EXP1 branch'
+
 run_step 'Layer verified ReSukiSU SUSFS hooks'
 run_step 'Patch netbpfload uname compatibility'
 run_step 'Prepare proven A16 root config'
@@ -154,6 +217,8 @@ grep -Fq 'PCHM30 A16 late-DLKM: AVS not ready, defer q6core probe' "$RUN16_STRIN
 grep -Fq 'A16-BPF compat uname:' "$RUN16_STRINGS_ALL"
 grep -q ' sock_map_ops$' "$RUN16_NM_ALL"
 grep -q ' sock_hash_ops$' "$RUN16_NM_ALL"
+grep -q ' queue_map_ops$' "$RUN16_NM_ALL"
+grep -q ' queue_stack_map_ops$' "$RUN16_NM_ALL"
 
 {
   echo '===== built-in object sizes ====='

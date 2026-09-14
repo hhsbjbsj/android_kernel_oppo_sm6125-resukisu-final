@@ -1,9 +1,9 @@
-name: PCHM30 A16 Xiaomi BPF MAP_FREEZE EXP1
+name: PCHM30 A16 Xiaomi BPF COMBO BOOTFIX1
 # ReSukiSU line from Run17. Keep in-tree 4.14 susfs.c + 4.14 VFS ABI. KPM stays off.
-# ReSukiSU: resolve refs/heads/main at compile time (do not pin SHA).
+# ReSukiSU: pinned to the exact revision used by Run 64 for reproducibility.
 # BPF verifier hardening: pinned Linux 4.14.236 stable series, excluding the
 # unrelated and broken hashtab changes from LF-Repo 013514ce.
-# Xiaomi EXP1: isolated BPF_MAP_FREEZE only, preserving upstream UAPI id 22.
+# Xiaomi combo bootfix: keep MAP_FREEZE/queue-stack/lookup-delete/JMP32; reject unsafe pseudo loops.
 
 on:
   workflow_dispatch:
@@ -44,7 +44,7 @@ env:
   A16_FIRST: c2c621b5448adc69e105b1519b93dd637a581da5
   A16_LAST: c74436291044381d4365d91afa0c8f4a574b22b4
   ROOT_SNAPSHOT: b667ba359bf7da11b43c5d6403788d21c19facd7
-  RESUKISU_COMMIT: 1e25a4c5c0e7eb71292f1fa4f48704e5490f1b82
+  RESUKISU_COMMIT: 833edb0e8e4bc11ac8e976edd7de42da6bdc5bd2
   ROOT_SUCCESS_BRANCH: pchm30-a16-resukisu-susfs220
   ROOT_SUCCESS_WORKFLOW: .github/workflows/pchm30-a16-resukisu-susfs220-build.yml
   EXP1_BRANCH: pchm30-a16-btf-sockmap-exp1
@@ -71,15 +71,6 @@ jobs:
           path: source/android/kernel/msm-4.14
           fetch-depth: 1
           submodules: false
-
-      - name: Resolve latest ReSukiSU main at build time
-        shell: bash
-        run: |
-          set -Eeuo pipefail
-          SHA=$(git ls-remote https://github.com/ReSukiSU/ReSukiSU.git refs/heads/main | awk '{print $1}')
-          test -n "$SHA"
-          echo "RESUKISU_COMMIT=$SHA" >> "$GITHUB_ENV"
-          echo "Resolved ReSukiSU main: $SHA"
 
       - name: Install BTF host tooling
         shell: bash

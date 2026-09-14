@@ -6,7 +6,7 @@ kernel/bpf/. Features:
   * BPF_MAP_LOOKUP_AND_DELETE_ELEM = 21 + queue/stack maps
   * BPF_BTF_GET_NEXT_ID = 23
   * BPF_JMP32
-  * bounded-loop CFG back-edge accept
+  * boot-safe legacy back-edge rejection until the full bounded-loop verifier lands
 """
 
 from pathlib import Path
@@ -279,44 +279,27 @@ if "class == BPF_JMP || class == BPF_JMP32" not in ver:
         "} else if (class == BPF_JMP || class == BPF_JMP32) {",
     )
 
-if "bounded-loop back-edge" not in ver:
-    pat = re.compile(
-        r"(\t\} else if \(\(insn_state\[w\] & 0xF0\) == DISCOVERED\) \{\n)"
-        r"(\t\tverbose\((?:env, )?\"back-edge from insn %d to %d\\n\", t, w\);\n)"
-        r"(\t\treturn -EINVAL;\n)"
-        r"(\t\})",
-        re.M,
+if "bounded-loop back-edge" in ver:
+    # Boot safety: the former shortcut only removed CFG rejection.  It did
+    # not backport the verifier state-parent/branch accounting required by
+    # upstream bounded loops, so repair already-overlaid trees as well.
+    ver = ver.replace(
+        "\t\t/* Isolated 4.14 bounded-loop accept: keep exploring. */\n",
+        "",
+        1,
     )
-    m = pat.search(ver)
-    if not m:
-        raise SystemExit("verifier back-edge block not found")
-    call = m.group(2)
-    # Build the C line with a real backslash-n escape. Do NOT feed this
-    # through re.sub() as a string replacement: re.sub interprets \n.
-    c_nl = chr(92) + "n"
-    if "verbose(env," in call:
-        verbose_line = (
-            "\t\tverbose(env, \"bounded-loop back-edge from insn %d to %d"
-            + c_nl
-            + '", t, w);\n'
-        )
-    else:
-        verbose_line = (
-            "\t\tverbose(\"bounded-loop back-edge from insn %d to %d"
-            + c_nl
-            + '", t, w);\n'
-        )
-    repl = (
-        m.group(1)
-        + "\t\t/* Isolated 4.14 bounded-loop accept: keep exploring. */\n"
-        + verbose_line
-        + "\t\tinsn_state[t] = DISCOVERED | e;\n"
-        + m.group(4)
+    ver = ver.replace(
+        "bounded-loop back-edge from insn %d to %d",
+        "back-edge from insn %d to %d",
+        1,
     )
-    ver = ver[: m.start()] + repl + ver[m.end() :]
-    marker = "bounded-loop back-edge from insn %d to %d" + c_nl
-    if marker not in ver or (marker + "\n") in ver:
-        raise SystemExit("bounded-loop verbose() string was split across lines")
+    ver = ver.replace(
+        "\t\tinsn_state[t] = DISCOVERED | e;\n",
+        "\t\treturn -EINVAL;\n",
+        1,
+    )
+    if "bounded-loop back-edge" in ver:
+        raise SystemExit("failed to remove unsafe bounded-loop shortcut")
 
 write(ver_path, ver)
 

@@ -116,6 +116,31 @@ git add include/uapi/linux/bpf.h include/linux/bpf.h kernel/bpf/syscall.c
 git commit -m 'bpf: add Xiaomi-derived BPF_MAP_FREEZE experiment'
 echo '[PASS] isolated Xiaomi BPF_MAP_FREEZE EXP1 applied with upstream command number 22'
 
+echo '===== APPLY XIAOMI BPF COMBO ON SAME BRANCH ====='
+git show "$GITHUB_SHA:.github/patches/bpf-xiaomi-queue-stack-maps.c" > \
+  "$GITHUB_WORKSPACE/bpf-xiaomi-queue-stack-maps.c"
+git show "$GITHUB_SHA:.github/scripts/apply-xiaomi-bpf-combo.py" > \
+  "$GITHUB_WORKSPACE/apply-xiaomi-bpf-combo.py"
+git show "$GITHUB_SHA:.github/scripts/check-bpf-xiaomi-combo.py" > \
+  "$GITHUB_WORKSPACE/check-bpf-xiaomi-combo.py"
+python3 "$GITHUB_WORKSPACE/apply-xiaomi-bpf-combo.py" . \
+  "$GITHUB_WORKSPACE/bpf-xiaomi-queue-stack-maps.c"
+python3 "$GITHUB_WORKSPACE/check-bpf-v414236-spectre.py" .
+python3 "$GITHUB_WORKSPACE/check-bpf-xiaomi-map-freeze.py" .
+python3 "$GITHUB_WORKSPACE/check-bpf-xiaomi-combo.py" .
+git diff --check
+git add \
+  include/uapi/linux/bpf.h \
+  include/linux/bpf.h \
+  include/linux/bpf_types.h \
+  kernel/bpf/Makefile \
+  kernel/bpf/queue_stack_maps.c \
+  kernel/bpf/syscall.c \
+  kernel/bpf/verifier.c \
+  kernel/bpf/core.c
+git commit -m 'bpf: add isolated Xiaomi combo on MAP_FREEZE EXP1'
+echo '[PASS] isolated Xiaomi BPF combo applied on the same EXP1 branch'
+
 run_step 'Layer verified ReSukiSU SUSFS hooks'
 run_step 'Patch netbpfload uname compatibility'
 run_step 'Prepare proven A16 root config'
@@ -190,6 +215,8 @@ grep -Fq 'PCHM30 A16 late-DLKM: AVS not ready, defer q6core probe' "$RUN16_STRIN
 grep -Fq 'A16-BPF compat uname:' "$RUN16_STRINGS_ALL"
 grep -q ' sock_map_ops$' "$RUN16_NM_ALL"
 grep -q ' sock_hash_ops$' "$RUN16_NM_ALL"
+grep -q ' queue_map_ops$' "$RUN16_NM_ALL"
+grep -q ' queue_stack_map_ops$' "$RUN16_NM_ALL"
 
 {
   echo '===== built-in object sizes ====='

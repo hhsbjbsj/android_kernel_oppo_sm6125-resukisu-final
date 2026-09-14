@@ -10,6 +10,7 @@ kernel/bpf/. Features:
 """
 
 from pathlib import Path
+import re
 import shutil
 import sys
 
@@ -79,6 +80,7 @@ elif "BPF_BTF_GET_NEXT_ID" not in uapi:
 if "BPF_MAP_TYPE_QUEUE" not in uapi:
     for last in (
         "\tBPF_MAP_TYPE_SOCKHASH,\n",
+        "\tBPF_MAP_TYPE_SOCKHASH = 18,\n",
         "\tBPF_MAP_TYPE_CPUMAP,\n",
         "\tBPF_MAP_TYPE_SOCKMAP,\n",
     ):
@@ -277,23 +279,30 @@ if "class == BPF_JMP || class == BPF_JMP32" not in ver:
         "} else if (class == BPF_JMP || class == BPF_JMP32) {",
     )
 
-old_back = (
-    "\t} else if ((insn_state[w] & 0xF0) == DISCOVERED) {\n"
-    "\t\tverbose(\"back-edge from insn %d to %d\\n\", t, w);\n"
-    "\t\treturn -EINVAL;\n"
-    "\t}"
-)
-new_back = (
-    "\t} else if ((insn_state[w] & 0xF0) == DISCOVERED) {\n"
-    "\t\t/* Isolated 4.14 bounded-loop accept: keep exploring. */\n"
-    "\t\tverbose(\"bounded-loop back-edge from insn %d to %d\\n\", t, w);\n"
-    "\t\tinsn_state[t] = DISCOVERED | e;\n"
-    "\t}"
-)
 if "bounded-loop back-edge" not in ver:
-    if old_back not in ver:
+    pat = re.compile(
+        r"(\t\} else if \(\(insn_state\[w\] & 0xF0\) == DISCOVERED\) \{\n)"
+        r"(\t\tverbose\((?:env, )?\"back-edge from insn %d to %d\\n\", t, w\);\n)"
+        r"(\t\treturn -EINVAL;\n)"
+        r"(\t\})",
+        re.M,
+    )
+    m = pat.search(ver)
+    if not m:
         raise SystemExit("verifier back-edge block not found")
-    ver = ver.replace(old_back, new_back, 1)
+    call = m.group(2)
+    if "verbose(env," in call:
+        verbose_line = '\t\tverbose(env, "bounded-loop back-edge from insn %d to %d\\n", t, w);\n'
+    else:
+        verbose_line = '\t\tverbose("bounded-loop back-edge from insn %d to %d\\n", t, w);\n'
+    repl = (
+        m.group(1)
+        + "\t\t/* Isolated 4.14 bounded-loop accept: keep exploring. */\n"
+        + verbose_line
+        + "\t\tinsn_state[t] = DISCOVERED | e;\n"
+        + m.group(4)
+    )
+    ver = pat.sub(repl, ver, count=1)
 
 write(ver_path, ver)
 

@@ -64,21 +64,34 @@ grep -Eq 'BTF_KIND_MAX.*BTF_KIND_DATASEC|BTF_KIND_MAX[^0-9]*15' include/uapi/lin
 grep -q 'struct btf_var {' include/uapi/linux/btf.h
 grep -q 'struct btf_var_secinfo {' include/uapi/linux/btf.h
 
-# Kernel-side delta is a different file. Try exact upstream context first and
-# then the index-aware 3-way fallback. Abort on any conflict; never keep a
-# partially merged verifier implementation.
-fetch_delta "$UPSTREAM_BTF_KERNEL" kernel/bpf/btf.c /tmp/btf-var-kernel.patch
+# Kernel-side delta is a different file. Xiaomi's BTF next-id backport
+# intentionally made btf_idr/btf_idr_lock visible outside btf.c, while the
+# older upstream VAR/DATASEC commit carries their `static` spelling only as
+# patch context. Normalize exactly those two context lines before applying the
+# semantic delta; keep the original apply/checkpoint and fail-closed 3-way path.
+fetch_delta "$UPSTREAM_BTF_KERNEL" kernel/bpf/btf.c /tmp/btf-var-kernel.upstream.patch
+git show "$GITHUB_SHA:.github/scripts/normalize-btf-var-datasec-patch.py" > \
+  "$GITHUB_WORKSPACE/normalize-btf-var-datasec-patch.py"
+python3 "$GITHUB_WORKSPACE/normalize-btf-var-datasec-patch.py" \
+  /tmp/btf-var-kernel.upstream.patch /tmp/btf-var-kernel.patch
 echo "===== APPLY $UPSTREAM_BTF_KERNEL :: kernel/bpf/btf.c ====="
 if git apply --check /tmp/btf-var-kernel.patch; then
   git apply /tmp/btf-var-kernel.patch
 else
-  echo '[INFO] kernel direct apply needs merge context; trying git apply --3way'
+  echo '[INFO] normalized kernel direct apply still needs merge context; trying git apply --3way'
   if ! git apply --3way /tmp/btf-var-kernel.patch; then
     git diff -- kernel/bpf/btf.c || true
-    echo '[ERROR] kernel-side VAR/DATASEC delta conflicts with this 4.14 tree'
+    echo '[ERROR] kernel-side VAR/DATASEC delta conflicts with this 4.14 tree after safe context normalization'
     exit 42
   fi
 fi
+
+# Xiaomi BTF next-id depends on these objects remaining externally visible.
+grep -Fxq 'DEFINE_IDR(btf_idr);' kernel/bpf/btf.c
+grep -Fxq 'DEFINE_SPINLOCK(btf_idr_lock);' kernel/bpf/btf.c
+! grep -Fxq 'static DEFINE_IDR(btf_idr);' kernel/bpf/btf.c
+! grep -Fxq 'static DEFINE_SPINLOCK(btf_idr_lock);' kernel/bpf/btf.c
+echo '[PASS] Xiaomi BTF idr visibility preserved across VAR/DATASEC backport'
 
 # EXP3 Run4 proved that kinds 14/15 are now recognized, but btf_parse_type_sec
 # still returns -EINVAL deeper in the verifier. Do not relax semantics here.

@@ -1,25 +1,23 @@
-name: PCHM30 A16 Xiaomi BPF COMBO BOOTFIX1
+name: PCHM30 A16 Xiaomi BPF FULL DEPS
 # ReSukiSU line from Run17. Keep in-tree 4.14 susfs.c + 4.14 VFS ABI. KPM stays off.
 # ReSukiSU: pinned to the exact revision used by Run 64 for reproducibility.
 # BPF verifier hardening: pinned Linux 4.14.236 stable series, excluding the
 # unrelated and broken hashtab changes from LF-Repo 013514ce.
-# Xiaomi combo bootfix: keep MAP_FREEZE/queue-stack/lookup-delete/JMP32; reject unsafe pseudo loops.
+# Xiaomi full dependency chain: MAP_FREEZE, lookup-delete, queue/stack,
+# BTF next-id, JMP32 and bounded loops.
 
 on:
   workflow_dispatch:
   push:
-    branches: [pchm30-a16-xiaomi-bpf-map-freeze-exp1, pchm30-a16-xiaomi-bpf-combo-bootfix1]
+    branches: [pchm30-a16-xiaomi-bpf-full-deps]
     paths:
       - '.github/workflows/pchm30-a16-run26-resukisu-susfs230.yml'
       - '.github/scripts/run16-orchestrate.sh'
       - '.github/scripts/check-bpf-v414236-spectre.py'
       - '.github/patches/bpf-v414236-spectre-clean.patch'
       - '.github/patches/bpf-v414236-spectre-clean.series'
-      - '.github/scripts/check-bpf-xiaomi-map-freeze.py'
-      - '.github/patches/bpf-xiaomi-map-freeze-exp1.patch'
-      - '.github/patches/bpf-xiaomi-queue-stack-maps.c'
-      - '.github/scripts/apply-xiaomi-bpf-combo.py'
-      - '.github/scripts/check-bpf-xiaomi-combo.py'
+      - '.github/scripts/check-xiaomi-bpf-full.py'
+      - '.github/patches/xiaomi-bpf-full/**'
       - '.github/scripts/run25-susfs230-adapt.sh'
       - '.github/scripts/package-pchm30-run17-ak3.sh'
       - '.github/scripts/run26-disable-kpm.sh'
@@ -60,7 +58,7 @@ env:
 
 jobs:
   build:
-    name: Run26 ReSukiSU + SUSFS 2.3.0 + clean BPF hardening
+    name: Run26 ReSukiSU + SUSFS 2.3.0 + Xiaomi BPF full deps
     runs-on: ubuntu-22.04
     timeout-minutes: 360
     steps:

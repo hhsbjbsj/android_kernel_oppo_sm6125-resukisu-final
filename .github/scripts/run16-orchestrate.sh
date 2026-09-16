@@ -100,46 +100,48 @@ git add \
 git commit -m 'bpf: backport clean Linux 4.14.236 speculative-pointer hardening'
 echo '[PASS] pinned clean 4.14.236 BPF hardening applied; LF hashtab changes excluded'
 
-echo '===== APPLY XIAOMI-DERIVED BPF_MAP_FREEZE EXP1 ====='
-git show "$GITHUB_SHA:.github/patches/bpf-xiaomi-map-freeze-exp1.patch" > \
-  "$GITHUB_WORKSPACE/bpf-xiaomi-map-freeze-exp1.patch"
-git show "$GITHUB_SHA:.github/scripts/check-bpf-xiaomi-map-freeze.py" > \
-  "$GITHUB_WORKSPACE/check-bpf-xiaomi-map-freeze.py"
-echo 'e34332336e9c3057835518c94681a4b0e91b22e24eb33f0c70622bf6796f8b71  bpf-xiaomi-map-freeze-exp1.patch' | \
+echo '===== APPLY XIAOMI BPF SIX-FEATURE FULL DEPENDENCY CHAIN ====='
+git show "$GITHUB_SHA:.github/patches/xiaomi-bpf-full/adaptations/9001-oppo-a16-bpf-integration.patch" > \
+  "$GITHUB_WORKSPACE/xiaomi-bpf-full.patch"
+git show "$GITHUB_SHA:.github/scripts/check-xiaomi-bpf-full.py" > \
+  "$GITHUB_WORKSPACE/check-xiaomi-bpf-full.py"
+echo '1f02104d3b55c269831826f8e6847423b62d3d965a062288fc26757714079ded  xiaomi-bpf-full.patch' | \
   (cd "$GITHUB_WORKSPACE" && sha256sum -c -)
-git apply --check "$GITHUB_WORKSPACE/bpf-xiaomi-map-freeze-exp1.patch"
-git apply "$GITHUB_WORKSPACE/bpf-xiaomi-map-freeze-exp1.patch"
+git apply --check "$GITHUB_WORKSPACE/xiaomi-bpf-full.patch"
+git apply "$GITHUB_WORKSPACE/xiaomi-bpf-full.patch"
 python3 "$GITHUB_WORKSPACE/check-bpf-v414236-spectre.py" .
-python3 "$GITHUB_WORKSPACE/check-bpf-xiaomi-map-freeze.py" .
-git diff --check
-git add include/uapi/linux/bpf.h include/linux/bpf.h kernel/bpf/syscall.c
-git commit -m 'bpf: add Xiaomi-derived BPF_MAP_FREEZE experiment'
-echo '[PASS] isolated Xiaomi BPF_MAP_FREEZE EXP1 applied with upstream command number 22'
-
-echo '===== APPLY XIAOMI BPF COMBO ON SAME BRANCH ====='
-git show "$GITHUB_SHA:.github/patches/bpf-xiaomi-queue-stack-maps.c" > \
-  "$GITHUB_WORKSPACE/bpf-xiaomi-queue-stack-maps.c"
-git show "$GITHUB_SHA:.github/scripts/apply-xiaomi-bpf-combo.py" > \
-  "$GITHUB_WORKSPACE/apply-xiaomi-bpf-combo.py"
-git show "$GITHUB_SHA:.github/scripts/check-bpf-xiaomi-combo.py" > \
-  "$GITHUB_WORKSPACE/check-bpf-xiaomi-combo.py"
-python3 "$GITHUB_WORKSPACE/apply-xiaomi-bpf-combo.py" . \
-  "$GITHUB_WORKSPACE/bpf-xiaomi-queue-stack-maps.c"
-python3 "$GITHUB_WORKSPACE/check-bpf-v414236-spectre.py" .
-python3 "$GITHUB_WORKSPACE/check-bpf-xiaomi-map-freeze.py" .
-python3 "$GITHUB_WORKSPACE/check-bpf-xiaomi-combo.py" .
+python3 "$GITHUB_WORKSPACE/check-xiaomi-bpf-full.py" .
 git diff --check
 git add \
+  Documentation/networking/filter.txt \
   include/uapi/linux/bpf.h \
   include/linux/bpf.h \
   include/linux/bpf_types.h \
+  include/linux/bpf_verifier.h \
+  include/linux/filter.h \
   kernel/bpf/Makefile \
+  kernel/bpf/bpf_lru_list.c \
+  kernel/bpf/bpf_lru_list.h \
+  kernel/bpf/btf.c \
+  kernel/bpf/core.c \
+  kernel/bpf/disasm.c \
+  kernel/bpf/helpers.c \
+  kernel/bpf/inode.c \
+  kernel/bpf/map_in_map.c \
+  kernel/bpf/map_in_map.h \
+  kernel/bpf/offload.c \
+  kernel/bpf/percpu_freelist.c \
+  kernel/bpf/percpu_freelist.h \
   kernel/bpf/queue_stack_maps.c \
+  kernel/bpf/stackmap.c \
   kernel/bpf/syscall.c \
   kernel/bpf/verifier.c \
-  kernel/bpf/core.c
-git commit -m 'bpf: add isolated Xiaomi combo on MAP_FREEZE EXP1'
-echo '[PASS] isolated Xiaomi BPF combo applied on the same EXP1 branch'
+  kernel/bpf/tnum.c \
+  net/core/filter.c \
+  tools/include/linux/filter.h \
+  tools/include/uapi/linux/bpf.h
+git commit -m 'bpf: backport Xiaomi six-feature full dependency chain'
+echo '[PASS] Xiaomi MAP_FREEZE, lookup-delete, queue/stack, BTF next-id, JMP32 and bounded loops applied'
 
 run_step 'Layer verified ReSukiSU SUSFS hooks'
 run_step 'Patch netbpfload uname compatibility'

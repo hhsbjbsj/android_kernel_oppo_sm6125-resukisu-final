@@ -1,0 +1,1361 @@
+diff --git a/include/linux/bpf.h b/include/linux/bpf.h
+index c7f827a537d31fe3a83e546b035d9eda498813cd..e9d1022b8c121b21daf437ccef230efe3fb044e8 100644
+--- a/include/linux/bpf.h
++++ b/include/linux/bpf.h
+@@ -41,6 +41,9 @@ struct bpf_map_ops {
+ 	void *(*map_lookup_elem)(struct bpf_map *map, void *key);
+ 	int (*map_update_elem)(struct bpf_map *map, void *key, void *value, u64 flags);
+ 	int (*map_delete_elem)(struct bpf_map *map, void *key);
++	int (*map_push_elem)(struct bpf_map *map, void *value, u64 flags);
++	int (*map_pop_elem)(struct bpf_map *map, void *value);
++	int (*map_peek_elem)(struct bpf_map *map, void *value);
+ 
+ 	/* funcs called by prog_array and perf_event_array map */
+ 	void *(*map_fd_get_ptr)(struct bpf_map *map, struct file *map_file,
+@@ -308,8 +311,13 @@ struct bpf_verifier_ops {
+ };
+ 
+ struct bpf_prog_offload_ops {
++	/* verifier basic callbacks */
+ 	int (*insn_hook)(struct bpf_verifier_env *env,
+ 			 int insn_idx, int prev_insn_idx);
++	/* verifier optimization callbacks */
++	int (*replace_insn)(struct bpf_verifier_env *env, u32 off,
++			    struct bpf_insn *insn);
++	int (*remove_insns)(struct bpf_verifier_env *env, u32 off, u32 cnt);
+ };
+ 
+ struct bpf_prog_offload {
+@@ -319,6 +327,7 @@ struct bpf_prog_offload {
+ 	struct list_head	offloads;
+ 	bool			dev_state;
+ 	const struct bpf_prog_offload_ops *dev_ops;
++	bool			opt_failed;
+ };
+ 
+ enum bpf_cgroup_storage_type {
+@@ -759,6 +768,9 @@ static inline int sock_map_get_from_fd(const union bpf_attr *attr,
+ extern const struct bpf_func_proto bpf_map_lookup_elem_proto;
+ extern const struct bpf_func_proto bpf_map_update_elem_proto;
+ extern const struct bpf_func_proto bpf_map_delete_elem_proto;
++extern const struct bpf_func_proto bpf_map_push_elem_proto;
++extern const struct bpf_func_proto bpf_map_pop_elem_proto;
++extern const struct bpf_func_proto bpf_map_peek_elem_proto;
+ 
+ extern const struct bpf_func_proto bpf_get_prandom_u32_proto;
+ extern const struct bpf_func_proto bpf_get_smp_processor_id_proto;
+diff --git a/include/linux/bpf_types.h b/include/linux/bpf_types.h
+index 80715af1e55347ac90c93ff13a5799aaf219bf2d..843bfb5615fb93a4fba9f2e6ce26b2dae7a82995 100644
+--- a/include/linux/bpf_types.h
++++ b/include/linux/bpf_types.h
+@@ -48,7 +48,7 @@ BPF_MAP_TYPE(BPF_MAP_TYPE_LRU_HASH, htab_lru_map_ops)
+ BPF_MAP_TYPE(BPF_MAP_TYPE_LRU_PERCPU_HASH, htab_lru_percpu_map_ops)
+ BPF_MAP_TYPE(BPF_MAP_TYPE_LPM_TRIE, trie_map_ops)
+ #ifdef CONFIG_PERF_EVENTS
+-BPF_MAP_TYPE(BPF_MAP_TYPE_STACK_TRACE, stack_map_ops)
++BPF_MAP_TYPE(BPF_MAP_TYPE_STACK_TRACE, stack_trace_map_ops)
+ #endif
+ BPF_MAP_TYPE(BPF_MAP_TYPE_ARRAY_OF_MAPS, array_of_maps_map_ops)
+ BPF_MAP_TYPE(BPF_MAP_TYPE_HASH_OF_MAPS, htab_of_maps_map_ops)
+@@ -62,3 +62,5 @@ BPF_MAP_TYPE(BPF_MAP_TYPE_SOCKHASH, sock_hash_ops)
+ #endif
+ BPF_MAP_TYPE(BPF_MAP_TYPE_CPUMAP, cpu_map_ops)
+ #endif
++BPF_MAP_TYPE(BPF_MAP_TYPE_QUEUE, queue_map_ops)
++BPF_MAP_TYPE(BPF_MAP_TYPE_STACK, stack_map_ops)
+diff --git a/include/linux/bpf_verifier.h b/include/linux/bpf_verifier.h
+index e1894acfb7414a481c4df961ed7942850f5866bf..3e34f24ed03ca3a40a3a3adfd283461332c592da 100644
+--- a/include/linux/bpf_verifier.h
++++ b/include/linux/bpf_verifier.h
+@@ -271,6 +271,10 @@ static inline struct bpf_reg_state *cur_regs(struct bpf_verifier_env *env)
+ int bpf_prog_offload_verifier_prep(struct bpf_verifier_env *env);
+ int bpf_prog_offload_verify_insn(struct bpf_verifier_env *env,
+ 				 int insn_idx, int prev_insn_idx);
++void bpf_prog_offload_replace_insn(struct bpf_verifier_env *env, u32 off,
++				   struct bpf_insn *insn);
++void bpf_prog_offload_remove_insns(struct bpf_verifier_env *env, u32 off,
++				   u32 cnt);
+ 
+ int bpf_analyzer(struct bpf_prog *prog, const struct bpf_ext_analyzer_ops *ops,
+ 		 void *priv);
+diff --git a/include/linux/filter.h b/include/linux/filter.h
+index 07021fb3a760582839f7222d8b7f91260618b526..07f507da217e83d675a118b34b864b353595d314 100644
+--- a/include/linux/filter.h
++++ b/include/linux/filter.h
+@@ -780,6 +780,7 @@ static inline bool bpf_dump_raw_ok(void)
+ 
+ struct bpf_prog *bpf_patch_insn_single(struct bpf_prog *prog, u32 off,
+ 				       const struct bpf_insn *patch, u32 len);
++int bpf_remove_insns(struct bpf_prog *prog, u32 off, u32 cnt);
+ 
+ /* The pair of xdp_do_redirect and xdp_do_flush_map MUST be called in the
+  * same cpu context. Further for best results no more than a single map
+diff --git a/include/uapi/linux/bpf.h b/include/uapi/linux/bpf.h
+index 9e6816912da1c737b7844275e8b4031e3dad7249..5ce4ecd3fe8c720f884fd2322765c48eeb13ce3c 100644
+--- a/include/uapi/linux/bpf.h
++++ b/include/uapi/linux/bpf.h
+@@ -102,6 +102,7 @@ enum bpf_cmd {
+ 	BPF_RAW_TRACEPOINT_OPEN,
+ 	BPF_BTF_LOAD = 18,
+ 	BPF_BTF_GET_FD_BY_ID = 19,
++	BPF_MAP_LOOKUP_AND_DELETE_ELEM = 21,
+ };
+ 
+ enum bpf_map_type {
+@@ -125,6 +126,8 @@ enum bpf_map_type {
+ 	BPF_MAP_TYPE_SOCKHASH = 18,
+ 	BPF_MAP_TYPE_CGROUP_STORAGE = 19,
+ 	BPF_MAP_TYPE_PERCPU_CGROUP_STORAGE = 21,
++	BPF_MAP_TYPE_QUEUE = 22,
++	BPF_MAP_TYPE_STACK = 23,
+ 	BPF_MAP_TYPE_SK_STORAGE = 24,
+ 	BPF_MAP_TYPE_DEVMAP_HASH = 25,
+ };
+@@ -412,6 +415,28 @@ union bpf_attr {
+  * int bpf_map_delete_elem(&map, &key)
+  *     Return: 0 on success or negative error
+  *
++ * int bpf_map_push_elem(struct bpf_map *map, const void *value, u64 flags)
++ * 	Description
++ * 		Push an element *value* in *map*. *flags* is one of:
++ *
++ * 		**BPF_EXIST**
++ * 		If the queue/stack is full, the oldest element is removed to
++ * 		make room for this.
++ * 	Return
++ * 		0 on success, or a negative error in case of failure.
++ *
++ * int bpf_map_pop_elem(struct bpf_map *map, void *value)
++ * 	Description
++ * 		Pop an element from *map*.
++ * Return
++ * 		0 on success, or a negative error in case of failure.
++ *
++ * int bpf_map_peek_elem(struct bpf_map *map, void *value)
++ * 	Description
++ * 		Get an element from *map* without removing it.
++ * Return
++ * 		0 on success, or a negative error in case of failure.
++ *
+  * int bpf_probe_read(void *dst, int size, void *src)
+  *     Return: 0 on success or negative error
+  *
+diff --git a/kernel/bpf/Makefile b/kernel/bpf/Makefile
+index f23e125c39c9d6b8bff31d49a6252c0a9e23a35a..5ba4a9051114716eac0206998624b2cc210d7c37 100644
+--- a/kernel/bpf/Makefile
++++ b/kernel/bpf/Makefile
+@@ -6,7 +6,7 @@ CFLAGS_helpers.o += -include $(srctree)/kernel/bpf/atomic_cond_read_compat.h
+ 
+ obj-$(CONFIG_BPF_SYSCALL) += syscall.o verifier.o inode.o helpers.o tnum.o vfs_mkobj_compat.o
+ obj-$(CONFIG_BPF_SYSCALL) += hashtab.o arraymap.o percpu_freelist.o bpf_lru_list.o lpm_trie.o map_in_map.o
+-obj-$(CONFIG_BPF_SYSCALL) += local_storage.o
++obj-$(CONFIG_BPF_SYSCALL) += local_storage.o queue_stack_maps.o
+ obj-$(CONFIG_BPF_SYSCALL) += btf.o
+ obj-$(CONFIG_BPF_SYSCALL) += disasm.o
+ ifeq ($(CONFIG_NET),y)
+@@ -17,4 +17,4 @@ endif
+ ifeq ($(CONFIG_PERF_EVENTS),y)
+ obj-$(CONFIG_BPF_SYSCALL) += stackmap.o
+ endif
+-obj-$(CONFIG_CGROUP_BPF) += cgroup.o
+\ No newline at end of file
++obj-$(CONFIG_CGROUP_BPF) += cgroup.o
+diff --git a/kernel/bpf/core.c b/kernel/bpf/core.c
+index 4a4328fde224e29cc4f20e32a23844ea327f7208..449eb5425db547b1bcd0d02355e2c817c921a016 100644
+--- a/kernel/bpf/core.c
++++ b/kernel/bpf/core.c
+@@ -300,51 +300,68 @@ int bpf_prog_calc_tag(struct bpf_prog *fp)
+ 	return 0;
+ }
+ 
+-static int bpf_adj_branches(struct bpf_prog *prog, u32 pos, u32 delta,
+-			    const bool probe_pass)
++static int bpf_adj_delta_to_imm(struct bpf_insn *insn, u32 pos, s32 end_old,
++				s32 end_new, u32 curr, const bool probe_pass)
++{
++	const s64 imm_min = S32_MIN, imm_max = S32_MAX;
++	s32 delta = end_new - end_old;
++	s64 imm = insn->imm;
++
++	if (curr < pos && curr + imm + 1 >= end_old)
++		imm += delta;
++	else if (curr >= end_new && curr + imm + 1 < end_new)
++		imm -= delta;
++	if (imm < imm_min || imm > imm_max)
++		return -ERANGE;
++	if (!probe_pass)
++		insn->imm = imm;
++	return 0;
++}
++
++static int bpf_adj_delta_to_off(struct bpf_insn *insn, u32 pos, s32 end_old,
++				s32 end_new, u32 curr, const bool probe_pass)
+ {
+-	u32 i, insn_cnt = prog->len + (probe_pass ? delta : 0);
++	const s32 off_min = S16_MIN, off_max = S16_MAX;
++	s32 delta = end_new - end_old;
++	s32 off = insn->off;
++
++	if (curr < pos && curr + off + 1 >= end_old)
++		off += delta;
++	else if (curr >= end_new && curr + off + 1 < end_new)
++		off -= delta;
++	if (off < off_min || off > off_max)
++		return -ERANGE;
++	if (!probe_pass)
++		insn->off = off;
++	return 0;
++}
++
++static int bpf_adj_branches(struct bpf_prog *prog, u32 pos, s32 end_old,
++			    s32 end_new, const bool probe_pass)
++{
++	u32 i, insn_cnt = prog->len + (probe_pass ? end_new - end_old : 0);
+ 	struct bpf_insn *insn = prog->insnsi;
+ 	int ret = 0;
+-	bool pseudo_call;
+-	u8 code;
+-	int off;
+ 
+ 	for (i = 0; i < insn_cnt; i++, insn++) {
+-		/* In the probing pass we still operate on the original,
+-		 * unpatched image in order to check overflows before we
+-		 * do any other adjustments. Therefore skip the patchlet.
+-		 */
++		u8 code;
++
+ 		if (probe_pass && i == pos) {
+-			i += delta + 1;
+-			insn++;
++			i = end_new;
++			insn = prog->insnsi + end_old;
+ 		}
+-
+ 		code = insn->code;
+-		if (BPF_CLASS(code) != BPF_JMP)
+-			continue;
+-		if (BPF_OP(code) == BPF_EXIT)
++		if (BPF_CLASS(code) != BPF_JMP || BPF_OP(code) == BPF_EXIT)
+ 			continue;
+ 		if (BPF_OP(code) == BPF_CALL) {
+-			if (insn->src_reg == BPF_PSEUDO_CALL)
+-				pseudo_call = true;
+-			else
++			if (insn->src_reg != BPF_PSEUDO_CALL)
+ 				continue;
++			ret = bpf_adj_delta_to_imm(insn, pos, end_old, end_new,
++						   i, probe_pass);
+ 		} else {
+-			pseudo_call = false;
++			ret = bpf_adj_delta_to_off(insn, pos, end_old, end_new,
++						   i, probe_pass);
+ 		}
+-		off = pseudo_call ? insn->imm : insn->off;
+-
+-		/* Adjust offset of jmps if we cross patch boundaries. */
+-		if (i < pos && i + off + 1 > pos)
+-			off += delta;
+-		else if (i > pos + delta && i + off + 1 <= pos + delta)
+-			off -= delta;
+-		if (pseudo_call)
+-			insn->imm = off;
+-		else
+-			insn->off = off;
+-
+ 		if (ret)
+ 			break;
+ 	}
+@@ -389,7 +406,7 @@ struct bpf_prog *bpf_patch_insn_single(struct bpf_prog *prog, u32 off,
+ 	 * we afterwards may not fail anymore.
+ 	 */
+ 	if (insn_adj_cnt > cnt_max &&
+-	    bpf_adj_branches(prog, off, insn_delta, true))
++	    bpf_adj_branches(prog, off, off + 1, off + len, true))
+ 		return NULL;
+ 
+ 	/* Several new instructions need to be inserted. Make room
+@@ -421,13 +438,38 @@ struct bpf_prog *bpf_patch_insn_single(struct bpf_prog *prog, u32 off,
+ 	 * the ship has sailed to reverse to the original state. An
+ 	 * overflow cannot happen at this point.
+ 	 */
+-	BUG_ON(bpf_adj_branches(prog_adj, off, insn_delta, false));
++	BUG_ON(bpf_adj_branches(prog_adj, off, off + 1, off + len, false));
+ 
+ 	bpf_adj_linfo(prog_adj, off, insn_delta);
+ 
+ 	return prog_adj;
+ }
+ 
++int bpf_remove_insns(struct bpf_prog *prog, u32 off, u32 cnt)
++{
++	/* Branch offsets can't overflow when program is shrinking, no need
++	 * to call bpf_adj_branches(..., true) here
++	 */
++	memmove(prog->insnsi + off, prog->insnsi + off + cnt,
++		sizeof(struct bpf_insn) * (prog->len - off - cnt));
++	prog->len -= cnt;
++
++	return WARN_ON_ONCE(bpf_adj_branches(prog, off, off + cnt, off, false));
++}
++
++void bpf_prog_kallsyms_del_subprogs(struct bpf_prog *fp)
++{
++	int i;
++
++	for (i = 0; i < fp->aux->func_cnt; i++)
++		bpf_prog_kallsyms_del(fp->aux->func[i]);
++}
++
++void bpf_prog_kallsyms_del_all(struct bpf_prog *fp)
++{
++	bpf_prog_kallsyms_del_subprogs(fp);
++	bpf_prog_kallsyms_del(fp);
++}
+ #ifdef CONFIG_BPF_JIT
+ /* All BPF JIT sysctl knobs here. */
+ int bpf_jit_enable   __read_mostly = IS_BUILTIN(CONFIG_BPF_JIT_ALWAYS_ON);
+@@ -2014,6 +2056,9 @@ const struct bpf_func_proto bpf_map_update_elem_proto __weak;
+ const struct bpf_func_proto bpf_map_delete_elem_proto __weak;
+ const struct bpf_func_proto bpf_spin_lock_proto __weak;
+ const struct bpf_func_proto bpf_spin_unlock_proto __weak;
++const struct bpf_func_proto bpf_map_push_elem_proto __weak;
++const struct bpf_func_proto bpf_map_pop_elem_proto __weak;
++const struct bpf_func_proto bpf_map_peek_elem_proto __weak;
+ 
+ const struct bpf_func_proto bpf_get_prandom_u32_proto __weak;
+ const struct bpf_func_proto bpf_get_smp_processor_id_proto __weak;
+diff --git a/kernel/bpf/helpers.c b/kernel/bpf/helpers.c
+index 8a849424edb82118b0b17980563530c2600976e6..08b86772bee7bf559da7622b87d0517a39b9ab17 100644
+--- a/kernel/bpf/helpers.c
++++ b/kernel/bpf/helpers.c
+@@ -76,6 +76,47 @@ const struct bpf_func_proto bpf_map_delete_elem_proto = {
+ 	.arg2_type	= ARG_PTR_TO_MAP_KEY,
+ };
+ 
++BPF_CALL_3(bpf_map_push_elem, struct bpf_map *, map, void *, value, u64, flags)
++{
++	return map->ops->map_push_elem(map, value, flags);
++}
++
++const struct bpf_func_proto bpf_map_push_elem_proto = {
++	.func		= bpf_map_push_elem,
++	.gpl_only	= false,
++	.pkt_access	= true,
++	.ret_type	= RET_INTEGER,
++	.arg1_type	= ARG_CONST_MAP_PTR,
++	.arg2_type	= ARG_PTR_TO_MAP_VALUE,
++	.arg3_type	= ARG_ANYTHING,
++};
++
++BPF_CALL_2(bpf_map_pop_elem, struct bpf_map *, map, void *, value)
++{
++	return map->ops->map_pop_elem(map, value);
++}
++
++const struct bpf_func_proto bpf_map_pop_elem_proto = {
++	.func		= bpf_map_pop_elem,
++	.gpl_only	= false,
++	.ret_type	= RET_INTEGER,
++	.arg1_type	= ARG_CONST_MAP_PTR,
++	.arg2_type	= ARG_PTR_TO_UNINIT_MAP_VALUE,
++};
++
++BPF_CALL_2(bpf_map_peek_elem, struct bpf_map *, map, void *, value)
++{
++	return map->ops->map_peek_elem(map, value);
++}
++
++const struct bpf_func_proto bpf_map_peek_elem_proto = {
++	.func		= bpf_map_pop_elem,
++	.gpl_only	= false,
++	.ret_type	= RET_INTEGER,
++	.arg1_type	= ARG_CONST_MAP_PTR,
++	.arg2_type	= ARG_PTR_TO_UNINIT_MAP_VALUE,
++};
++
+ const struct bpf_func_proto bpf_get_prandom_u32_proto = {
+ 	.func		= bpf_user_rnd_u32,
+ 	.gpl_only	= false,
+diff --git a/kernel/bpf/offload.c b/kernel/bpf/offload.c
+index c6d4778f0ea0123298f1b62d0e8896f6ae0fd2aa..481943489ea8cf12c61eb6b40e1e773e94e1637c 100644
+--- a/kernel/bpf/offload.c
++++ b/kernel/bpf/offload.c
+@@ -118,6 +118,41 @@ int bpf_prog_offload_verify_insn(struct bpf_verifier_env *env,
+ 	return ret;
+ }
+ 
++void
++bpf_prog_offload_replace_insn(struct bpf_verifier_env *env, u32 off,
++			      struct bpf_insn *insn)
++{
++	const struct bpf_prog_offload_ops *ops;
++	struct bpf_prog_offload *offload;
++	int ret = -EOPNOTSUPP;
++
++	down_read(&bpf_devs_lock);
++	offload = env->prog->aux->offload;
++	if (offload && offload->netdev) {
++		ops = offload->dev_ops;
++		if (!offload->opt_failed && ops->replace_insn)
++			ret = ops->replace_insn(env, off, insn);
++		offload->opt_failed |= ret;
++	}
++	up_read(&bpf_devs_lock);
++}
++
++void
++bpf_prog_offload_remove_insns(struct bpf_verifier_env *env, u32 off, u32 cnt)
++{
++	struct bpf_prog_offload *offload;
++	int ret = -EOPNOTSUPP;
++
++	down_read(&bpf_devs_lock);
++	offload = env->prog->aux->offload;
++	if (offload && offload->netdev) {
++		if (!offload->opt_failed && offload->dev_ops->remove_insns)
++			ret = offload->dev_ops->remove_insns(env, off, cnt);
++		offload->opt_failed |= ret;
++	}
++	up_read(&bpf_devs_lock);
++}
++
+ static void __bpf_prog_offload_destroy(struct bpf_prog *prog)
+ {
+ 	struct bpf_prog_offload *offload = prog->aux->offload;
+diff --git a/kernel/bpf/queue_stack_maps.c b/kernel/bpf/queue_stack_maps.c
+new file mode 100644
+index 0000000000000000000000000000000000000000..b384ea9f3254987f1caa16dff0780900720d93ca
+--- /dev/null
++++ b/kernel/bpf/queue_stack_maps.c
+@@ -0,0 +1,290 @@
++// SPDX-License-Identifier: GPL-2.0
++/*
++ * queue_stack_maps.c: BPF queue and stack maps
++ *
++ * Copyright (c) 2018 Politecnico di Torino
++ */
++#include <linux/bpf.h>
++#include <linux/list.h>
++#include <linux/slab.h>
++#include <linux/capability.h>
++#include "percpu_freelist.h"
++
++#define QUEUE_STACK_CREATE_FLAG_MASK \
++	(BPF_F_NUMA_NODE | BPF_F_RDONLY | BPF_F_WRONLY)
++
++
++struct bpf_queue_stack {
++	struct bpf_map map;
++	raw_spinlock_t lock;
++	u32 head, tail;
++	u32 size; /* max_entries + 1 */
++
++	char elements[0] __aligned(8);
++};
++
++static struct bpf_queue_stack *bpf_queue_stack(struct bpf_map *map)
++{
++	return container_of(map, struct bpf_queue_stack, map);
++}
++
++static bool queue_stack_map_is_empty(struct bpf_queue_stack *qs)
++{
++	return qs->head == qs->tail;
++}
++
++static bool queue_stack_map_is_full(struct bpf_queue_stack *qs)
++{
++	u32 head = qs->head + 1;
++
++	if (unlikely(head >= qs->size))
++		head = 0;
++
++	return head == qs->tail;
++}
++
++/* Called from syscall */
++static int queue_stack_map_alloc_check(union bpf_attr *attr)
++{
++	if (!capable(CAP_SYS_ADMIN))
++		return -EPERM;
++
++	/* check sanity of attributes */
++	if (attr->max_entries == 0 || attr->key_size != 0 ||
++	    attr->value_size == 0 ||
++	    attr->map_flags & ~QUEUE_STACK_CREATE_FLAG_MASK)
++		return -EINVAL;
++
++	if (attr->value_size > KMALLOC_MAX_SIZE)
++		/* if value_size is bigger, the user space won't be able to
++		 * access the elements.
++		 */
++		return -E2BIG;
++
++	return 0;
++}
++
++static struct bpf_map *queue_stack_map_alloc(union bpf_attr *attr)
++{
++	int ret, numa_node = bpf_map_attr_numa_node(attr);
++	struct bpf_queue_stack *qs;
++	u64 size, queue_size, cost;
++
++	size = (u64) attr->max_entries + 1;
++	cost = queue_size = sizeof(*qs) + size * attr->value_size;
++	if (cost >= U32_MAX - PAGE_SIZE)
++		return ERR_PTR(-E2BIG);
++
++	cost = round_up(cost, PAGE_SIZE) >> PAGE_SHIFT;
++
++	ret = bpf_map_precharge_memlock(cost);
++	if (ret < 0)
++		return ERR_PTR(ret);
++
++	qs = bpf_map_area_alloc(queue_size, numa_node);
++	if (!qs)
++		return ERR_PTR(-ENOMEM);
++
++	memset(qs, 0, sizeof(*qs));
++
++	bpf_map_init_from_attr(&qs->map, attr);
++
++	qs->map.pages = cost;
++	qs->size = size;
++
++	raw_spin_lock_init(&qs->lock);
++
++	return &qs->map;
++}
++
++/* Called when map->refcnt goes to zero, either from workqueue or from syscall */
++static void queue_stack_map_free(struct bpf_map *map)
++{
++	struct bpf_queue_stack *qs = bpf_queue_stack(map);
++
++	/* at this point bpf_prog->aux->refcnt == 0 and this map->refcnt == 0,
++	 * so the programs (can be more than one that used this map) were
++	 * disconnected from events. Wait for outstanding critical sections in
++	 * these programs to complete
++	 */
++	synchronize_rcu();
++
++	bpf_map_area_free(qs);
++}
++
++static int __queue_map_get(struct bpf_map *map, void *value, bool delete)
++{
++	struct bpf_queue_stack *qs = bpf_queue_stack(map);
++	unsigned long flags;
++	int err = 0;
++	void *ptr;
++
++	raw_spin_lock_irqsave(&qs->lock, flags);
++
++	if (queue_stack_map_is_empty(qs)) {
++		memset(value, 0, qs->map.value_size);
++		err = -ENOENT;
++		goto out;
++	}
++
++	ptr = &qs->elements[qs->tail * qs->map.value_size];
++	memcpy(value, ptr, qs->map.value_size);
++
++	if (delete) {
++		if (unlikely(++qs->tail >= qs->size))
++			qs->tail = 0;
++	}
++
++out:
++	raw_spin_unlock_irqrestore(&qs->lock, flags);
++	return err;
++}
++
++
++static int __stack_map_get(struct bpf_map *map, void *value, bool delete)
++{
++	struct bpf_queue_stack *qs = bpf_queue_stack(map);
++	unsigned long flags;
++	int err = 0;
++	void *ptr;
++	u32 index;
++
++	raw_spin_lock_irqsave(&qs->lock, flags);
++
++	if (queue_stack_map_is_empty(qs)) {
++		memset(value, 0, qs->map.value_size);
++		err = -ENOENT;
++		goto out;
++	}
++
++	index = qs->head - 1;
++	if (unlikely(index >= qs->size))
++		index = qs->size - 1;
++
++	ptr = &qs->elements[index * qs->map.value_size];
++	memcpy(value, ptr, qs->map.value_size);
++
++	if (delete)
++		qs->head = index;
++
++out:
++	raw_spin_unlock_irqrestore(&qs->lock, flags);
++	return err;
++}
++
++/* Called from syscall or from eBPF program */
++static int queue_map_peek_elem(struct bpf_map *map, void *value)
++{
++	return __queue_map_get(map, value, false);
++}
++
++/* Called from syscall or from eBPF program */
++static int stack_map_peek_elem(struct bpf_map *map, void *value)
++{
++	return __stack_map_get(map, value, false);
++}
++
++/* Called from syscall or from eBPF program */
++static int queue_map_pop_elem(struct bpf_map *map, void *value)
++{
++	return __queue_map_get(map, value, true);
++}
++
++/* Called from syscall or from eBPF program */
++static int stack_map_pop_elem(struct bpf_map *map, void *value)
++{
++	return __stack_map_get(map, value, true);
++}
++
++/* Called from syscall or from eBPF program */
++static int queue_stack_map_push_elem(struct bpf_map *map, void *value,
++				     u64 flags)
++{
++	struct bpf_queue_stack *qs = bpf_queue_stack(map);
++	unsigned long irq_flags;
++	int err = 0;
++	void *dst;
++
++	/* BPF_EXIST is used to force making room for a new element in case the
++	 * map is full
++	 */
++	bool replace = (flags & BPF_EXIST);
++
++	/* Check supported flags for queue and stack maps */
++	if (flags & BPF_NOEXIST || flags > BPF_EXIST)
++		return -EINVAL;
++
++	raw_spin_lock_irqsave(&qs->lock, irq_flags);
++
++	if (queue_stack_map_is_full(qs)) {
++		if (!replace) {
++			err = -E2BIG;
++			goto out;
++		}
++		/* advance tail pointer to overwrite oldest element */
++		if (unlikely(++qs->tail >= qs->size))
++			qs->tail = 0;
++	}
++
++	dst = &qs->elements[qs->head * qs->map.value_size];
++	memcpy(dst, value, qs->map.value_size);
++
++	if (unlikely(++qs->head >= qs->size))
++		qs->head = 0;
++
++out:
++	raw_spin_unlock_irqrestore(&qs->lock, irq_flags);
++	return err;
++}
++
++/* Called from syscall or from eBPF program */
++static void *queue_stack_map_lookup_elem(struct bpf_map *map, void *key)
++{
++	return NULL;
++}
++
++/* Called from syscall or from eBPF program */
++static int queue_stack_map_update_elem(struct bpf_map *map, void *key,
++				       void *value, u64 flags)
++{
++	return -EINVAL;
++}
++
++/* Called from syscall or from eBPF program */
++static int queue_stack_map_delete_elem(struct bpf_map *map, void *key)
++{
++	return -EINVAL;
++}
++
++/* Called from syscall */
++static int queue_stack_map_get_next_key(struct bpf_map *map, void *key,
++					void *next_key)
++{
++	return -EINVAL;
++}
++
++const struct bpf_map_ops queue_map_ops = {
++	.map_alloc_check = queue_stack_map_alloc_check,
++	.map_alloc = queue_stack_map_alloc,
++	.map_free = queue_stack_map_free,
++	.map_lookup_elem = queue_stack_map_lookup_elem,
++	.map_update_elem = queue_stack_map_update_elem,
++	.map_delete_elem = queue_stack_map_delete_elem,
++	.map_push_elem = queue_stack_map_push_elem,
++	.map_pop_elem = queue_map_pop_elem,
++	.map_peek_elem = queue_map_peek_elem,
++	.map_get_next_key = queue_stack_map_get_next_key,
++};
++
++const struct bpf_map_ops stack_map_ops = {
++	.map_alloc_check = queue_stack_map_alloc_check,
++	.map_alloc = queue_stack_map_alloc,
++	.map_free = queue_stack_map_free,
++	.map_lookup_elem = queue_stack_map_lookup_elem,
++	.map_update_elem = queue_stack_map_update_elem,
++	.map_delete_elem = queue_stack_map_delete_elem,
++	.map_push_elem = queue_stack_map_push_elem,
++	.map_pop_elem = stack_map_pop_elem,
++	.map_peek_elem = stack_map_peek_elem,
++	.map_get_next_key = queue_stack_map_get_next_key,
++};
+diff --git a/kernel/bpf/stackmap.c b/kernel/bpf/stackmap.c
+index 8cddf05ac7b263bb58f588acd3cc1a4de9f69e69..a52ffe5a7d0760ec3e5e87aead1d0282ba335f5e 100755
+--- a/kernel/bpf/stackmap.c
++++ b/kernel/bpf/stackmap.c
+@@ -267,7 +267,7 @@ static void stack_map_free(struct bpf_map *map)
+ 	put_callchain_buffers();
+ }
+ 
+-const struct bpf_map_ops stack_map_ops = {
++const struct bpf_map_ops stack_trace_map_ops = {
+ 	.map_alloc = stack_map_alloc,
+ 	.map_free = stack_map_free,
+ 	.map_get_next_key = stack_map_get_next_key,
+diff --git a/kernel/bpf/syscall.c b/kernel/bpf/syscall.c
+index 5faf955fbb47ccabcd3eb73fa2d43f287eec0f5a..0f74938c29fc7582c3a3d8cc1cd1dee2493c4d87 100644
+--- a/kernel/bpf/syscall.c
++++ b/kernel/bpf/syscall.c
+@@ -732,6 +732,9 @@ static int map_lookup_elem(union bpf_attr *attr)
+ 		err = bpf_fd_array_map_lookup_elem(map, key, value);
+ 	} else if (IS_FD_HASH(map)) {
+ 		err = bpf_fd_htab_map_lookup_elem(map, key, value);
++	} else if (map->map_type == BPF_MAP_TYPE_QUEUE ||
++		   map->map_type == BPF_MAP_TYPE_STACK) {
++		err = map->ops->map_peek_elem(map, value);
+ 	} else {
+ 		rcu_read_lock();
+ 		if (map->ops->map_lookup_elem_sys_only)
+@@ -868,6 +871,9 @@ static int map_update_elem(union bpf_attr *attr)
+ 		err = bpf_fd_htab_map_update_elem(map, f.file, key, value,
+ 						  attr->flags);
+ 		rcu_read_unlock();
++	} else if (map->map_type == BPF_MAP_TYPE_QUEUE ||
++		   map->map_type == BPF_MAP_TYPE_STACK) {
++		err = map->ops->map_push_elem(map, value, attr->flags);
+ 	} else {
+ 		rcu_read_lock();
+ 		err = map->ops->map_update_elem(map, key, value, attr->flags);
+@@ -1011,6 +1017,69 @@ static int map_get_next_key(union bpf_attr *attr)
+ 	return err;
+ }
+ 
++#define BPF_MAP_LOOKUP_AND_DELETE_ELEM_LAST_FIELD value
++
++static int map_lookup_and_delete_elem(union bpf_attr *attr)
++{
++	void __user *ukey = u64_to_user_ptr(attr->key);
++	void __user *uvalue = u64_to_user_ptr(attr->value);
++	int ufd = attr->map_fd;
++	struct bpf_map *map;
++	void *key, *value, *ptr;
++	u32 value_size;
++	struct fd f;
++	int err;
++
++	if (CHECK_ATTR(BPF_MAP_LOOKUP_AND_DELETE_ELEM))
++		return -EINVAL;
++
++	f = fdget(ufd);
++	map = __bpf_map_get(f);
++	if (IS_ERR(map))
++		return PTR_ERR(map);
++
++	if (!(f.file->f_mode & FMODE_CAN_WRITE)) {
++		err = -EPERM;
++		goto err_put;
++	}
++
++	key = __bpf_copy_key(ukey, map->key_size);
++	if (IS_ERR(key)) {
++		err = PTR_ERR(key);
++		goto err_put;
++	}
++
++	value_size = map->value_size;
++
++	err = -ENOMEM;
++	value = kmalloc(value_size, GFP_USER | __GFP_NOWARN);
++	if (!value)
++		goto free_key;
++
++	if (map->map_type == BPF_MAP_TYPE_QUEUE ||
++	    map->map_type == BPF_MAP_TYPE_STACK) {
++		err = map->ops->map_pop_elem(map, value);
++	} else {
++		err = -ENOTSUPP;
++	}
++
++	if (err)
++		goto free_value;
++
++	if (copy_to_user(uvalue, value, value_size) != 0)
++		goto free_value;
++
++	err = 0;
++
++free_value:
++	kfree(value);
++free_key:
++	kfree(key);
++err_put:
++	fdput(f);
++	return err;
++}
++
+ static const struct bpf_prog_ops * const bpf_prog_types[] = {
+ #define BPF_PROG_TYPE(_id, _name) \
+ 	[_id] = & _name ## _prog_ops,
+@@ -2460,6 +2529,9 @@ SYSCALL_DEFINE3(bpf, int, cmd, union bpf_attr __user *, uattr, unsigned int, siz
+ 	case BPF_BTF_GET_FD_BY_ID:
+ 		err = bpf_btf_get_fd_by_id(&attr);
+ 		break;
++	case BPF_MAP_LOOKUP_AND_DELETE_ELEM:
++		err = map_lookup_and_delete_elem(&attr);
++		break;
+ 	default:
+ 		err = -EINVAL;
+ 		break;
+diff --git a/kernel/bpf/verifier.c b/kernel/bpf/verifier.c
+index bf38e76d9c129eab1f6547f08e62b84199e43663..1faf4a3cd4327dca2b5afa6fd18b7778669d1040 100644
+--- a/kernel/bpf/verifier.c
++++ b/kernel/bpf/verifier.c
+@@ -2586,7 +2586,14 @@ static int check_map_func_compatibility(struct bpf_verifier_env *env,
+ 		if (func_id != BPF_FUNC_sk_redirect_hash &&
+ 		    func_id != BPF_FUNC_sock_hash_update &&
+ 		    func_id != BPF_FUNC_map_delete_elem &&
+-		    func_id != BPF_FUNC_msg_redirect_hash)
++			func_id != BPF_FUNC_msg_redirect_hash)
++			goto error;
++		break;
++	case BPF_MAP_TYPE_QUEUE:
++	case BPF_MAP_TYPE_STACK:
++		if (func_id != BPF_FUNC_map_peek_elem &&
++		    func_id != BPF_FUNC_map_pop_elem &&
++		    func_id != BPF_FUNC_map_push_elem)
+ 			goto error;
+ 		break;
+ 	default:
+@@ -2644,6 +2651,13 @@ static int check_map_func_compatibility(struct bpf_verifier_env *env,
+ 		if (map->map_type != BPF_MAP_TYPE_SK_STORAGE)
+ 			goto error;
+ 		break;
++	case BPF_FUNC_map_peek_elem:
++	case BPF_FUNC_map_pop_elem:
++	case BPF_FUNC_map_push_elem:
++		if (map->map_type != BPF_MAP_TYPE_QUEUE &&
++		    map->map_type != BPF_MAP_TYPE_STACK)
++			goto error;
++		break;
+ 	default:
+ 		break;
+ 	}
+@@ -2913,7 +2927,12 @@ record_func_map(struct bpf_verifier_env *env, struct bpf_call_arg_meta *meta,
+ {
+ 	struct bpf_insn_aux_data *aux = &env->insn_aux_data[insn_idx];
+ 	if (func_id != BPF_FUNC_tail_call &&
+-	    func_id != BPF_FUNC_map_lookup_elem)
++	    func_id != BPF_FUNC_map_lookup_elem &&
++	    func_id != BPF_FUNC_map_update_elem &&
++	    func_id != BPF_FUNC_map_delete_elem &&
++	    func_id != BPF_FUNC_map_push_elem &&
++	    func_id != BPF_FUNC_map_pop_elem &&
++	    func_id != BPF_FUNC_map_peek_elem)
+ 		return 0;
+ 	if (meta->map_ptr == NULL) {
+ 		verbose(env, "kernel subsystem misconfigured verifier\n");
+@@ -4492,6 +4511,74 @@ static void mark_ptr_or_null_regs(struct bpf_verifier_state *vstate, u32 regno,
+ 	}
+ }
+ 
++/* Compute branch direction of "if (reg opcode val) goto target". */
++static int is_branch_taken(struct bpf_reg_state *reg, u64 val, u8 opcode)
++{
++	if (__is_pointer_value(false, reg))
++		return -1;
++
++	switch (opcode) {
++	case BPF_JEQ:
++		if (tnum_is_const(reg->var_off))
++			return !!tnum_equals_const(reg->var_off, val);
++		break;
++	case BPF_JNE:
++		if (tnum_is_const(reg->var_off))
++			return !tnum_equals_const(reg->var_off, val);
++		break;
++	case BPF_JGT:
++		if (reg->umin_value > val)
++			return 1;
++		if (reg->umax_value <= val)
++			return 0;
++		break;
++	case BPF_JSGT:
++		if (reg->smin_value > (s64)val)
++			return 1;
++		if (reg->smax_value < (s64)val)
++			return 0;
++		break;
++	case BPF_JLT:
++		if (reg->umax_value < val)
++			return 1;
++		if (reg->umin_value >= val)
++			return 0;
++		break;
++	case BPF_JSLT:
++		if (reg->smax_value < (s64)val)
++			return 1;
++		if (reg->smin_value >= (s64)val)
++			return 0;
++		break;
++	case BPF_JGE:
++		if (reg->umin_value >= val)
++			return 1;
++		if (reg->umax_value < val)
++			return 0;
++		break;
++	case BPF_JSGE:
++		if (reg->smin_value >= (s64)val)
++			return 1;
++		if (reg->smax_value < (s64)val)
++			return 0;
++		break;
++	case BPF_JLE:
++		if (reg->umax_value <= val)
++			return 1;
++		if (reg->umin_value > val)
++			return 0;
++		break;
++	case BPF_JSLE:
++		if (reg->smax_value <= (s64)val)
++			return 1;
++		if (reg->smin_value > (s64)val)
++			return 0;
++		break;
++	}
++
++	return -1;
++}
++
+ static bool try_match_pkt_pointers(const struct bpf_insn *insn,
+ 				   struct bpf_reg_state *dst_reg,
+ 				   struct bpf_reg_state *src_reg,
+@@ -4591,8 +4678,9 @@ static int check_cond_jmp_op(struct bpf_verifier_env *env,
+ 	struct bpf_verifier_state *this_branch = env->cur_state;
+ 	struct bpf_verifier_state *other_branch;
+ 	struct bpf_reg_state *regs = this_branch->frame[this_branch->curframe]->regs;
+-	struct bpf_reg_state *dst_reg, *other_branch_regs;
++	struct bpf_reg_state *dst_reg, *other_branch_regs, *src_reg = NULL;
+ 	u8 opcode = BPF_OP(insn->code);
++	int pred = -1;
+ 	int err;
+ 
+ 	if (opcode > BPF_JSLE) {
+@@ -4616,6 +4704,7 @@ static int check_cond_jmp_op(struct bpf_verifier_env *env,
+ 				insn->src_reg);
+ 			return -EACCES;
+ 		}
++		src_reg = &regs[insn->src_reg];
+ 	} else {
+ 		if (insn->src_reg != BPF_REG_0) {
+ 			verbose(env, "BPF_JMP uses reserved fields\n");
+@@ -4630,24 +4719,21 @@ static int check_cond_jmp_op(struct bpf_verifier_env *env,
+ 
+ 	dst_reg = &regs[insn->dst_reg];
+ 
+-	/* detect if R == 0 where R was initialized to zero earlier */
+-	if (BPF_SRC(insn->code) == BPF_K &&
+-	    (opcode == BPF_JEQ || opcode == BPF_JNE) &&
+-	    dst_reg->type == SCALAR_VALUE &&
+-	    tnum_equals_const(dst_reg->var_off, insn->imm)) {
+-		if (opcode == BPF_JEQ) {
+-			/* if (imm == imm) goto pc+off;
+-			 * only follow the goto, ignore fall-through
+-			 */
+-			*insn_idx += insn->off;
+-			return 0;
+-		} else {
+-			/* if (imm != imm) goto pc+off;
+-			 * only follow fall-through branch, since
+-			 * that's where the program will go
+-			 */
+-			return 0;
+-		}
++	if (BPF_SRC(insn->code) == BPF_K)
++		pred = is_branch_taken(dst_reg, insn->imm, opcode);
++	else if (src_reg->type == SCALAR_VALUE &&
++		 tnum_is_const(src_reg->var_off))
++		pred = is_branch_taken(dst_reg, src_reg->var_off.value,
++				       opcode);
++	if (pred == 1) {
++		/* only follow the goto, ignore fall-through */
++		*insn_idx += insn->off;
++		return 0;
++	} else if (pred == 0) {
++		/* only follow fall-through branch, since
++		 * that's where the program will go
++		 */
++		return 0;
+ 	}
+ 
+ 	other_branch = push_stack(env, *insn_idx + insn->off + 1, *insn_idx,
+@@ -6469,14 +6555,168 @@ static struct bpf_prog *bpf_patch_insn_data(struct bpf_verifier_env *env, u32 of
+ 	return new_prog;
+ }
+ 
+-/* The verifier does more data flow analysis than llvm and will not explore
+- * branches that are dead at run time. Malicious programs can have dead code
+- * too. Therefore replace all dead at-run-time code with nops.
++static int adjust_subprog_starts_after_remove(struct bpf_verifier_env *env,
++					      u32 off, u32 cnt)
++{
++	int i, j;
++
++	/* find first prog starting at or after off (first to remove) */
++	for (i = 0; i < env->subprog_cnt; i++)
++		if (env->subprog_info[i].start >= off)
++			break;
++	/* find first prog starting at or after off + cnt (first to stay) */
++	for (j = i; j < env->subprog_cnt; j++)
++		if (env->subprog_info[j].start >= off + cnt)
++			break;
++	/* if j doesn't start exactly at off + cnt, we are just removing
++	 * the front of previous prog
++	 */
++	if (env->subprog_info[j].start != off + cnt)
++		j--;
++
++	if (j > i) {
++		struct bpf_prog_aux *aux = env->prog->aux;
++		int move;
++
++		/* move fake 'exit' subprog as well */
++		move = env->subprog_cnt + 1 - j;
++
++		memmove(env->subprog_info + i,
++			env->subprog_info + j,
++			sizeof(*env->subprog_info) * move);
++		env->subprog_cnt -= j - i;
++
++		/* remove func_info */
++		if (aux->func_info) {
++			move = aux->func_info_cnt - j;
++
++			memmove(aux->func_info + i,
++				aux->func_info + j,
++				sizeof(*aux->func_info) * move);
++			aux->func_info_cnt -= j - i;
++			/* func_info->insn_off is set after all code rewrites,
++			 * in adjust_btf_func() - no need to adjust
++			 */
++		}
++	} else {
++		/* convert i from "first prog to remove" to "first to adjust" */
++		if (env->subprog_info[i].start == off)
++			i++;
++	}
++
++	/* update fake 'exit' subprog as well */
++	for (; i <= env->subprog_cnt; i++)
++		env->subprog_info[i].start -= cnt;
++
++	return 0;
++}
++
++static int bpf_adj_linfo_after_remove(struct bpf_verifier_env *env, u32 off,
++				      u32 cnt)
++{
++	struct bpf_prog *prog = env->prog;
++	u32 i, l_off, l_cnt, nr_linfo;
++	struct bpf_line_info *linfo;
++
++	nr_linfo = prog->aux->nr_linfo;
++	if (!nr_linfo)
++		return 0;
++
++	linfo = prog->aux->linfo;
++
++	/* find first line info to remove, count lines to be removed */
++	for (i = 0; i < nr_linfo; i++)
++		if (linfo[i].insn_off >= off)
++			break;
++
++	l_off = i;
++	l_cnt = 0;
++	for (; i < nr_linfo; i++)
++		if (linfo[i].insn_off < off + cnt)
++			l_cnt++;
++		else
++			break;
++
++	/* First live insn doesn't match first live linfo, it needs to "inherit"
++	 * last removed linfo.  prog is already modified, so prog->len == off
++	 * means no live instructions after (tail of the program was removed).
++	 */
++	if (prog->len != off && l_cnt &&
++	    (i == nr_linfo || linfo[i].insn_off != off + cnt)) {
++		l_cnt--;
++		linfo[--i].insn_off = off + cnt;
++	}
++
++	/* remove the line info which refer to the removed instructions */
++	if (l_cnt) {
++		memmove(linfo + l_off, linfo + i,
++			sizeof(*linfo) * (nr_linfo - i));
++
++		prog->aux->nr_linfo -= l_cnt;
++		nr_linfo = prog->aux->nr_linfo;
++	}
++
++	/* pull all linfo[i].insn_off >= off + cnt in by cnt */
++	for (i = l_off; i < nr_linfo; i++)
++		linfo[i].insn_off -= cnt;
++
++	/* fix up all subprogs (incl. 'exit') which start >= off */
++	for (i = 0; i <= env->subprog_cnt; i++)
++		if (env->subprog_info[i].linfo_idx > l_off) {
++			/* program may have started in the removed region but
++			 * may not be fully removed
++			 */
++			if (env->subprog_info[i].linfo_idx >= l_off + l_cnt)
++				env->subprog_info[i].linfo_idx -= l_cnt;
++			else
++				env->subprog_info[i].linfo_idx = l_off;
++		}
++
++	return 0;
++}
++
++static int verifier_remove_insns(struct bpf_verifier_env *env, u32 off, u32 cnt)
++{
++	struct bpf_insn_aux_data *aux_data = env->insn_aux_data;
++	unsigned int orig_prog_len = env->prog->len;
++	int err;
++
++	if (bpf_prog_is_dev_bound(env->prog->aux))
++		bpf_prog_offload_remove_insns(env, off, cnt);
++
++	err = bpf_remove_insns(env->prog, off, cnt);
++	if (err)
++		return err;
++
++	err = adjust_subprog_starts_after_remove(env, off, cnt);
++	if (err)
++		return err;
++
++	err = bpf_adj_linfo_after_remove(env, off, cnt);
++	if (err)
++		return err;
++
++	memmove(aux_data + off,	aux_data + off + cnt,
++		sizeof(*aux_data) * (orig_prog_len - off - cnt));
++
++	return 0;
++}
++
++/* The verifier does more data flow analysis than llvm and will not
++ * explore branches that are dead at run time. Malicious programs can
++ * have dead code too. Therefore replace all dead at-run-time code
++ * with 'ja -1'.
++ *
++ * Just nops are not optimal, e.g. if they would sit at the end of the
++ * program and through another bug we would manage to jump there, then
++ * we'd execute beyond program memory otherwise. Returning exception
++ * code also wouldn't work since we can have subprogs where the dead
++ * code could be located.
+  */
+ static void sanitize_dead_code(struct bpf_verifier_env *env)
+ {
+ 	struct bpf_insn_aux_data *aux_data = env->insn_aux_data;
+-	struct bpf_insn nop = BPF_MOV64_REG(BPF_REG_0, BPF_REG_0);
++	struct bpf_insn trap = BPF_JMP_IMM(BPF_JA, 0, 0, -1);
+ 	struct bpf_insn *insn = env->prog->insnsi;
+ 	const int insn_cnt = env->prog->len;
+ 	int i;
+@@ -6484,12 +6724,96 @@ static void sanitize_dead_code(struct bpf_verifier_env *env)
+ 	for (i = 0; i < insn_cnt; i++) {
+ 		if (aux_data[i].seen)
+ 			continue;
+-		memcpy(insn + i, &nop, sizeof(nop));
++		memcpy(insn + i, &trap, sizeof(trap));
++	}
++}
++
++static bool insn_is_cond_jump(u8 code)
++{
++	u8 op;
++
++	if (BPF_CLASS(code) != BPF_JMP)
++		return false;
++
++	op = BPF_OP(code);
++	return op != BPF_JA && op != BPF_EXIT && op != BPF_CALL;
++}
++
++static void opt_hard_wire_dead_code_branches(struct bpf_verifier_env *env)
++{
++	struct bpf_insn_aux_data *aux_data = env->insn_aux_data;
++	struct bpf_insn ja = BPF_JMP_IMM(BPF_JA, 0, 0, 0);
++	struct bpf_insn *insn = env->prog->insnsi;
++	const int insn_cnt = env->prog->len;
++	int i;
++
++	for (i = 0; i < insn_cnt; i++, insn++) {
++		if (!insn_is_cond_jump(insn->code))
++			continue;
++
++		if (!aux_data[i + 1].seen)
++			ja.off = insn->off;
++		else if (!aux_data[i + 1 + insn->off].seen)
++			ja.off = 0;
++		else
++			continue;
++
++		if (bpf_prog_is_dev_bound(env->prog->aux))
++			bpf_prog_offload_replace_insn(env, i, &ja);
++
++		memcpy(insn, &ja, sizeof(ja));
++	}
++}
++
++static int opt_remove_dead_code(struct bpf_verifier_env *env)
++{
++	struct bpf_insn_aux_data *aux_data = env->insn_aux_data;
++	int insn_cnt = env->prog->len;
++	int i, err;
++
++	for (i = 0; i < insn_cnt; i++) {
++		int j;
++
++		j = 0;
++		while (i + j < insn_cnt && !aux_data[i + j].seen)
++			j++;
++		if (!j)
++			continue;
++
++		err = verifier_remove_insns(env, i, j);
++		if (err)
++			return err;
++		insn_cnt = env->prog->len;
++	}
++
++	return 0;
++}
++
++static int opt_remove_nops(struct bpf_verifier_env *env)
++{
++	const struct bpf_insn ja = BPF_JMP_IMM(BPF_JA, 0, 0, 0);
++	struct bpf_insn *insn = env->prog->insnsi;
++	int insn_cnt = env->prog->len;
++	int i, err;
++
++	for (i = 0; i < insn_cnt; i++) {
++		if (memcmp(&insn[i], &ja, sizeof(ja)))
++			continue;
++
++		err = verifier_remove_insns(env, i, 1);
++		if (err)
++			return err;
++		insn_cnt--;
++		i--;
+ 	}
++
++	return 0;
+ }
+ 
+-/* convert load instructions that access fields of 'struct __sk_buff'
+- * into sequence of instructions that access fields of 'struct sk_buff'
++/* convert load instructions that access fields of a context type into a
++ * sequence of instructions that access fields of the underlying structure:
++ *     struct __sk_buff    -> struct sk_buff
++ *     struct bpf_sock_ops -> struct sock
+  */
+ static int convert_ctx_accesses(struct bpf_verifier_env *env)
+ {
+@@ -7080,6 +7404,7 @@ int bpf_check(struct bpf_prog **prog, union bpf_attr *attr,
+ 	struct bpf_verifier_log *log;
+ 	struct bpf_verifier_env *env;
+ 	int ret = -EINVAL;
++	bool is_priv;
+ 
+ 	/* 'struct bpf_verifier_env' can be global, but since it's not small,
+ 	 * allocate/free it every time bpf_check() is called
+@@ -7130,6 +7455,9 @@ int bpf_check(struct bpf_prog **prog, union bpf_attr *attr,
+ 			goto err_unlock;
+ 	}
+ 
++	is_priv = capable(CAP_SYS_ADMIN);
++	env->allow_ptr_leaks = is_priv;
++
+ 	ret = replace_map_fd_with_map_ptr(env);
+ 	if (ret < 0)
+ 		goto skip_full_check;
+@@ -7141,8 +7469,6 @@ int bpf_check(struct bpf_prog **prog, union bpf_attr *attr,
+ 	if (!env->explored_states)
+ 		goto skip_full_check;
+ 
+-	env->allow_ptr_leaks = capable(CAP_SYS_ADMIN);
+-
+ 	ret = check_cfg(env);
+ 	if (ret < 0)
+ 		goto skip_full_check;
+@@ -7161,12 +7487,21 @@ int bpf_check(struct bpf_prog **prog, union bpf_attr *attr,
+ 	while (!pop_stack(env, NULL, NULL));
+ 	free_states(env);
+ 
+-	if (ret == 0)
+-		sanitize_dead_code(env);
+-
+ 	if (ret == 0)
+ 		ret = check_max_stack_depth(env);
+ 
++	/* Instruction rewrites happen after this point. */
++	if (is_priv) {
++		if (ret == 0)
++			opt_hard_wire_dead_code_branches(env);
++		if (ret == 0)
++			ret = opt_remove_dead_code(env);
++		if (ret == 0)
++			ret = opt_remove_nops(env);
++	} else if (ret == 0) {
++		sanitize_dead_code(env);
++	}
++
+ 	if (ret == 0)
+ 		/* program is valid, convert *(u32*)(ctx + off) accesses */
+ 		ret = convert_ctx_accesses(env);
+diff --git a/net/core/filter.c b/net/core/filter.c
+index bb4c7d838f3b146ae0f4e4101724e899d53cd71f..66e9d752a64139a6dd3c70ad54c8e6841a3947c1 100644
+--- a/net/core/filter.c
++++ b/net/core/filter.c
+@@ -3713,6 +3713,12 @@ bpf_base_func_proto(enum bpf_func_id func_id)
+ 		return &bpf_map_update_elem_proto;
+ 	case BPF_FUNC_map_delete_elem:
+ 		return &bpf_map_delete_elem_proto;
++	case BPF_FUNC_map_push_elem:
++		return &bpf_map_push_elem_proto;
++	case BPF_FUNC_map_pop_elem:
++		return &bpf_map_pop_elem_proto;
++	case BPF_FUNC_map_peek_elem:
++		return &bpf_map_peek_elem_proto;
+ 	case BPF_FUNC_get_prandom_u32:
+ 		return &bpf_get_prandom_u32_proto;
+ 	case BPF_FUNC_get_smp_processor_id:

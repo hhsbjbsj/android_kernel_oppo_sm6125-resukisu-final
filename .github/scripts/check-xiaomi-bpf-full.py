@@ -49,6 +49,16 @@ for token in (
 for token in ("DEFINE_IDR(btf_idr)", "DEFINE_SPINLOCK(btf_idr_lock)"):
     need(btf, token, "BTF ID registry")
 
+# Xiaomi BTF next-id accesses this registry from syscall.c, so the objects must
+# remain externally visible. A later upstream BTF backport must not silently
+# restore the older `static` spelling just because it appears as patch context.
+for pattern, label in (
+    (r"^\s*static\s+DEFINE_IDR\(btf_idr\);", "btf_idr became static"),
+    (r"^\s*static\s+DEFINE_SPINLOCK\(btf_idr_lock\);", "btf_idr_lock became static"),
+):
+    if re.search(pattern, btf, re.M):
+        raise AssertionError(label)
+
 for token in (
     "queue_map_ops",
     "stack_map_ops",

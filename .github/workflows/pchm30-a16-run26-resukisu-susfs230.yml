@@ -18,6 +18,8 @@ on:
       - '.github/patches/bpf-v414236-spectre-clean.series'
       - '.github/scripts/check-xiaomi-bpf-full.py'
       - '.github/patches/xiaomi-bpf-full/**'
+      - '.github/scripts/exp3-btf-backport.sh'
+      - '.github/scripts/normalize-btf-var-datasec-patch.py'
       - '.github/scripts/run25-susfs230-adapt.sh'
       - '.github/scripts/package-pchm30-run17-ak3.sh'
       - '.github/scripts/run26-disable-kpm.sh'

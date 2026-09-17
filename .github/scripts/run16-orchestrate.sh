@@ -80,9 +80,100 @@ run_step 'Prepare successful EXP1 step runner'
 run_step 'Prepare proven root step runner'
 run_step 'Pin rootless baseline and prepare A16 step runner'
 run_step 'Reproduce exact successful A16 source state'
+
+echo '===== APPLY PINNED LINUX 4.14.236 BPF SPECULATIVE-POINTER HARDENING ====='
+git fetch --no-tags --depth=1 origin "$GITHUB_SHA"
+git show "$GITHUB_SHA:.github/patches/bpf-v414236-spectre-clean.patch" > \
+  "$GITHUB_WORKSPACE/bpf-v414236-spectre-clean.patch"
+git show "$GITHUB_SHA:.github/scripts/check-bpf-v414236-spectre.py" > \
+  "$GITHUB_WORKSPACE/check-bpf-v414236-spectre.py"
+echo 'd9c82e5c8116c5314fffe67e1b65497f350b787fa0b6906317d5a3fd6fcb61ea  bpf-v414236-spectre-clean.patch' | \
+  (cd "$GITHUB_WORKSPACE" && sha256sum -c -)
+git apply --check "$GITHUB_WORKSPACE/bpf-v414236-spectre-clean.patch"
+git apply "$GITHUB_WORKSPACE/bpf-v414236-spectre-clean.patch"
+python3 "$GITHUB_WORKSPACE/check-bpf-v414236-spectre.py" .
+git diff --check
+git add \
+  include/linux/bpf_verifier.h \
+  kernel/bpf/verifier.c \
+  tools/testing/selftests/bpf/test_verifier.c
+git commit -m 'bpf: backport clean Linux 4.14.236 speculative-pointer hardening'
+echo '[PASS] pinned clean 4.14.236 BPF hardening applied; LF hashtab changes excluded'
+
+echo '===== APPLY XIAOMI BPF SIX-FEATURE FULL DEPENDENCY CHAIN ====='
+git show "$GITHUB_SHA:.github/patches/xiaomi-bpf-full/adaptations/9001-oppo-a16-bpf-integration.patch" > \
+  "$GITHUB_WORKSPACE/xiaomi-bpf-full.patch"
+git show "$GITHUB_SHA:.github/scripts/check-xiaomi-bpf-full.py" > \
+  "$GITHUB_WORKSPACE/check-xiaomi-bpf-full.py"
+echo '1f02104d3b55c269831826f8e6847423b62d3d965a062288fc26757714079ded  xiaomi-bpf-full.patch' | \
+  (cd "$GITHUB_WORKSPACE" && sha256sum -c -)
+git apply --check "$GITHUB_WORKSPACE/xiaomi-bpf-full.patch"
+git apply "$GITHUB_WORKSPACE/xiaomi-bpf-full.patch"
+python3 "$GITHUB_WORKSPACE/check-bpf-v414236-spectre.py" .
+python3 "$GITHUB_WORKSPACE/check-xiaomi-bpf-full.py" .
+git diff --check
+git add \
+  Documentation/networking/filter.txt \
+  include/uapi/linux/bpf.h \
+  include/linux/bpf.h \
+  include/linux/bpf_types.h \
+  include/linux/bpf_verifier.h \
+  include/linux/filter.h \
+  kernel/bpf/Makefile \
+  kernel/bpf/bpf_lru_list.c \
+  kernel/bpf/bpf_lru_list.h \
+  kernel/bpf/btf.c \
+  kernel/bpf/core.c \
+  kernel/bpf/disasm.c \
+  kernel/bpf/helpers.c \
+  kernel/bpf/inode.c \
+  kernel/bpf/map_in_map.c \
+  kernel/bpf/map_in_map.h \
+  kernel/bpf/offload.c \
+  kernel/bpf/percpu_freelist.c \
+  kernel/bpf/percpu_freelist.h \
+  kernel/bpf/queue_stack_maps.c \
+  kernel/bpf/stackmap.c \
+  kernel/bpf/syscall.c \
+  kernel/bpf/verifier.c \
+  kernel/bpf/tnum.c \
+  net/core/filter.c \
+  tools/include/linux/filter.h \
+  tools/include/uapi/linux/bpf.h
+git commit -m 'bpf: backport Xiaomi six-feature full dependency chain'
+echo '[PASS] Xiaomi MAP_FREEZE, lookup-delete, queue/stack, BTF next-id, JMP32 and bounded loops applied'
+
+echo '===== CLOSE XIAOMI BOUNDED-LOOP VERIFIER PREREQUISITES ====='
+git show "$GITHUB_SHA:.github/scripts/repair-xiaomi-bpf-bounded-closure.py" > \
+  "$GITHUB_WORKSPACE/repair-xiaomi-bpf-bounded-closure.py"
+git show "$GITHUB_SHA:.github/scripts/check-xiaomi-bpf-bounded-closure.py" > \
+  "$GITHUB_WORKSPACE/check-xiaomi-bpf-bounded-closure.py"
+python3 "$GITHUB_WORKSPACE/repair-xiaomi-bpf-bounded-closure.py" .
+python3 "$GITHUB_WORKSPACE/check-bpf-v414236-spectre.py" .
+python3 "$GITHUB_WORKSPACE/check-xiaomi-bpf-full.py" .
+python3 "$GITHUB_WORKSPACE/check-xiaomi-bpf-bounded-closure.py" .
+git diff --check
+git add include/linux/bpf_verifier.h kernel/bpf/verifier.c
+git commit -m 'bpf: close Xiaomi bounded-loop verifier prerequisites'
+echo '[PASS] bounded-loop prerequisite closure preserves 4.14.236 and Xiaomi checkpoints'
+
 run_step 'Layer verified ReSukiSU SUSFS hooks'
 run_step 'Patch netbpfload uname compatibility'
 run_step 'Prepare proven A16 root config'
+
+echo '===== SMOKE-COMPILE REPAIRED BPF CLOSURE BEFORE LONG BUILD ====='
+unset LLVM LLVM_IAS KBUILD_COMPILER_STRING
+make O="$OUT_DIR" ARCH=arm64 LOCALVERSION=+ \
+  CC="$CC" REAL_CC="$REAL_CC" LD="$LD" \
+  CROSS_COMPILE="$CROSS_COMPILE" \
+  CROSS_COMPILE_ARM32="$CROSS_COMPILE_ARM32" \
+  CLANG_TRIPLE="$CLANG_TRIPLE" \
+  kernel/bpf/verifier.o kernel/bpf/core.o net/core/filter.o -j"$(nproc)"
+test -s "$OUT_DIR/kernel/bpf/verifier.o"
+test -s "$OUT_DIR/kernel/bpf/core.o"
+test -s "$OUT_DIR/net/core/filter.o"
+echo '[PASS] repaired verifier/core/filter smoke compile before long build'
+
 run_step 'Enable BPF stream parser for sockmap sockhash'
 run_step 'Relax module signature enforcement for WiFi experiment only'
 
@@ -154,6 +245,8 @@ grep -Fq 'PCHM30 A16 late-DLKM: AVS not ready, defer q6core probe' "$RUN16_STRIN
 grep -Fq 'A16-BPF compat uname:' "$RUN16_STRINGS_ALL"
 grep -q ' sock_map_ops$' "$RUN16_NM_ALL"
 grep -q ' sock_hash_ops$' "$RUN16_NM_ALL"
+grep -q ' queue_map_ops$' "$RUN16_NM_ALL"
+grep -q ' queue_stack_map_ops$' "$RUN16_NM_ALL"
 
 {
   echo '===== built-in object sizes ====='

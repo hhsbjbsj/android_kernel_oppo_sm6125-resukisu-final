@@ -268,7 +268,7 @@ grep -Fq 'A16-BPF compat uname:' "$RUN16_STRINGS_ALL"
 grep -q ' sock_map_ops$' "$RUN16_NM_ALL"
 grep -q ' sock_hash_ops$' "$RUN16_NM_ALL"
 grep -q ' queue_map_ops$' "$RUN16_NM_ALL"
-grep -q ' queue_stack_map_ops$' "$RUN16_NM_ALL"
+grep -q ' stack_map_ops$' "$RUN16_NM_ALL"
 
 {
   echo '===== built-in archive evidence ====='

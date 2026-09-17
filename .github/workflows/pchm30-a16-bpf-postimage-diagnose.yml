@@ -1,0 +1,87 @@
+name: PCHM30 A16 BPF Postimage Diagnose
+
+on:
+  push:
+    branches: [pchm30-a16-xiaomi-bpf-full-deps]
+    paths:
+      - '.github/workflows/pchm30-a16-bpf-postimage-diagnose.yml'
+
+env:
+  TOOLCHAIN_RELEASE_TAG: pchm30-build-environment-20260810
+  TOOLCHAIN_ROOT: /opt/pchm30-toolchains
+  KERNEL_REL: source/android/kernel/msm-4.14
+  OUT_DIR: out-pchm30-a16-bpf
+  CONFIG_FILE: configs/PCHM30-stock-running.config
+  OPPO_VENDOR_REPO: https://github.com/oppo-source/android_kernel_modules_and_devicetree_oppo_sm6125.git
+  OPPO_VENDOR_COMMIT: 5e7bee452c72c948427b9131bec8cd5d92934f83
+  ARESIN_REPO: https://github.com/jsdizkcksv/android_kernel_aresin.git
+  ARESIN_PREREQ: 620d928acca50c8ba013554fc798dcf8b8910918
+  A15_FIRST: a2b662dced04902eb8f1778ec8e30259dc680ff4
+  A15_LAST: bd379f8140acc083fc386cc2600ee205b2a54e31
+  A16_FIRST: c2c621b5448adc69e105b1519b93dd637a581da5
+  A16_LAST: c74436291044381d4365d91afa0c8f4a574b22b4
+  ROOT_SNAPSHOT: b667ba359bf7da11b43c5d6403788d21c19facd7
+  RESUKISU_COMMIT: 833edb0e8e4bc11ac8e976edd7de42da6bdc5bd2
+  ROOT_SUCCESS_BRANCH: pchm30-a16-resukisu-susfs220
+  ROOT_SUCCESS_WORKFLOW: .github/workflows/pchm30-a16-resukisu-susfs220-build.yml
+  EXP1_BRANCH: pchm30-a16-btf-sockmap-exp1
+  EXP1_WORKFLOW: .github/workflows/pchm30-a16-btf-sockmap-exp1-v2.yml
+  WIFI_SUCCESS_BRANCH: pchm30-a16-wifi-abi-exp1
+  WIFI_SUCCESS_WORKFLOW: .github/workflows/pchm30-a16-wifi-abi-exp1-build.yml
+  EXP2_BRANCH: pchm30-a16-btf-exp2-diagnose
+  EXP2_WORKFLOW: .github/workflows/pchm30-a16-btf-exp2-diagnose.yml
+  UPSTREAM_BTF_UAPI: f063c889c9458354a92b235a51cbb60d30321070
+  UPSTREAM_BTF_KERNEL: 1dc92851849cc2235a1efef8f8d5a9255efc5f13
+  RUN17_BTF_FIX_COMMIT: bc983ae72d5795d0ec2a5b5dd4292dfab1417e57
+  GH_TOKEN: ${{ github.token }}
+
+jobs:
+  capture:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    steps:
+      - name: Checkout exact successful A16 rootless baseline
+        uses: actions/checkout@v4
+        with:
+          ref: pchm30-a16-bpf-only
+          path: source/android/kernel/msm-4.14
+          fetch-depth: 1
+          submodules: false
+
+      - name: Reproduce through Xiaomi patch and capture postimage
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          cd "$GITHUB_WORKSPACE/$KERNEL_REL"
+          git fetch --no-tags --depth=1 origin "$GITHUB_SHA"
+          git show "$GITHUB_SHA:.github/scripts/run16-orchestrate.sh" > "$GITHUB_WORKSPACE/diag-run16.sh"
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path(__import__('os').environ['GITHUB_WORKSPACE']) / 'diag-run16.sh'
+          s = p.read_text()
+          needle = "git commit -m 'bpf: backport Xiaomi six-feature full dependency chain'\necho '[PASS] Xiaomi MAP_FREEZE, lookup-delete, queue/stack, BTF next-id, JMP32 and bounded loops applied'\n"
+          repl = needle + r'''
+mkdir -p "$GITHUB_WORKSPACE/postimage"
+cp -a include/linux/bpf_verifier.h "$GITHUB_WORKSPACE/postimage/include-linux-bpf_verifier.h"
+cp -a include/linux/bpf.h "$GITHUB_WORKSPACE/postimage/include-linux-bpf.h"
+cp -a kernel/bpf/verifier.c "$GITHUB_WORKSPACE/postimage/kernel-bpf-verifier.c"
+cp -a net/core/filter.c "$GITHUB_WORKSPACE/postimage/net-core-filter.c"
+git diff HEAD^..HEAD -- include/linux/bpf_verifier.h include/linux/bpf.h kernel/bpf/verifier.c net/core/filter.c > "$GITHUB_WORKSPACE/postimage/xiaomi-commit.diff"
+echo '[PASS] diagnostic postimage captured before ReSukiSU/build stages'
+exit 0
+'''
+          if needle not in s:
+              raise SystemExit('cannot locate Xiaomi commit checkpoint in run16')
+          p.write_text(s.replace(needle, repl, 1))
+          PY
+          chmod +x "$GITHUB_WORKSPACE/diag-run16.sh"
+          "$GITHUB_WORKSPACE/diag-run16.sh" 2>&1 | tee "$GITHUB_WORKSPACE/postimage-diagnose.log"
+
+      - name: Upload exact postimage
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pchm30-a16-bpf-postimage
+          path: |
+            postimage/
+            postimage-diagnose.log

@@ -93,6 +93,43 @@ grep -Fxq 'DEFINE_SPINLOCK(btf_idr_lock);' kernel/bpf/btf.c
 ! grep -Fxq 'static DEFINE_SPINLOCK(btf_idr_lock);' kernel/bpf/btf.c
 echo '[PASS] Xiaomi BTF idr visibility preserved across VAR/DATASEC backport'
 
+# The Xiaomi lookup-and-delete backport was taken from a syscall.c baseline
+# that already had __bpf_copy_key(). The OPPO 4.14 baseline does not. Backport
+# that helper semantically and fail closed if the expected lookup-delete anchor
+# is absent or if a duplicate definition would be created.
+python3 - <<'PY'
+from pathlib import Path
+p = Path('kernel/bpf/syscall.c')
+s = p.read_text()
+sig = 'static void *__bpf_copy_key(void __user *ukey, u64 key_size)'
+anchor = '#define BPF_MAP_LOOKUP_AND_DELETE_ELEM_LAST_FIELD value\n'
+helper = '''static void *__bpf_copy_key(void __user *ukey, u64 key_size)
+{
+	if (key_size)
+		return memdup_user(ukey, key_size);
+
+	if (ukey)
+		return ERR_PTR(-EINVAL);
+
+	return NULL;
+}
+
+'''
+if sig not in s:
+    if s.count(anchor) != 1:
+        raise SystemExit('[ERROR] cannot locate unique lookup-delete anchor for __bpf_copy_key backport')
+    s = s.replace(anchor, helper + anchor, 1)
+    p.write_text(s)
+
+s = p.read_text()
+if s.count(sig) != 1:
+    raise SystemExit('[ERROR] __bpf_copy_key backport is missing or duplicated')
+print('[PASS] __bpf_copy_key dependency available for Xiaomi lookup-delete backport')
+PY
+
+grep -Fq 'static void *__bpf_copy_key(void __user *ukey, u64 key_size)' kernel/bpf/syscall.c
+grep -Fq 'return memdup_user(ukey, key_size);' kernel/bpf/syscall.c
+
 # EXP3 Run4 proved that kinds 14/15 are now recognized, but btf_parse_type_sec
 # still returns -EINVAL deeper in the verifier. Do not relax semantics here.
 # Instead, pinpoint whether the rejection is in metadata validation or the

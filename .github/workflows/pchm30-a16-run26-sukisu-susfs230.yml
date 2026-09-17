@@ -1,16 +1,25 @@
-name: PCHM30 A16 Run26 SukiSU SUSFS 2.3.0
+name: PCHM30 A16 SukiSU Xiaomi BPF FULL DEPS
 # SukiSU line from Run25/Run24. Keep in-tree 4.14 susfs.c + 4.14 VFS ABI. KPM stays on.
-# ReSukiSU: main HEAD. SukiSU: builtin HEAD (main has no in-tree SUSFS).
+# Xiaomi BPF full dependency chain is injected through the current branch's run16-orchestrate.sh.
 # Do NOT copy SM8250/GKI getname_flags+filename_lookup; that hangs first splash on 4.14.
 
 on:
   workflow_dispatch:
   push:
-    branches: [pchm30-a16-run26-susfs230-split]
+    branches: [pchm30-a16-run26-sukisu-xiaomi-bpf-full-deps]
     paths:
       - '.github/workflows/pchm30-a16-run26-sukisu-susfs230.yml'
       - '.github/workflows/pchm30-a16-run24-selinux-hide.yml'
       - '.github/workflows/pchm30-a16-run19-kpm-exp1.yml'
+      - '.github/scripts/run16-orchestrate.sh'
+      - '.github/scripts/check-bpf-v414236-spectre.py'
+      - '.github/patches/bpf-v414236-spectre-clean.patch'
+      - '.github/scripts/check-xiaomi-bpf-full.py'
+      - '.github/scripts/check-xiaomi-bpf-bounded-closure.py'
+      - '.github/scripts/repair-xiaomi-bpf-bounded-closure.py'
+      - '.github/patches/xiaomi-bpf-full/**'
+      - '.github/scripts/exp3-btf-backport.sh'
+      - '.github/scripts/normalize-btf-var-datasec-patch.py'
       - '.github/scripts/run18-sukisu-swap.sh'
       - '.github/scripts/run19-kpm-enable.sh'
       - '.github/scripts/run24-selinux-hide-compat.sh'
@@ -64,7 +73,7 @@ env:
 
 jobs:
   build:
-    name: Run26 SukiSU + SUSFS 2.3.0, KPM on
+    name: Run26 SukiSU + SUSFS 2.3.0 + Xiaomi BPF full deps + KPM
     runs-on: ubuntu-22.04
     timeout-minutes: 360
     steps:
@@ -164,9 +173,11 @@ jobs:
           git show "$GITHUB_SHA:.github/scripts/inject-run28-sukisu.py" > "$GITHUB_WORKSPACE/inject-run28-sukisu.py"
           python3 "$GITHUB_WORKSPACE/inject-run28-sukisu.py"
 
-      - name: Build Run24 SukiSU stack with SUSFS 2.3.0 overlay and KPM
+      - name: Build Run24 SukiSU stack with SUSFS 2.3.0 overlay, Xiaomi BPF full deps and KPM
         shell: bash
-        run: python3 "$GITHUB_WORKSPACE/run-run19-step.py" 'Build Run19 from proven Run18 stack with KPM compiled in'
+        run: |
+          set -Eeuo pipefail
+          python3 "$GITHUB_WORKSPACE/run-run19-step.py" 'Build Run19 from proven Run18 stack with KPM compiled in' 2>&1 | tee "$GITHUB_WORKSPACE/run26-sukisu-build.log"
 
       - name: Verify generated source and SUSFS 2.3.0
         working-directory: source/android/kernel/msm-4.14
@@ -201,14 +212,15 @@ jobs:
           python3 "$GITHUB_WORKSPACE/run-run19-step.py" 'Patch final Image with pinned SukiSU KPM patcher'
           python3 "$GITHUB_WORKSPACE/run-run19-step.py" 'Package reusable PCHM30 Run19 KPM AnyKernel3 ZIP'
           grep -Fq '#define SUSFS_VERSION "v2.3.0"' "$GITHUB_WORKSPACE/$KERNEL_REL/include/linux/susfs.h"
-          echo '[PASS] Run26 compiled SukiSU + SUSFS 2.3.0 with 4.14 user_path_at hooks and KPM'
+          echo '[PASS] Run26 compiled SukiSU + SUSFS 2.3.0 + Xiaomi BPF full deps with 4.14 user_path_at hooks and KPM'
 
       - name: Upload Run26 SukiSU artifact
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: PCHM30-A16-RUN26-SUKISU-SUSFS230-${{ github.run_number }}
+          name: PCHM30-A16-RUN26-SUKISU-XIAOMI-BPF-FULL-${{ github.run_number }}
           path: |
+            run26-sukisu-build.log
             run25-susfs230-adapt.log
             run25-susfs230-proof.txt
             run28-extra-features.log

@@ -200,14 +200,35 @@ test -s "$IMAGE"
 test -s "$VMLINUX"
 
 echo '===== RUN16 VERIFY TRUE BUILT-INS ====='
-test -s "$OUT_DIR/techpack/audio/built-in.o"
-test -s "$OUT_DIR/techpack/audio/ipc/built-in.o"
-test -s "$OUT_DIR/techpack/audio/dsp/built-in.o"
-test -s "$OUT_DIR/techpack/audio/asoc/built-in.o"
-test -s "$OUT_DIR/techpack/audio/asoc/codecs/wcd934x/built-in.o"
-test -s "$OUT_DIR/techpack/audio/asoc/codecs/sia81xx/built-in.o"
-test -s "$OUT_DIR/drivers/staging/qcacld-3.0/built-in.o"
-test -s "$OUT_DIR/drivers/platform/msm/msm_11ad/built-in.o"
+RUN16_BUILD_LOG="$GITHUB_WORKSPACE/run26-build.log"
+verify_builtin_archive() {
+  local rel="$1"
+  local abs="$OUT_DIR/$rel"
+  if [ -s "$abs" ]; then
+    printf '[PASS] built-in archive retained: %s (%s bytes)\n' "$rel" "$(stat -c %s "$abs")"
+    return 0
+  fi
+  if [ -s "$RUN16_BUILD_LOG" ] && grep -Fq "  AR      $rel" "$RUN16_BUILD_LOG"; then
+    printf '[INFO] built-in archive was produced then discarded by final Kbuild link: %s\n' "$rel"
+    return 0
+  fi
+  printf '[FATAL] no retained archive and no AR build evidence: %s\n' "$rel" >&2
+  return 1
+}
+
+RUN16_ARCHIVES=(
+  'techpack/audio/built-in.o'
+  'techpack/audio/ipc/built-in.o'
+  'techpack/audio/dsp/built-in.o'
+  'techpack/audio/asoc/built-in.o'
+  'techpack/audio/asoc/codecs/wcd934x/built-in.o'
+  'techpack/audio/asoc/codecs/sia81xx/built-in.o'
+  'drivers/staging/qcacld-3.0/built-in.o'
+  'drivers/platform/msm/msm_11ad/built-in.o'
+)
+for rel in "${RUN16_ARCHIVES[@]}"; do
+  verify_builtin_archive "$rel"
+done
 
 if [ -n "$(find "$OUT_DIR/techpack/audio" -type f -name '*.ko' -print -quit)" ]; then
   echo '[FATAL] audio .ko still produced in built-in experiment'
@@ -240,6 +261,7 @@ grep -Eq '[[:space:]]q6core_probe$' "$RUN16_NM_ALL"
 grep -Eq '[[:space:]]tavil_cdc_mclk_enable$' "$RUN16_NM_ALL"
 grep -Eq '[[:space:]]sia81xx_' "$RUN16_NM_ALL"
 grep -Eq '[[:space:]]wlan_hdd_' "$RUN16_NM_ALL"
+grep -Eq '[[:space:]]msm_11ad_probe$' "$RUN16_NM_ALL"
 grep -Fq 'PCHM30 A16 late-DLKM: schedule APR child population from probe' "$RUN16_STRINGS_ALL"
 grep -Fq 'PCHM30 A16 late-DLKM: AVS not ready, defer q6core probe' "$RUN16_STRINGS_ALL"
 grep -Fq 'A16-BPF compat uname:' "$RUN16_STRINGS_ALL"
@@ -249,19 +271,17 @@ grep -q ' queue_map_ops$' "$RUN16_NM_ALL"
 grep -q ' queue_stack_map_ops$' "$RUN16_NM_ALL"
 
 {
-  echo '===== built-in object sizes ====='
-  stat -c '%s %n' \
-    "$OUT_DIR/techpack/audio/built-in.o" \
-    "$OUT_DIR/techpack/audio/ipc/built-in.o" \
-    "$OUT_DIR/techpack/audio/dsp/built-in.o" \
-    "$OUT_DIR/techpack/audio/asoc/built-in.o" \
-    "$OUT_DIR/techpack/audio/asoc/codecs/wcd934x/built-in.o" \
-    "$OUT_DIR/techpack/audio/asoc/codecs/sia81xx/built-in.o" \
-    "$OUT_DIR/drivers/staging/qcacld-3.0/built-in.o" \
-    "$OUT_DIR/drivers/platform/msm/msm_11ad/built-in.o"
+  echo '===== built-in archive evidence ====='
+  for rel in "${RUN16_ARCHIVES[@]}"; do
+    if [ -s "$OUT_DIR/$rel" ]; then
+      stat -c '%s %n' "$OUT_DIR/$rel"
+    else
+      printf 'linked-and-discarded %s\n' "$rel"
+    fi
+  done
   echo '===== key vmlinux symbols ====='
-  grep -E ' apr_probe$| q6core_probe$| tavil_cdc_mclk_enable$| sia81xx_| wlan_hdd_' "$RUN16_NM_ALL" > "$GITHUB_WORKSPACE/run16-key-vmlinux-symbols.txt"
-  head -n 120 "$GITHUB_WORKSPACE/run16-key-vmlinux-symbols.txt"
+  grep -E ' apr_probe$| q6core_probe$| tavil_cdc_mclk_enable$| sia81xx_| wlan_hdd_| msm_11ad_probe$' "$RUN16_NM_ALL" > "$GITHUB_WORKSPACE/run16-key-vmlinux-symbols.txt"
+  head -n 140 "$GITHUB_WORKSPACE/run16-key-vmlinux-symbols.txt"
 } | tee "$GITHUB_WORKSPACE/run16-builtin-proof.txt"
 
 find "$OUT_DIR/techpack/audio" "$OUT_DIR/drivers/staging/qcacld-3.0" \

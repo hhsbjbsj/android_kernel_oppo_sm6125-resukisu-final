@@ -143,9 +143,37 @@ git add \
 git commit -m 'bpf: backport Xiaomi six-feature full dependency chain'
 echo '[PASS] Xiaomi MAP_FREEZE, lookup-delete, queue/stack, BTF next-id, JMP32 and bounded loops applied'
 
+echo '===== CLOSE XIAOMI BOUNDED-LOOP VERIFIER PREREQUISITES ====='
+git show "$GITHUB_SHA:.github/scripts/repair-xiaomi-bpf-bounded-closure.py" > \
+  "$GITHUB_WORKSPACE/repair-xiaomi-bpf-bounded-closure.py"
+git show "$GITHUB_SHA:.github/scripts/check-xiaomi-bpf-bounded-closure.py" > \
+  "$GITHUB_WORKSPACE/check-xiaomi-bpf-bounded-closure.py"
+python3 "$GITHUB_WORKSPACE/repair-xiaomi-bpf-bounded-closure.py" .
+python3 "$GITHUB_WORKSPACE/check-bpf-v414236-spectre.py" .
+python3 "$GITHUB_WORKSPACE/check-xiaomi-bpf-full.py" .
+python3 "$GITHUB_WORKSPACE/check-xiaomi-bpf-bounded-closure.py" .
+git diff --check
+git add include/linux/bpf_verifier.h kernel/bpf/verifier.c
+git commit -m 'bpf: close Xiaomi bounded-loop verifier prerequisites'
+echo '[PASS] bounded-loop prerequisite closure preserves 4.14.236 and Xiaomi checkpoints'
+
 run_step 'Layer verified ReSukiSU SUSFS hooks'
 run_step 'Patch netbpfload uname compatibility'
 run_step 'Prepare proven A16 root config'
+
+echo '===== SMOKE-COMPILE REPAIRED BPF CLOSURE BEFORE LONG BUILD ====='
+unset LLVM LLVM_IAS KBUILD_COMPILER_STRING
+make O="$OUT_DIR" ARCH=arm64 LOCALVERSION=+ \
+  CC="$CC" REAL_CC="$REAL_CC" LD="$LD" \
+  CROSS_COMPILE="$CROSS_COMPILE" \
+  CROSS_COMPILE_ARM32="$CROSS_COMPILE_ARM32" \
+  CLANG_TRIPLE="$CLANG_TRIPLE" \
+  kernel/bpf/verifier.o kernel/bpf/core.o net/core/filter.o -j"$(nproc)"
+test -s "$OUT_DIR/kernel/bpf/verifier.o"
+test -s "$OUT_DIR/kernel/bpf/core.o"
+test -s "$OUT_DIR/net/core/filter.o"
+echo '[PASS] repaired verifier/core/filter smoke compile before long build'
+
 run_step 'Enable BPF stream parser for sockmap sockhash'
 run_step 'Relax module signature enforcement for WiFi experiment only'
 

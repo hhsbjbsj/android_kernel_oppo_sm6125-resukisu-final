@@ -57,22 +57,24 @@ jobs:
           git show "$GITHUB_SHA:.github/scripts/run16-orchestrate.sh" > "$GITHUB_WORKSPACE/diag-run16.sh"
           python3 - <<'PY'
           from pathlib import Path
-          p = Path(__import__('os').environ['GITHUB_WORKSPACE']) / 'diag-run16.sh'
+          import os
+          p = Path(os.environ['GITHUB_WORKSPACE']) / 'diag-run16.sh'
           s = p.read_text()
           needle = "git commit -m 'bpf: backport Xiaomi six-feature full dependency chain'\necho '[PASS] Xiaomi MAP_FREEZE, lookup-delete, queue/stack, BTF next-id, JMP32 and bounded loops applied'\n"
-          repl = needle + r'''
-mkdir -p "$GITHUB_WORKSPACE/postimage"
-cp -a include/linux/bpf_verifier.h "$GITHUB_WORKSPACE/postimage/include-linux-bpf_verifier.h"
-cp -a include/linux/bpf.h "$GITHUB_WORKSPACE/postimage/include-linux-bpf.h"
-cp -a kernel/bpf/verifier.c "$GITHUB_WORKSPACE/postimage/kernel-bpf-verifier.c"
-cp -a net/core/filter.c "$GITHUB_WORKSPACE/postimage/net-core-filter.c"
-git diff HEAD^..HEAD -- include/linux/bpf_verifier.h include/linux/bpf.h kernel/bpf/verifier.c net/core/filter.c > "$GITHUB_WORKSPACE/postimage/xiaomi-commit.diff"
-echo '[PASS] diagnostic postimage captured before ReSukiSU/build stages'
-exit 0
-'''
+          extra = "\n".join([
+              'mkdir -p "$GITHUB_WORKSPACE/postimage"',
+              'cp -a include/linux/bpf_verifier.h "$GITHUB_WORKSPACE/postimage/include-linux-bpf_verifier.h"',
+              'cp -a include/linux/bpf.h "$GITHUB_WORKSPACE/postimage/include-linux-bpf.h"',
+              'cp -a kernel/bpf/verifier.c "$GITHUB_WORKSPACE/postimage/kernel-bpf-verifier.c"',
+              'cp -a net/core/filter.c "$GITHUB_WORKSPACE/postimage/net-core-filter.c"',
+              'git diff HEAD^..HEAD -- include/linux/bpf_verifier.h include/linux/bpf.h kernel/bpf/verifier.c net/core/filter.c > "$GITHUB_WORKSPACE/postimage/xiaomi-commit.diff"',
+              "echo '[PASS] diagnostic postimage captured before ReSukiSU/build stages'",
+              'exit 0',
+              '',
+          ])
           if needle not in s:
               raise SystemExit('cannot locate Xiaomi commit checkpoint in run16')
-          p.write_text(s.replace(needle, repl, 1))
+          p.write_text(s.replace(needle, needle + extra, 1))
           PY
           chmod +x "$GITHUB_WORKSPACE/diag-run16.sh"
           "$GITHUB_WORKSPACE/diag-run16.sh" 2>&1 | tee "$GITHUB_WORKSPACE/postimage-diagnose.log"

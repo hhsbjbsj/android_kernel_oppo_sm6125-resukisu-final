@@ -22,6 +22,9 @@ h = Path('include/linux/susfs.h').read_text()
 h = h.replace('#define SUSFS_VERSION "v2.2.0"', '#define SUSFS_VERSION "v2.3.0"')
 if 'SUSFS_VERSION "v2.3.0"' not in h:
     raise SystemExit('failed to bump susfs.h to v2.3.0')
+if "#define KSTAT_SPOOF_CTIME_TV_SEC (1 < 8)" in h:
+    h = h.replace("#define KSTAT_SPOOF_CTIME_TV_SEC (1 < 8)", "#define KSTAT_SPOOF_CTIME_TV_SEC (1 << 8)")
+    print("fixed KSTAT_SPOOF_CTIME_TV_SEC bitmask typo (1 < 8) -> (1 << 8)", flush=True)
 Path('include/linux/susfs.h').write_text(h)
 
 d = Path('include/linux/susfs_def.h').read_text()
@@ -85,8 +88,64 @@ if '#include <linux/version.h>' not in d:
     else:
         d = d.replace('#define KSU_SUSFS_DEF_H', '#define KSU_SUSFS_DEF_H\n\n#include <linux/version.h>\n#include <linux/cred.h>', 1)
 
+d = ensure_helper(d, "susfs_clear_current_proc_umounted", "\nstatic inline void susfs_clear_current_proc_umounted(void) {\n\tclear_thread_flag(TIF_PROC_UMOUNTED);\n}\n")
+d = ensure_helper(d, "susfs_is_current_app_uid", "\nstatic inline bool susfs_is_current_app_uid(void) {\n\treturn ((current_uid().val % 100000) >= 10000);\n}\n")
+if "#define DEFAULT_KSU_MNT_MINOR_DEV" not in d:
+    d = d.replace("#define DEFAULT_KSU_MNT_GROUP_ID 200000 /* used by mount->mnt_group_id */", "#define DEFAULT_KSU_MNT_GROUP_ID 200000 /* used by mount->mnt_group_id */\n#define DEFAULT_KSU_MNT_MINOR_DEV (1 << 12)")
+if "#define STATX_SUS_KSTAT" not in d:
+    d = ensure_helper(d, "STATX_SUS_KSTAT", "\n#define STATX_SUS_KSTAT 0x10000000U\n#define STATX_SUS_KSTAT_FUSE 0x20000000U\n")
 Path('include/linux/susfs_def.h').write_text(d)
 print('lifted TIF_PROC_NO_SU helpers; VFS ABI stays 4.14 user_path_at', flush=True)
+# 3. Adapt fs/susfs.c with canonical upstream 2.3.0 bugfixes
+c = Path("fs/susfs.c").read_text()
+old_features = """	if (!info) {
+		info->err = -ENOMEM;
+		goto out_copy_to_user;
+	}"""
+new_features = """	if (!info) {
+		int err = -ENOMEM;
+		if (copy_to_user(&((struct st_susfs_enabled_features __user*)*user_info)->err, &err, sizeof(err)))
+			err = -EFAULT;
+		SUSFS_LOGI("CMD_SUSFS_SHOW_ENABLED_FEATURES -> ret: %d\\n", err);
+		return;
+	}"""
+if old_features in c:
+    c = c.replace(old_features, new_features, 1)
+    print("fixed NULL deref in susfs_get_enabled_features", flush=True)
+old_cmdline = """void susfs_spoof_cmdline_or_bootconfig(struct seq_file *m) {
+	unsigned seq;
+
+	do {
+		seq = read_seqbegin(&susfs_fake_cmdline_or_bootconfig_seqlock);
+		seq_puts(m, fake_cmdline_or_bootconfig);
+	} while (read_seqretry(&susfs_fake_cmdline_or_bootconfig_seqlock, seq));
+}"""
+new_cmdline = """void susfs_spoof_cmdline_or_bootconfig(struct seq_file *m) {
+	unsigned seq;
+	char *buf = (char *)kmalloc(SUSFS_FAKE_CMDLINE_OR_BOOTCONFIG_SIZE, GFP_KERNEL);
+	if (!buf) return;
+	do {
+		seq = read_seqbegin(&susfs_fake_cmdline_or_bootconfig_seqlock);
+		strscpy(buf, fake_cmdline_or_bootconfig, SUSFS_FAKE_CMDLINE_OR_BOOTCONFIG_SIZE);
+	} while (read_seqretry(&susfs_fake_cmdline_or_bootconfig_seqlock, seq));
+	seq_puts(m, buf);
+	kfree(buf);
+}"""
+if old_cmdline in c:
+    c = c.replace(old_cmdline, new_cmdline, 1)
+    print("fixed duplicate /proc/cmdline output in susfs_spoof_cmdline_or_bootconfig", flush=True)
+old_kstat = """	mutex_unlock(&susfs_mutex_lock_sus_kstat);
+	info.err = -ENOENT;"""
+new_kstat = """	mutex_unlock(&susfs_mutex_lock_sus_kstat);
+	kfree(new_entry);
+	info.err = -ENOENT;"""
+if old_kstat in c:
+    c = c.replace(old_kstat, new_kstat, 1)
+    print("fixed memory leak in susfs_update_sus_kstat", flush=True)
+if "#include <linux/security.h>" not in c:
+    c = c.replace("#include <linux/susfs.h>", "#include <linux/security.h>\n#include <linux/susfs.h>", 1)
+Path("fs/susfs.c").write_text(c)
+print("applied upstream SUSFS 2.3.0 bugfixes to fs/susfs.c", flush=True)
 PY
 
 echo '===== Revert any GKI/SM8250 VFS rewrite back to 4.14 user_path_at ====='

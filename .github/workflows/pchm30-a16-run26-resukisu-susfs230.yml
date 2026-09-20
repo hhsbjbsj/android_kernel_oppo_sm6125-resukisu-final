@@ -9,7 +9,7 @@ name: PCHM30 A16 Xiaomi BPF FULL DEPS
 on:
   workflow_dispatch:
   push:
-    branches: [pchm30-a16-xiaomi-bpf-full-deps]
+    branches: [pchm30-a16-xiaomi-bpf-full-deps, pchm30-a16-resukisu-main-test]
     paths:
       - '.github/workflows/pchm30-a16-run26-resukisu-susfs230.yml'
       - '.github/scripts/run16-orchestrate.sh'
@@ -44,7 +44,7 @@ env:
   A16_FIRST: c2c621b5448adc69e105b1519b93dd637a581da5
   A16_LAST: c74436291044381d4365d91afa0c8f4a574b22b4
   ROOT_SNAPSHOT: b667ba359bf7da11b43c5d6403788d21c19facd7
-  RESUKISU_COMMIT: 833edb0e8e4bc11ac8e976edd7de42da6bdc5bd2
+  RESUKISU_COMMIT: 6d18926ae6eeb571a04c1ce7552c324d606fa9d8
   ROOT_SUCCESS_BRANCH: pchm30-a16-resukisu-susfs220
   ROOT_SUCCESS_WORKFLOW: .github/workflows/pchm30-a16-resukisu-susfs220-build.yml
   EXP1_BRANCH: pchm30-a16-btf-sockmap-exp1

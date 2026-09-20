@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
-echo '===== Keep ReSukiSU/SukiSU sucompat on 4.14 user-pointer ABI ====='
+echo '===== Keep ReSukiSU/SukiSU sucompat on 4.14 user-pointer ABI + allow_shell ====='
 
 python3 -u - <<'PY'
 from pathlib import Path
@@ -40,57 +40,54 @@ FA_USER = '''int ksu_handle_faccessat(int *dfd, const char __user **filename_use
 	if (likely(memcmp(path, su_path, sizeof(su_path))))
 		return 0;
 	if (current_chrooted()) {
-		pr_err("ksu_handle_faccessat: su found but NOT allowed! Because current process is running in chrooted environment\\n");
+		pr_err("ksu_handle_faccessat: su found but NOT allowed! Because current process is running in chrooted environment\n");
 		return 0;
 	}
-	pr_info("ksu_handle_faccessat: su->sh!\\n");
-	*filename_user = sh_path;
+	pr_info("ksu_handle_faccessat: su->sh!\n");
+	*filename_user = sh_user_path();
 	return 0;
 }'''
 
-FA_USER_SU = FA_USER.replace('su_path', 'su').replace('sh_path', 'sh')
+FA_USER_SU = FA_USER.replace('su_path', 'su')
 
 
 def pick_names(text):
-    if re.search(r'\bsu_path\b', text) and re.search(r'\bsh_path\b', text):
-        return 'su_path', 'sh_path', FA_USER
-    return 'su', 'sh', FA_USER_SU
+    if re.search(r'\bsu_path\b', text):
+        return 'su_path', FA_USER
+    return 'su', FA_USER_SU
 
 
 def adapt_c(path: Path):
     t = path.read_text()
     changed = []
-    su_name, sh_name, fa_body = pick_names(t)
+    su_name, fa_body = pick_names(t)
 
-    for old, new, label in (
-        (
-            """#ifdef CONFIG_KSU_SUSFS
-            if (!susfs_is_current_proc_no_su())
-                susfs_set_current_proc_no_su();
-#endif""",
-            """#ifdef CONFIG_KSU_SUSFS
-            if (!susfs_is_current_proc_umounted())
-                susfs_set_current_proc_umounted();
-#endif""",
-            'exec init: no_su -> umounted',
-        ),
-        ('susfs_is_current_proc_no_su()', 'susfs_is_current_proc_umounted()', 'no_su helper -> umounted'),
-        ('susfs_set_current_proc_no_su()', 'susfs_set_current_proc_umounted()', 'no_su setter -> umounted'),
-    ):
-        if old in t and old != new:
-            t = t.replace(old, new)
-            changed.append(label)
+    # In ReSukiSU, disable the GKI struct filename ** handler so that the 4.14
+    # const char __user **filename_user handler with sh_user_path() in the #else branch is compiled.
+    if re.search(r'#ifdef CONFIG_KSU_SUSFS\s*\nint ksu_handle_faccessat\(int \*dfd, struct filename \*\*filename,', t):
+        t = re.sub(
+            r'#ifdef CONFIG_KSU_SUSFS\s*\nint ksu_handle_faccessat\(int \*dfd, struct filename \*\*filename,',
+            '#if 0 /* SM6125 4.14: uses user-pointer faccessat */\nint ksu_handle_faccessat(int *dfd, struct filename **filename,',
+            t,
+            count=1,
+        )
+        changed.append('disabled GKI faccessat in favor of 4.14 user-pointer handler')
+
+    if re.search(r'#ifdef CONFIG_KSU_SUSFS\s*\nint ksu_handle_stat\(int \*dfd, struct filename \*\*filename,', t):
+        t = re.sub(
+            r'#ifdef CONFIG_KSU_SUSFS\s*\nint ksu_handle_stat\(int \*dfd, struct filename \*\*filename,',
+            '#if 0 /* SM6125 4.14: uses user-pointer stat */\nint ksu_handle_stat(int *dfd, struct filename **filename,',
+            t,
+            count=1,
+        )
+        changed.append('disabled GKI stat in favor of 4.14 user-pointer handler')
 
     fa_fn = re.compile(
         r'int ksu_handle_faccessat\s*\(\s*int \*dfd,\s*(?:struct filename \*\*filename|const char __user \*\*filename_user),\s*int \*mode,\s*int \*\w+\s*\)\s*\{.*?\n\}',
         re.S,
     )
     m = fa_fn.search(t)
-    if not m:
-        raise SystemExit('%s: no faccessat impl to rewrite' % path)
-    if 'const char __user **filename_user' in m.group(0) and 'strncpy_from_user' in m.group(0):
-        changed.append('faccessat already user-pointer')
-    else:
+    if m and 'struct filename **filename' in m.group(0):
         t = t[:m.start()] + fa_body + t[m.end():]
         changed.append('faccessat: installed 4.14 user-pointer handler')
 
@@ -114,9 +111,9 @@ def adapt_c(path: Path):
 		return 0;
 	if (likely(memcmp(path, %s, sizeof(%s))))
 		return 0;
-	*filename_user = %s;
+	*filename_user = sh_user_path();
 	return 0;
-}''' % (su_name, su_name, su_name, sh_name)
+}''' % (su_name, su_name, su_name)
             t = re.sub(
                 r'int ksu_handle_stat\s*\(\s*int \*dfd,\s*const char __user \*\*filename_user,\s*int \*flags\s*\)\s*\{.*?\n\}',
                 stat_user,
@@ -134,8 +131,6 @@ def adapt_c(path: Path):
 
     if not re.search(r'int ksu_handle_faccessat\s*\(\s*int \*dfd,\s*const char __user \*\*filename_user', t):
         raise SystemExit('%s: faccessat still not user-pointer' % path)
-    if re.search(r'int ksu_handle_faccessat\s*\(\s*int \*dfd,\s*struct filename \*\*filename', t):
-        raise SystemExit('%s: faccessat still filename**' % path)
 
     path.write_text(t)
     print('%s: %s' % (path, '; '.join(changed) or 'unchanged'), flush=True)
@@ -146,14 +141,9 @@ def adapt_h(path: Path):
         return
     h = path.read_text()
     h = re.sub(
-        r'int ksu_handle_faccessat\s*\(\s*int \*dfd,\s*struct filename \*\*filename,\s*int \*mode,\s*int \*\w+\s*\)\s*;',
-        'int ksu_handle_faccessat(int *dfd, const char __user **filename_user, int *mode, int *__unused_flags);',
-        h,
-    )
-    h = re.sub(
-        r'int ksu_handle_stat\s*\(\s*int \*dfd,\s*struct filename \*\*filename,\s*int \*flags\s*\)\s*;',
-        'int ksu_handle_stat(int *dfd, const char __user **filename_user, int *flags);',
-        h,
+        r'#ifdef CONFIG_KSU_SUSFS\s*\nint ksu_handle_faccessat\(int \*dfd, struct filename \*\*filename, int \*mode, int \*\w+\);\s*\nint ksu_handle_stat\(int \*dfd, struct filename \*\*filename, int \*flags\);',
+        '#if 0 /* 4.14 user_path_at sucompat ABI */\nint ksu_handle_faccessat(int *dfd, struct filename **filename, int *mode, int *__unused_flags);\nint ksu_handle_stat(int *dfd, struct filename **filename, int *flags);\n#else\nint ksu_handle_faccessat(int *dfd, const char __user **filename_user, int *mode, int *__unused_flags);\nint ksu_handle_stat(int *dfd, const char __user **filename_user, int *flags);',
+        h
     )
     h = h.replace(
         'int ksu_handle_faccessat(int *dfd, struct filename **filename, int *mode, int *__unused_flags);',
@@ -167,11 +157,38 @@ def adapt_h(path: Path):
     print('updated', path, flush=True)
 
 
+def enable_allow_shell():
+    init_paths = [
+        Path('KernelSU/kernel/core/init.c'),
+        Path('drivers/kernelsu/core/init.c'),
+        Path('KernelSU/kernel/init.c'),
+        Path('drivers/kernelsu/init.c'),
+    ]
+    for p in init_paths:
+        if not p.is_file():
+            continue
+        it = p.read_text()
+        it2 = re.sub(
+            r'#ifdef CONFIG_KSU_DEBUG\s*\nbool allow_shell = true;\s*\n#else\s*\nbool allow_shell = false;\s*\n#endif',
+            'bool allow_shell = true; /* enabled for adb shell su */',
+            it
+        )
+        if it2 != it:
+            p.write_text(it2)
+            print(f'{p}: set allow_shell = true for adb shell su', flush=True)
+        elif 'bool allow_shell = false;' in it:
+            it2 = it.replace('bool allow_shell = false;', 'bool allow_shell = true;')
+            p.write_text(it2)
+            print(f'{p}: replaced allow_shell false -> true', flush=True)
+
+
 for cpath in uniq:
     adapt_c(cpath)
     adapt_h(cpath.with_suffix('.h'))
 
-print('[PASS] sucompat kept on 4.14 user-pointer ABI', flush=True)
+enable_allow_shell()
+
+print('[PASS] sucompat kept on 4.14 user-pointer ABI with valid userspace stack paths and allow_shell=true', flush=True)
 PY
 
-echo '[PASS] ReSukiSU/SukiSU sucompat aligned to 4.14 user_path_at hooks'
+echo '[PASS] ReSukiSU/SukiSU sucompat aligned to 4.14 user_path_at hooks and adb shell enabled'

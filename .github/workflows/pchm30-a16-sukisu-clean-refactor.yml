@@ -1,0 +1,222 @@
+name: PCHM30 A16 SukiSU Clean Refactor SUSFS 2.3.0
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [pchm30-a16-sukisu-clean-refactor]
+
+env:
+  TOOLCHAIN_RELEASE_TAG: pchm30-build-environment-20260810
+  TOOLCHAIN_ROOT: /opt/pchm30-toolchains
+  KERNEL_REL: source/android/kernel/msm-4.14
+  OUT_DIR: out-pchm30-a16-bpf
+  CONFIG_FILE: configs/PCHM30-stock-running.config
+  OPPO_VENDOR_REPO: https://github.com/oppo-source/android_kernel_modules_and_devicetree_oppo_sm6125.git
+  OPPO_VENDOR_COMMIT: 5e7bee452c72c948427b9131bec8cd5d92934f83
+  ARESIN_REPO: https://github.com/jsdizkcksv/android_kernel_aresin.git
+  ARESIN_PREREQ: 620d928acca50c8ba013554fc798dcf8b8910918
+  A15_FIRST: a2b662dced04902eb8f1778ec8e30259dc680ff4
+  A15_LAST: bd379f8140acc083fc386cc2600ee205b2a54e31
+  A16_FIRST: c2c621b5448adc69e105b1519b93dd637a581da5
+  A16_LAST: c74436291044381d4365d91afa0c8f4a574b22b4
+  ROOT_SNAPSHOT: b667ba359bf7da11b43c5d6403788d21c19facd7
+  RESUKISU_COMMIT: 1e25a4c5c0e7eb71292f1fa4f48704e5490f1b82
+  ROOT_SUCCESS_BRANCH: pchm30-a16-resukisu-susfs220
+  ROOT_SUCCESS_WORKFLOW: .github/workflows/pchm30-a16-resukisu-susfs220-build.yml
+  EXP1_BRANCH: pchm30-a16-btf-sockmap-exp1
+  EXP1_WORKFLOW: .github/workflows/pchm30-a16-btf-sockmap-exp1-v2.yml
+  WIFI_SUCCESS_BRANCH: pchm30-a16-wifi-abi-exp1
+  WIFI_SUCCESS_WORKFLOW: .github/workflows/pchm30-a16-wifi-abi-exp1-build.yml
+  EXP2_BRANCH: pchm30-a16-btf-exp2-diagnose
+  EXP2_WORKFLOW: .github/workflows/pchm30-a16-btf-exp2-diagnose.yml
+  UPSTREAM_BTF_UAPI: f063c889c9458354a92b235a51cbb60d30321070
+  UPSTREAM_BTF_KERNEL: 1dc92851849cc2235a1efef8f8d5a9255efc5f13
+  SUKISU_REPO: https://github.com/SukiSU-Ultra/SukiSU-Ultra.git
+  SUKISU_COMMIT: b20dee702035af09cb2ecb5f35443bbc1747f3e6
+  SUKISU_BRANCH: builtin
+  SUKISU_COMPAT_SOURCE_COMMIT: a8f57213e7f1897914d5ec205741464342c6f0aa
+  SUKISU_PATCH_REPO: https://github.com/SukiSU-Ultra/SukiSU_patch.git
+  SUKISU_PATCH_COMMIT: 547ae94bcaec53d030398f857950c64662043a5d
+  RUN17_BTF_FIX_COMMIT: bc983ae72d5795d0ec2a5b5dd4292dfab1417e57
+  GH_TOKEN: ${{ github.token }}
+
+jobs:
+  build:
+    name: Clean SukiSU + SUSFS 2.3.0 + Xiaomi BPF + KPM (Single Pass)
+    runs-on: ubuntu-22.04
+    timeout-minutes: 180
+    steps:
+      - name: Checkout exact successful A16 rootless baseline
+        uses: actions/checkout@v4
+        with:
+          ref: pchm30-a16-bpf-only
+          path: source/android/kernel/msm-4.14
+          fetch-depth: 1
+          submodules: false
+
+      - name: Resolve latest ReSukiSU main and SukiSU-Ultra builtin at build time
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          RSHA=$(git ls-remote https://github.com/ReSukiSU/ReSukiSU.git refs/heads/main | awk '{print $1}')
+          SSHA=$(git ls-remote https://github.com/SukiSU-Ultra/SukiSU-Ultra.git refs/heads/builtin | awk '{print $1}')
+          test -n "$RSHA"
+          test -n "$SSHA"
+          echo "RESUKISU_COMMIT=$RSHA" >> "$GITHUB_ENV"
+          echo "SUKISU_COMMIT=$SSHA" >> "$GITHUB_ENV"
+          echo "SUKISU_BRANCH=builtin" >> "$GITHUB_ENV"
+          echo "Resolved ReSukiSU main: $RSHA"
+          echo "Resolved SukiSU-Ultra builtin: $SSHA"
+
+      - name: Install BTF host tooling without Azure mirror hang
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          set +e
+          sudo sed -i 's|http://azure.archive.ubuntu.com/ubuntu/|http://archive.ubuntu.com/ubuntu/|g' /etc/apt/sources.list
+          sudo sed -i 's|http://.*.clouds.archive.ubuntu.com/ubuntu/|http://archive.ubuntu.com/ubuntu/|g' /etc/apt/sources.list
+          sudo apt-get update -o Acquire::Retries=3 -o Acquire::http::Timeout="30"
+          sudo apt-get install -y --no-install-recommends dwarves binutils libelf-dev
+          set -e
+          command -v pahole >/dev/null
+          pahole --version
+
+      - name: Build clean single-pass SukiSU stack with SUSFS 2.3.0, Xiaomi BPF, Run28, and KPM
+        working-directory: source/android/kernel/msm-4.14
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          git fetch --no-tags --depth=1 origin "$GITHUB_SHA"
+          git show "$GITHUB_SHA:.github/scripts/clean-sukisu-orchestrate.sh" > "$GITHUB_WORKSPACE/clean-sukisu-orchestrate.sh"
+          git show "$GITHUB_SHA:.github/scripts/run17-builtin-runtime-retry.sh" > "$GITHUB_WORKSPACE/run17-builtin-runtime-retry.sh"
+          git show "$GITHUB_SHA:.github/scripts/run17-bbg-lz4kd.sh" > "$GITHUB_WORKSPACE/run17-bbg-lz4kd.sh"
+          git show "$GITHUB_SHA:.github/scripts/run18-sukisu-swap.sh" > "$GITHUB_WORKSPACE/run18-sukisu-swap.sh"
+          git show "$GITHUB_SHA:.github/scripts/run19-kpm-enable.sh" > "$GITHUB_WORKSPACE/run19-kpm-enable.sh"
+          git show "$GITHUB_SHA:.github/scripts/run25-susfs230-adapt.sh" > "$GITHUB_WORKSPACE/run25-susfs230-adapt.sh"
+          git show "$GITHUB_SHA:.github/scripts/rewrite-susfs230-hooks.py" > "$GITHUB_WORKSPACE/rewrite-susfs230-hooks.py"
+          git show "$GITHUB_SHA:.github/scripts/adapt-ksu-sucompat230.sh" > "$GITHUB_WORKSPACE/adapt-ksu-sucompat230.sh"
+          git show "$GITHUB_SHA:.github/scripts/run28-extra-features.sh" > "$GITHUB_WORKSPACE/run28-extra-features.sh"
+          git show "$GITHUB_SHA:.github/scripts/run17-btf-kprobe-scene-fix.sh" > "$GITHUB_WORKSPACE/run17-btf-kprobe-scene-fix.sh"
+          chmod +x \
+            "$GITHUB_WORKSPACE/clean-sukisu-orchestrate.sh" \
+            "$GITHUB_WORKSPACE/run17-builtin-runtime-retry.sh" \
+            "$GITHUB_WORKSPACE/run17-bbg-lz4kd.sh" \
+            "$GITHUB_WORKSPACE/run18-sukisu-swap.sh" \
+            "$GITHUB_WORKSPACE/run19-kpm-enable.sh" \
+            "$GITHUB_WORKSPACE/run25-susfs230-adapt.sh" \
+            "$GITHUB_WORKSPACE/adapt-ksu-sucompat230.sh" \
+            "$GITHUB_WORKSPACE/run28-extra-features.sh" \
+            "$GITHUB_WORKSPACE/run17-btf-kprobe-scene-fix.sh"
+
+          "$GITHUB_WORKSPACE/clean-sukisu-orchestrate.sh" 2>&1 | tee "$GITHUB_WORKSPACE/clean-sukisu-build.log"
+
+      - name: Verify generated source, SUSFS 2.3.0 and KPM
+        working-directory: source/android/kernel/msm-4.14
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          test -s "$GITHUB_WORKSPACE/run25-susfs230-proof.txt"
+          grep -Fxq 'susfs_to=v2.3.0' "$GITHUB_WORKSPACE/run25-susfs230-proof.txt"
+          grep -Fxq 'flag_storage=inode_i_state' "$GITHUB_WORKSPACE/run25-susfs230-proof.txt"
+          grep -Fxq 'susfs_overlay=skipped' "$GITHUB_WORKSPACE/run25-susfs230-proof.txt"
+          grep -Fxq 'hooks=4.14_user_path_at+filename_user' "$GITHUB_WORKSPACE/run25-susfs230-proof.txt"
+          test -s "$GITHUB_WORKSPACE/run28-extra-features-proof.txt"
+          grep -Fq 'droidspaces=off' "$GITHUB_WORKSPACE/run28-extra-features-proof.txt"
+          grep -Fq 'network_enhance=y' "$GITHUB_WORKSPACE/run28-extra-features-proof.txt"
+          grep -Fq 'tcp_brutal=y' "$GITHUB_WORKSPACE/run28-extra-features-proof.txt"
+          grep -Fq '#define SUSFS_VERSION "v2.3.0"' include/linux/susfs.h
+          grep -Fq 'user_path_at(dfd, filename, lookup_flags, &path)' fs/open.c
+          ! grep -Fq 'filename_lookup(dfd, fname' fs/open.c
+          ! grep -Fq 'filename_lookup(dfd, fname' fs/stat.c
+          grep -q '^CONFIG_KPM=y$' "$OUT_DIR/.config"
+          grep -q '^CONFIG_KSU=y$' "$OUT_DIR/.config"
+          grep -q '^CONFIG_KSU_SUSFS=y$' "$OUT_DIR/.config"
+          echo '[PASS] Clean SukiSU + SUSFS 2.3.0 + Xiaomi BPF full deps compiled in single pass'
+
+      - name: Patch final Image with pinned SukiSU KPM patcher
+        working-directory: source/android/kernel/msm-4.14
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          IMAGE="$OUT_DIR/arch/arm64/boot/Image"
+          PATCH_REPO="$GITHUB_WORKSPACE/SukiSU_patch"
+          PATCH_DIR="$GITHUB_WORKSPACE/clean-kpm-patch"
+          cp -f "$IMAGE" "$GITHUB_WORKSPACE/PCHM30-A16-CLEAN-KPM-PREPATCH-Image-${GITHUB_RUN_NUMBER}"
+          rm -rf "$PATCH_REPO" "$PATCH_DIR"
+          git clone --filter=blob:none --no-checkout "$SUKISU_PATCH_REPO" "$PATCH_REPO"
+          git -C "$PATCH_REPO" fetch --no-tags origin "$SUKISU_PATCH_COMMIT"
+          git -C "$PATCH_REPO" checkout --detach "$SUKISU_PATCH_COMMIT"
+          test "$(git -C "$PATCH_REPO" rev-parse HEAD)" = "$SUKISU_PATCH_COMMIT"
+          mkdir -p "$PATCH_DIR"
+          cp -a "$PATCH_REPO/kpm/." "$PATCH_DIR/"
+          cp -f "$IMAGE" "$PATCH_DIR/Image"
+          chmod +x "$PATCH_DIR/patch_linux" "$PATCH_DIR/kptools" || true
+          python3 - "$PATCH_DIR/Image" <<'PY'
+          from pathlib import Path
+          import sys
+          d = Path(sys.argv[1]).read_bytes()[:64]
+          if len(d) < 64 or d[56:60] != b'ARM\x64':
+              raise SystemExit('pre-patch Image lost ARM64 Image magic')
+          print('pre-patch ARM64 Image magic: PASS')
+          PY
+          BEFORE_SHA="$(sha256sum "$PATCH_DIR/Image" | awk '{print $1}')"
+          (
+            cd "$PATCH_DIR"
+            ./patch_linux 2>&1 | tee "$GITHUB_WORKSPACE/clean-kpm-patcher.log"
+          )
+          test -s "$PATCH_DIR/oImage"
+          python3 - "$PATCH_DIR/oImage" <<'PY'
+          from pathlib import Path
+          import sys
+          d = Path(sys.argv[1]).read_bytes()[:64]
+          if len(d) < 64 or d[56:60] != b'ARM\x64':
+              raise SystemExit('patched oImage lost ARM64 Image magic')
+          print('patched ARM64 Image magic: PASS')
+          PY
+          AFTER_SHA="$(sha256sum "$PATCH_DIR/oImage" | awk '{print $1}')"
+          test "$BEFORE_SHA" != "$AFTER_SHA"
+          cp -f "$PATCH_DIR/oImage" "$IMAGE"
+          {
+            echo "sukisu_patch_commit=$SUKISU_PATCH_COMMIT"
+            echo "before_sha256=$BEFORE_SHA"
+            echo "after_sha256=$AFTER_SHA"
+            echo 'kpm_final_image=patched'
+          } | tee "$GITHUB_WORKSPACE/clean-kpm-final-proof.txt"
+          echo '[PASS] Clean Image patched by pinned KPM patcher'
+
+      - name: Package reusable PCHM30 AnyKernel3 ZIP
+        working-directory: source/android/kernel/msm-4.14
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          git fetch --no-tags --depth=1 origin "$GITHUB_SHA"
+          git show "$GITHUB_SHA:.github/scripts/package-pchm30-run17-ak3.sh" > "$GITHUB_WORKSPACE/package-pchm30-clean-ak3.sh"
+          chmod +x "$GITHUB_WORKSPACE/package-pchm30-clean-ak3.sh"
+          "$GITHUB_WORKSPACE/package-pchm30-clean-ak3.sh" \
+            "$OUT_DIR/arch/arm64/boot/Image" \
+            "$GITHUB_WORKSPACE/PCHM30-A16-CLEAN-SUKISU-SUSFS230-AK3-${GITHUB_RUN_NUMBER}.zip"
+          echo '[PASS] Clean AnyKernel3 ZIP generated'
+
+      - name: Upload Clean SukiSU artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: PCHM30-A16-CLEAN-SUKISU-SUSFS230-${{ github.run_number }}
+          path: |
+            clean-sukisu-build.log
+            run25-susfs230-adapt.log
+            run25-susfs230-proof.txt
+            run28-extra-features.log
+            run28-extra-features-proof.txt
+            run18-sukisu-swap.log
+            run18-sukisu-proof.txt
+            run19-kpm-enable.log
+            run19-kpm-config-proof.txt
+            clean-kpm-patcher.log
+            clean-kpm-final-proof.txt
+            PCHM30-A16-CLEAN-SUKISU-SUSFS230-AK3-${{ github.run_number }}.zip
+            PCHM30-A16-CLEAN-SUKISU-SUSFS230-AK3-${{ github.run_number }}.zip.sha256
+            source/android/kernel/msm-4.14/out-pchm30-a16-bpf/.config
+            source/android/kernel/msm-4.14/out-pchm30-a16-bpf/arch/arm64/boot/Image
+          include-hidden-files: true
+          if-no-files-found: warn

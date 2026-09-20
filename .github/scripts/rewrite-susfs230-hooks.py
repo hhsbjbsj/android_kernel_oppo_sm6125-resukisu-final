@@ -3,12 +3,10 @@
 
 Do NOT apply the GKI / SM8250 SUSFS 2.3 ABI:
   getname_flags + ksu_handle_*(&fname) + filename_lookup(..., root) + putname
-  TIF_PROC_NO_SU early-out instead of TIF_PROC_UMOUNTED
 
-OPPO 4.14 faccessat/vfs_fstatat feed AT_* flags into user_path_at(), which
-converts them to LOOKUP_*. GKI 2.3 copies assume lookup_flags are already
-LOOKUP_* and that filename_lookup takes a 5th root argument. On this tree
-that rewrite is what hangs the first splash.
+DO preserve SUSFS 2.3 TIF_PROC_NO_SU early-out:
+  susfs_is_current_proc_no_su() must be kept so Zygote apps (marked with
+  TIF_PROC_UMOUNTED) are NOT falsely treated as unprivileged / skipped.
 """
 from pathlib import Path
 import re
@@ -64,23 +62,27 @@ def restore_user_pointer_proto(text, kind):
             'extern int ksu_handle_stat(int *dfd, const char __user **filename_user, int *flags);',
         )
         text = text.replace(
-            'extern int ksu_handle_stat(int *dfd, struct filename **filename,\n\t\t\t\tint *flags);',
-            'extern int ksu_handle_stat(int *dfd, const char __user **filename_user,\n\t\t\t\tint *flags);',
+            'extern int ksu_handle_stat(int *dfd, struct filename **filename,\n\t\t\tint *flags);',
+            'extern int ksu_handle_stat(int *dfd, const char __user **filename_user,\n\t\t\tint *flags);',
         )
     return text
 
 
-def restore_umounted(text, label):
-    n = text.count('susfs_is_current_proc_no_su()')
+def ensure_no_su_early_out(text, label):
+    # In SUSFS 2.3, the early-out check must use susfs_is_current_proc_no_su().
+    # If the file still uses susfs_is_current_proc_umounted(), convert it so that
+    # normal Android apps (which all have TIF_PROC_UMOUNTED set by Zygote) do NOT
+    # skip ksu_handle_faccessat, ksu_handle_stat, and ksu_handle_execveat_sucompat.
+    n = text.count('susfs_is_current_proc_umounted()')
     if n:
-        text = text.replace('susfs_is_current_proc_no_su()', 'susfs_is_current_proc_umounted()')
-        print(label + ': no_su -> umounted x%d' % n, flush=True)
+        text = text.replace('susfs_is_current_proc_umounted()', 'susfs_is_current_proc_no_su()')
+        print(label + ': umounted -> no_su x%d' % n, flush=True)
     return text
 
 
 open_t = read('fs/open.c')
 open_t = restore_user_pointer_proto(open_t, 'faccessat')
-open_t = restore_umounted(open_t, 'fs/open.c')
+open_t = ensure_no_su_early_out(open_t, 'fs/open.c')
 new_open, n = GKI_OPEN.subn('res = user_path_at(dfd, filename, lookup_flags, &path);', open_t, count=1)
 if n:
     open_t = new_open
@@ -95,7 +97,7 @@ write('fs/open.c', open_t)
 
 stat_t = read('fs/stat.c')
 stat_t = restore_user_pointer_proto(stat_t, 'stat')
-stat_t = restore_umounted(stat_t, 'fs/stat.c')
+stat_t = ensure_no_su_early_out(stat_t, 'fs/stat.c')
 new_stat, n = GKI_STAT.subn('error = user_path_at(dfd, filename, lookup_flags, &path);', stat_t, count=1)
 if n:
     stat_t = new_stat
@@ -108,7 +110,7 @@ if 'filename_lookup(dfd, fname' in stat_t:
     fail('fs/stat.c still has GKI filename_lookup')
 write('fs/stat.c', stat_t)
 
-exec_t = restore_umounted(read('fs/exec.c'), 'fs/exec.c')
+exec_t = ensure_no_su_early_out(read('fs/exec.c'), 'fs/exec.c')
 write('fs/exec.c', exec_t)
 
 open_t = read('fs/open.c')
@@ -118,6 +120,6 @@ if 'user_path_at(dfd, filename, lookup_flags, &path)' not in open_t:
     fail('fs/open.c missing 4.14 user_path_at')
 if 'filename_lookup(dfd, fname' in open_t or 'filename_lookup(dfd, fname' in stat_t:
     fail('GKI filename_lookup still present')
-if 'susfs_is_current_proc_umounted()' not in exec_t:
-    print('WARN: fs/exec.c has no umounted early-out (may be a different hook layout)', flush=True)
-print('hook rewrite verified: 4.14 user_path_at ABI', flush=True)
+if 'susfs_is_current_proc_no_su()' not in exec_t:
+    print('WARN: fs/exec.c has no no_su early-out (may be a different hook layout)', flush=True)
+print('hook rewrite verified: 4.14 user_path_at ABI + no_su early-out', flush=True)

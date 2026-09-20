@@ -161,7 +161,6 @@ run_step 'Layer verified ReSukiSU SUSFS hooks'
 run_step 'Patch netbpfload uname compatibility'
 run_step 'Prepare proven A16 root config'
 "$GITHUB_WORKSPACE/run18-sukisu-swap.sh"
-"$GITHUB_WORKSPACE/run19-kpm-enable.sh"
 
 echo '===== SMOKE-COMPILE REPAIRED BPF CLOSURE BEFORE LONG BUILD ====='
 unset LLVM LLVM_IAS KBUILD_COMPILER_STRING
@@ -187,7 +186,9 @@ for script in \
   run16-builtin-wifi-audio.sh \
   run17-builtin-runtime-retry.sh \
   run17-bbg-lz4kd.sh \
+  run19-kpm-enable.sh \
   run28-extra-features.sh \
+  apply-binder-419-stability.sh \
   run17-btf-kprobe-scene-fix.sh; do
   git show "$GITHUB_SHA:.github/scripts/$script" > "$GITHUB_WORKSPACE/$script"
   chmod +x "$GITHUB_WORKSPACE/$script"
@@ -198,7 +199,9 @@ done
 "$GITHUB_WORKSPACE/run16-builtin-wifi-audio.sh"
 "$GITHUB_WORKSPACE/run17-builtin-runtime-retry.sh"
 "$GITHUB_WORKSPACE/run17-bbg-lz4kd.sh"
+"$GITHUB_WORKSPACE/run19-kpm-enable.sh" --apply
 "$GITHUB_WORKSPACE/run28-extra-features.sh"
+"$GITHUB_WORKSPACE/apply-binder-419-stability.sh"
 "$GITHUB_WORKSPACE/run17-btf-kprobe-scene-fix.sh"
 
 run_step 'Instrument exact BTF rejection path'

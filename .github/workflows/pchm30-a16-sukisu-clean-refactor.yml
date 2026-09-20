@@ -96,6 +96,7 @@ jobs:
           git show "$GITHUB_SHA:.github/scripts/rewrite-susfs230-hooks.py" > "$GITHUB_WORKSPACE/rewrite-susfs230-hooks.py"
           git show "$GITHUB_SHA:.github/scripts/adapt-ksu-sucompat230.sh" > "$GITHUB_WORKSPACE/adapt-ksu-sucompat230.sh"
           git show "$GITHUB_SHA:.github/scripts/run28-extra-features.sh" > "$GITHUB_WORKSPACE/run28-extra-features.sh"
+          git show "$GITHUB_SHA:.github/scripts/apply-binder-419-stability.sh" > "$GITHUB_WORKSPACE/apply-binder-419-stability.sh"
           git show "$GITHUB_SHA:.github/scripts/run17-btf-kprobe-scene-fix.sh" > "$GITHUB_WORKSPACE/run17-btf-kprobe-scene-fix.sh"
           chmod +x \
             "$GITHUB_WORKSPACE/clean-sukisu-orchestrate.sh" \
@@ -106,6 +107,7 @@ jobs:
             "$GITHUB_WORKSPACE/run25-susfs230-adapt.sh" \
             "$GITHUB_WORKSPACE/adapt-ksu-sucompat230.sh" \
             "$GITHUB_WORKSPACE/run28-extra-features.sh" \
+            "$GITHUB_WORKSPACE/apply-binder-419-stability.sh" \
             "$GITHUB_WORKSPACE/run17-btf-kprobe-scene-fix.sh"
 
           "$GITHUB_WORKSPACE/clean-sukisu-orchestrate.sh" 2>&1 | tee "$GITHUB_WORKSPACE/clean-sukisu-build.log"
@@ -124,6 +126,13 @@ jobs:
           grep -Fq 'droidspaces=off' "$GITHUB_WORKSPACE/run28-extra-features-proof.txt"
           grep -Fq 'network_enhance=y' "$GITHUB_WORKSPACE/run28-extra-features-proof.txt"
           grep -Fq 'tcp_brutal=y' "$GITHUB_WORKSPACE/run28-extra-features-proof.txt"
+          test -s "$GITHUB_WORKSPACE/binder-419-proof.txt"
+          grep -Fq 'wake_up_pollfree=applied' "$GITHUB_WORKSPACE/binder-419-proof.txt"
+          grep -Fq '__wake_up_pollfree=exported' "$GITHUB_WORKSPACE/binder-419-proof.txt"
+          grep -Fq 'binder_thread_release=wake_up_pollfree' "$GITHUB_WORKSPACE/binder-419-proof.txt"
+          grep -Fq 'binder_max_threads=u32' "$GITHUB_WORKSPACE/binder-419-proof.txt"
+          grep -Fq 'mmput_async=applied' "$GITHUB_WORKSPACE/binder-419-proof.txt"
+          grep -Fq 'async_pad_0size=applied' "$GITHUB_WORKSPACE/binder-419-proof.txt"
           grep -Fq '#define SUSFS_VERSION "v2.3.0"' include/linux/susfs.h
           grep -Fq 'user_path_at(dfd, filename, lookup_flags, &path)' fs/open.c
           ! grep -Fq 'filename_lookup(dfd, fname' fs/open.c
@@ -208,6 +217,7 @@ jobs:
             run25-susfs230-proof.txt
             run28-extra-features.log
             run28-extra-features-proof.txt
+            binder-419-proof.txt
             run18-sukisu-swap.log
             run18-sukisu-proof.txt
             run19-kpm-enable.log

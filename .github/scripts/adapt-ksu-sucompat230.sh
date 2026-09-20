@@ -82,26 +82,28 @@ def adapt_c(path: Path):
         )
         changed.append('disabled GKI stat in favor of 4.14 user-pointer handler')
 
-    fa_fn = re.compile(
-        r'int ksu_handle_faccessat\s*\(\s*int \*dfd,\s*(?:struct filename \*\*filename|const char __user \*\*filename_user),\s*int \*mode,\s*int \*\w+\s*\)\s*\{.*?\n\}',
-        re.S,
-    )
-    m = fa_fn.search(t)
-    if m and 'struct filename **filename' in m.group(0):
-        t = t[:m.start()] + fa_body + t[m.end():]
-        changed.append('faccessat: installed 4.14 user-pointer handler')
+    # Fallback for trees where user-pointer handler is not already in #else branch
+    if 'const char __user **filename_user' not in t:
+        fa_fn = re.compile(
+            r'int ksu_handle_faccessat\s*\(\s*int \*dfd,\s*(?:struct filename \*\*filename|const char __user \*\*filename_user),\s*int \*mode,\s*int \*\w+\s*\)\s*\{.*?\n\}',
+            re.S,
+        )
+        m = fa_fn.search(t)
+        if m:
+            t = t[:m.start()] + fa_body + t[m.end():]
+            changed.append('faccessat: installed 4.14 user-pointer handler')
 
-    t2, n = re.subn(
-        r'int ksu_handle_stat\s*\(\s*int \*dfd,\s*struct filename \*\*filename,\s*int \*flags\s*\)',
-        'int ksu_handle_stat(int *dfd, const char __user **filename_user, int *flags)',
-        t,
-    )
-    if n:
-        t = t2
-        changed.append('stat proto rewritten to user-pointer x%d' % n)
-        t = t.replace('(*filename)->name', 'ksu_stat_user_path')
-        if 'ksu_stat_user_path' in t and 'filename_user' in t:
-            stat_user = '''int ksu_handle_stat(int *dfd, const char __user **filename_user, int *flags)
+        t2, n = re.subn(
+            r'int ksu_handle_stat\s*\(\s*int \*dfd,\s*struct filename \*\*filename,\s*int \*flags\s*\)',
+            'int ksu_handle_stat(int *dfd, const char __user **filename_user, int *flags)',
+            t,
+        )
+        if n:
+            t = t2
+            changed.append('stat proto rewritten to user-pointer x%d' % n)
+            t = t.replace('(*filename)->name', 'ksu_stat_user_path')
+            if 'ksu_stat_user_path' in t and 'filename_user' in t:
+                stat_user = '''int ksu_handle_stat(int *dfd, const char __user **filename_user, int *flags)
 {
 	char path[sizeof(%s) + 1] = { 0 };
 
@@ -114,14 +116,14 @@ def adapt_c(path: Path):
 	*filename_user = sh_user_path();
 	return 0;
 }''' % (su_name, su_name, su_name)
-            t = re.sub(
-                r'int ksu_handle_stat\s*\(\s*int \*dfd,\s*const char __user \*\*filename_user,\s*int \*flags\s*\)\s*\{.*?\n\}',
-                stat_user,
-                t,
-                count=1,
-                flags=re.S,
-            )
-            changed.append('stat: installed 4.14 user-pointer handler')
+                t = re.sub(
+                    r'int ksu_handle_stat\s*\(\s*int \*dfd,\s*const char __user \*\*filename_user,\s*int \*flags\s*\)\s*\{.*?\n\}',
+                    stat_user,
+                    t,
+                    count=1,
+                    flags=re.S,
+                )
+                changed.append('stat: installed 4.14 user-pointer handler')
 
     t = re.sub(
         r'#if LINUX_VERSION_CODE >= KERNEL_VERSION\(\s*6\s*,\s*1\s*,\s*0\s*\)(?:\s*&&\s*defined\(\s*CONFIG_KSU_SUSFS\s*\))?\s*',
@@ -140,19 +142,22 @@ def adapt_h(path: Path):
     if not path.exists():
         return
     h = path.read_text()
-    h = re.sub(
-        r'#ifdef CONFIG_KSU_SUSFS\s*\nint ksu_handle_faccessat\(int \*dfd, struct filename \*\*filename, int \*mode, int \*\w+\);\s*\nint ksu_handle_stat\(int \*dfd, struct filename \*\*filename, int \*flags\);',
-        '#if 0 /* 4.14 user_path_at sucompat ABI */\nint ksu_handle_faccessat(int *dfd, struct filename **filename, int *mode, int *__unused_flags);\nint ksu_handle_stat(int *dfd, struct filename **filename, int *flags);\n#else\nint ksu_handle_faccessat(int *dfd, const char __user **filename_user, int *mode, int *__unused_flags);\nint ksu_handle_stat(int *dfd, const char __user **filename_user, int *flags);',
-        h
-    )
-    h = h.replace(
-        'int ksu_handle_faccessat(int *dfd, struct filename **filename, int *mode, int *__unused_flags);',
-        'int ksu_handle_faccessat(int *dfd, const char __user **filename_user, int *mode, int *__unused_flags);',
-    )
-    h = h.replace(
-        'int ksu_handle_stat(int *dfd, struct filename **filename, int *flags);',
-        'int ksu_handle_stat(int *dfd, const char __user **filename_user, int *flags);',
-    )
+    if '#ifdef CONFIG_KSU_SUSFS\nint ksu_handle_faccessat(int *dfd, struct filename **filename' in h:
+        h = h.replace(
+            '#ifdef CONFIG_KSU_SUSFS\nint ksu_handle_faccessat(int *dfd, struct filename **filename',
+            '#if 0 /* 4.14 user-pointer sucompat */\nint ksu_handle_faccessat(int *dfd, struct filename **filename',
+        )
+    else:
+        h = re.sub(
+            r'int ksu_handle_faccessat\s*\(\s*int \*dfd,\s*struct filename \*\*filename,\s*int \*mode,\s*int \*\w+\s*\)\s*;',
+            'int ksu_handle_faccessat(int *dfd, const char __user **filename_user, int *mode, int *__unused_flags);',
+            h,
+        )
+        h = re.sub(
+            r'int ksu_handle_stat\s*\(\s*int \*dfd,\s*struct filename \*\*filename,\s*int \*flags\s*\)\s*;',
+            'int ksu_handle_stat(int *dfd, const char __user **filename_user, int *flags);',
+            h,
+        )
     path.write_text(h)
     print('updated', path, flush=True)
 

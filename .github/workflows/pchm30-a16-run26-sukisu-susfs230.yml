@@ -6,7 +6,9 @@ name: PCHM30 A16 SukiSU Xiaomi BPF FULL DEPS
 on:
   workflow_dispatch:
   push:
-    branches: [pchm30-a16-run26-sukisu-xiaomi-bpf-full-deps]
+    branches:
+      - pchm30-a16-run26-sukisu-xiaomi-bpf-full-deps
+      - pchm30-a16-sukisu-main-test
     paths:
       - '.github/workflows/pchm30-a16-run26-sukisu-susfs230.yml'
       - '.github/workflows/pchm30-a16-run24-selinux-hide.yml'

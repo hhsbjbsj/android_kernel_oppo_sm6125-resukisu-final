@@ -28,6 +28,7 @@ on:
       - '.github/scripts/run28-extra-features.sh'
       - '.github/scripts/resolve-latest-ksu.sh'
       - '.github/scripts/run29-manager-handshake.sh'
+      - '.github/scripts/apply-binder-419-stability.sh'
 
 env:
   TOOLCHAIN_RELEASE_TAG: pchm30-build-environment-20260810
@@ -96,6 +97,7 @@ jobs:
           git show "$GITHUB_SHA:.github/scripts/adapt-ksu-sucompat230.sh" > "$GITHUB_WORKSPACE/adapt-ksu-sucompat230.sh"
           git show "$GITHUB_SHA:.github/scripts/run28-extra-features.sh" > "$GITHUB_WORKSPACE/run28-extra-features.sh"
           git show "$GITHUB_SHA:.github/scripts/run29-manager-handshake.sh" > "$GITHUB_WORKSPACE/run29-manager-handshake.sh"
+          git show "$GITHUB_SHA:.github/scripts/apply-binder-419-stability.sh" > "$GITHUB_WORKSPACE/apply-binder-419-stability.sh"
           git show "$RUN17_BTF_FIX_COMMIT:.github/scripts/run17-btf-kprobe-scene-fix.sh" > "$GITHUB_WORKSPACE/run17-btf-kprobe-scene-fix.sh"
           chmod +x \
             "$GITHUB_WORKSPACE/run17-orchestrate.sh" \
@@ -106,7 +108,8 @@ jobs:
             "$GITHUB_WORKSPACE/run26-disable-kpm.sh" \
             "$GITHUB_WORKSPACE/adapt-ksu-sucompat230.sh" \
             "$GITHUB_WORKSPACE/run28-extra-features.sh" \
-            "$GITHUB_WORKSPACE/run29-manager-handshake.sh"
+            "$GITHUB_WORKSPACE/run29-manager-handshake.sh" \
+            "$GITHUB_WORKSPACE/apply-binder-419-stability.sh"
 
           python3 - <<'PY'
           from pathlib import Path
@@ -135,6 +138,7 @@ jobs:
                  '"$GITHUB_WORKSPACE/run17-builtin-runtime-retry.sh"\n'
                  '"$GITHUB_WORKSPACE/run17-bbg-lz4kd.sh"\n'
                  '"$GITHUB_WORKSPACE/run28-extra-features.sh"\n'
+                 '"$GITHUB_WORKSPACE/apply-binder-419-stability.sh"\n'
                  '"$GITHUB_WORKSPACE/run17-btf-kprobe-scene-fix.sh"\n\n'
                  'run_step \'Instrument exact BTF rejection path\'')
           if old not in s:
@@ -146,6 +150,7 @@ jobs:
           grep -n 'run26-disable-kpm' "$GITHUB_WORKSPACE/run17-orchestrate.sh"
           grep -n 'run29-manager-handshake' "$GITHUB_WORKSPACE/run17-orchestrate.sh"
           grep -n 'run28-extra-features' "$GITHUB_WORKSPACE/run17-orchestrate.sh"
+          grep -n 'apply-binder-419-stability' "$GITHUB_WORKSPACE/run17-orchestrate.sh"
           ! grep -n 'run18-sukisu-swap' "$GITHUB_WORKSPACE/run17-orchestrate.sh"
           ! grep -n 'run19-kpm-enable' "$GITHUB_WORKSPACE/run17-orchestrate.sh"
           "$GITHUB_WORKSPACE/run17-orchestrate.sh" 2>&1 | tee "$GITHUB_WORKSPACE/run26-build.log"
@@ -181,6 +186,13 @@ jobs:
           grep -q '^CONFIG_KSU_SUSFS=y$' "$CONFIG"
           test -s "$GITHUB_WORKSPACE/run29-manager-handshake-proof.txt"
           grep -Fq 'hook_guard=CONFIG_KSU' "$GITHUB_WORKSPACE/run29-manager-handshake-proof.txt"
+          test -s "$GITHUB_WORKSPACE/binder-419-proof.txt"
+          grep -Fq 'wake_up_pollfree=applied' "$GITHUB_WORKSPACE/binder-419-proof.txt"
+          grep -Fq '__wake_up_pollfree=exported' "$GITHUB_WORKSPACE/binder-419-proof.txt"
+          grep -Fq 'binder_thread_release=wake_up_pollfree' "$GITHUB_WORKSPACE/binder-419-proof.txt"
+          grep -Fq 'binder_max_threads=u32' "$GITHUB_WORKSPACE/binder-419-proof.txt"
+          grep -Fq 'mmput_async=applied' "$GITHUB_WORKSPACE/binder-419-proof.txt"
+          grep -Fq 'async_pad_0size=applied' "$GITHUB_WORKSPACE/binder-419-proof.txt"
           grep -Fq 'ksu_handle_sys_reboot' kernel/reboot.c
           grep -E '[[:space:]]ksu_handle_sys_reboot$' "$GITHUB_WORKSPACE/run16-vmlinux-nm-all.txt" || nm "$VMLINUX" | grep -E '[[:space:]]ksu_handle_sys_reboot$'
           ! grep -q '^CONFIG_KPM=y$' "$CONFIG"
@@ -214,6 +226,7 @@ jobs:
             run28-extra-features-proof.txt
             run29-manager-handshake.log
             run29-manager-handshake-proof.txt
+            binder-419-proof.txt
             run16-builtin-proof.txt
             run17-builtin-runtime-proof.txt
             run17-bbg-zram-stage-proof.txt

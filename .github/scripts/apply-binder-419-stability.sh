@@ -8,7 +8,7 @@ set -Eeuo pipefail
 
 KERNEL_DIR="${KERNEL_DIR:-$GITHUB_WORKSPACE/$KERNEL_REL}"
 cd "$KERNEL_DIR"
-PROOF="${GITHUB_WORKSPACE:-.}/binder-419-proof.txt"
+export PROOF="${GITHUB_WORKSPACE:-.}/binder-419-proof.txt"
 
 python3 - <<'PY'
 from pathlib import Path
@@ -152,7 +152,12 @@ if "mmput_async" not in ba:
 proof_lines.append("mmput_async=applied")
 proof_lines.append("async_pad_0size=applied")
 
-proof_path.write_text("\n".join(proof_lines) + "\n", encoding="utf-8")
+proof_text = "\n".join(proof_lines) + "\n"
+proof_path.write_text(proof_text, encoding="utf-8")
+Path("binder-419-proof.txt").write_text(proof_text, encoding="utf-8")
+workspace = os.environ.get("GITHUB_WORKSPACE")
+if workspace:
+    (Path(workspace) / "binder-419-proof.txt").write_text(proof_text, encoding="utf-8")
 print("[PASS] binder-419-proof.txt written")
 PY
 

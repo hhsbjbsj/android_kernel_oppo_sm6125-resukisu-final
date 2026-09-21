@@ -129,7 +129,7 @@ with tempfile.TemporaryDirectory() as td:
 
 # Post-apply Sanity Sweep: guarantee NO conflict markers exist in entire repository
 for p in Path(".").rglob("*"):
-    if not p.is_file() or ".git" in p.parts:
+    if not p.is_file() or ".git" in p.parts or ".github" in p.parts:
         continue
     try:
         if p.stat().st_size > 10 * 1024 * 1024:

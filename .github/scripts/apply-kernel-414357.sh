@@ -498,6 +498,35 @@ if hid_h.exists():
         print("[POST-PATCH] Added HID_CP_VOLUMEUP/DOWN to include/linux/hid.h")
     hid_h.write_text(h_txt, encoding="utf-8")
 
+usbnet_h = Path("include/linux/usb/usbnet.h")
+if usbnet_h.exists():
+    u_txt = usbnet_h.read_text(encoding="utf-8")
+    target_usbnet = "#\t\tdefine EVENT_NO_IP_ALIGN\t13\n"
+    repl_usbnet = (
+        "#\t\tdefine EVENT_NO_IP_ALIGN\t13\n\n"
+        "\tu32\t\t\trx_speed;\t/* in bps - NOT Mbps */\n"
+        "\tu32\t\t\ttx_speed;\t/* in bps - NOT Mbps */\n"
+    )
+    if target_usbnet in u_txt and "rx_speed" not in u_txt:
+        u_txt = u_txt.replace(target_usbnet, repl_usbnet, 1)
+        usbnet_h.write_text(u_txt, encoding="utf-8")
+        print("[POST-PATCH] Added rx_speed and tx_speed to struct usbnet in include/linux/usb/usbnet.h")
+
+inet_hash = Path("net/ipv4/inet_hashtables.c")
+if inet_hash.exists():
+    ih_txt = inet_hash.read_text(encoding="utf-8")
+    target_hash = "#define INET_TABLE_PERTURB_SIZE (1 << CONFIG_INET_TABLE_PERTURB_ORDER)"
+    repl_hash = (
+        "#ifndef CONFIG_INET_TABLE_PERTURB_ORDER\n"
+        "#define CONFIG_INET_TABLE_PERTURB_ORDER 16\n"
+        "#endif\n"
+        "#define INET_TABLE_PERTURB_SIZE (1 << CONFIG_INET_TABLE_PERTURB_ORDER)"
+    )
+    if target_hash in ih_txt and "#ifndef CONFIG_INET_TABLE_PERTURB_ORDER" not in ih_txt:
+        ih_txt = ih_txt.replace(target_hash, repl_hash, 1)
+        inet_hash.write_text(ih_txt, encoding="utf-8")
+        print("[POST-PATCH] Injected CONFIG_INET_TABLE_PERTURB_ORDER fallback to net/ipv4/inet_hashtables.c")
+
 mmu_h = Path("arch/arm64/include/asm/mmu.h")
 if mmu_h.exists():
     text = mmu_h.read_text(encoding="utf-8")

@@ -534,6 +534,68 @@ if p_er.exists():
         p_er.write_text(er_txt, encoding="utf-8")
         print("[POST-PATCH] Added #include <linux/random.h> to drivers/soc/qcom/early_random.c")
 
+p_et = Path("drivers/soc/qcom/event_timer.c")
+if p_et.exists():
+    et_txt = p_et.read_text(encoding="utf-8")
+    et_txt, n_et = re.subn(
+        r"static DEFINE_PER_CPU\(struct timerqueue_head,\s*timer_head\)\s*=\s*\{[^}]*\};",
+        "static DEFINE_PER_CPU(struct timerqueue_head, timer_head) = {\n\t.rb_root = RB_ROOT_CACHED,\n};",
+        et_txt, count=1
+    )
+    if n_et > 0:
+        p_et.write_text(et_txt, encoding="utf-8")
+        print("[POST-PATCH] Aligned drivers/soc/qcom/event_timer.c timerqueue_head initializer to 4.14.357 rb_root_cached")
+
+p_tcph = Path("include/linux/tcp.h")
+if p_tcph.exists():
+    tcph_txt = p_tcph.read_text(encoding="utf-8")
+    if "max_packets_seq" not in tcph_txt:
+        tcph_txt, n_tcp = re.subn(
+            r"(\tu32\s+max_packets_out;[^\n]*)",
+            r"\1\n\tu32\tmax_packets_seq;\t/* right edge of max_packets_out flight */",
+            tcph_txt, count=1
+        )
+        if n_tcp > 0:
+            p_tcph.write_text(tcph_txt, encoding="utf-8")
+            print("[POST-PATCH] Injected max_packets_seq into include/linux/tcp.h")
+
+p_ntcp = Path("include/net/tcp.h")
+if p_ntcp.exists():
+    ntcp_txt = p_ntcp.read_text(encoding="utf-8")
+    if "sysctl_tcp_early_retrans" not in ntcp_txt:
+        ntcp_txt, n_ntcp = re.subn(
+            r"(extern int sysctl_tcp_max_orphans;)",
+            r"\1\nextern int sysctl_tcp_early_retrans;",
+            ntcp_txt, count=1
+        )
+        if n_ntcp > 0:
+            p_ntcp.write_text(ntcp_txt, encoding="utf-8")
+            print("[POST-PATCH] Injected sysctl_tcp_early_retrans into include/net/tcp.h")
+
+p_tty_h = Path("include/linux/tty.h")
+if p_tty_h.exists():
+    tty_h_txt = p_tty_h.read_text(encoding="utf-8")
+    if "tty_write_lock" not in tty_h_txt:
+        target_st = "extern void start_tty(struct tty_struct *tty);"
+        repl_st = "extern void start_tty(struct tty_struct *tty);\nvoid tty_write_unlock(struct tty_struct *tty);\nint tty_write_lock(struct tty_struct *tty, int ndelay);"
+        if target_st in tty_h_txt:
+            tty_h_txt = tty_h_txt.replace(target_st, repl_st, 1)
+        else:
+            tty_h_txt += "\nvoid tty_write_unlock(struct tty_struct *tty);\nint tty_write_lock(struct tty_struct *tty, int ndelay);\n"
+        p_tty_h.write_text(tty_h_txt, encoding="utf-8")
+        print("[POST-PATCH] Injected tty_write_lock/unlock into include/linux/tty.h")
+
+p_tio = Path("drivers/tty/tty_io.c")
+if p_tio.exists():
+    tio_txt = p_tio.read_text(encoding="utf-8")
+    if "static void tty_write_unlock(" in tio_txt:
+        tio_txt = tio_txt.replace("static void tty_write_unlock(struct tty_struct *tty)", "void tty_write_unlock(struct tty_struct *tty)", 1)
+    if "static int tty_write_lock(" in tio_txt:
+        tio_txt = tio_txt.replace("static int tty_write_lock(struct tty_struct *tty, int ndelay)", "int tty_write_lock(struct tty_struct *tty, int ndelay)", 1)
+    p_tio.write_text(tio_txt, encoding="utf-8")
+    print("[POST-PATCH] Made tty_write_lock/unlock non-static in drivers/tty/tty_io.c")
+
+
 mmu_h = Path("arch/arm64/include/asm/mmu.h")
 if mmu_h.exists():
     text = mmu_h.read_text(encoding="utf-8")

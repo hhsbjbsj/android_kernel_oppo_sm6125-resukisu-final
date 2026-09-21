@@ -641,6 +641,25 @@ if p_nfq_h.exists():
             p_nfq_h.write_text(nfq_txt, encoding="utf-8")
             print(f"[POST-PATCH] Aligned include/net/netfilter/nf_queue.h nf_queue_entry_get_refs return type to bool via regex (count={n_nfq})")
 
+p_pkt_int = Path("net/packet/internal.h")
+if p_pkt_int.exists():
+    pkt_txt = p_pkt_int.read_text(encoding="utf-8")
+    if "auxdata:1" not in pkt_txt:
+        target_vnet = "unsigned int\t\thas_vnet_hdr:1"
+        repl_vnet = "unsigned int\t\tauxdata:1,\n\t\t\t\torigdev:1,\n\t\t\t\thas_vnet_hdr:1"
+        if target_vnet in pkt_txt:
+            pkt_txt = pkt_txt.replace(target_vnet, repl_vnet, 1)
+        else:
+            pkt_txt, _ = re.subn(r"unsigned int\s+has_vnet_hdr:1", "unsigned int\t\tauxdata:1,\n\t\t\t\torigdev:1,\n\t\t\t\thas_vnet_hdr:1", pkt_txt, count=1)
+    if "atomic_long_t\t\tmapped;" in pkt_txt:
+        pkt_txt = pkt_txt.replace("atomic_long_t\t\tmapped;", "atomic_t\t\tmapped;")
+    elif "atomic_long_t mapped;" in pkt_txt:
+        pkt_txt = pkt_txt.replace("atomic_long_t mapped;", "atomic_t mapped;")
+    else:
+        pkt_txt, _ = re.subn(r"atomic_long_t\s+mapped;", "atomic_t\t\tmapped;", pkt_txt, count=1)
+    p_pkt_int.write_text(pkt_txt, encoding="utf-8")
+    print("[POST-PATCH] Restored auxdata, origdev, and atomic_t mapped to net/packet/internal.h")
+
 p_ics = Path("net/ipv4/inet_connection_sock.c")
 if p_ics.exists():
     ics_txt = p_ics.read_text(encoding="utf-8")

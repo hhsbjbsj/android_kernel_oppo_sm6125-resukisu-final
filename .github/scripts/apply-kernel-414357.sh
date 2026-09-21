@@ -119,7 +119,9 @@ CRITICAL_VENDOR_PATHS = {
     "drivers/android/binder_alloc.c",
     "drivers/android/binder_alloc.h",
     "fs/open.c",
-    "fs/stat.c"
+    "fs/stat.c",
+    "arch/arm64/kernel/setup.c",
+    "arch/arm64/mm/mmu.c"
 }
 
 def is_protected(fn: str) -> bool:
@@ -331,6 +333,46 @@ for p in Path(".").rglob("*"):
 if unclean:
     raise SystemExit(f"[FATAL ERROR] Lingering conflict markers found in: {unclean}")
 print("[PASS] Final verification: Zero conflict markers across entire repository.")
+
+# Post-patch ABI alignments between vendor implementation and 4.14.357 headers
+bugs_h = Path("include/asm-generic/bugs.h")
+if not bugs_h.exists() or bugs_h.stat().st_size == 0:
+    bugs_h.parent.mkdir(parents=True, exist_ok=True)
+    bugs_h.write_text("#ifndef __ASM_GENERIC_BUGS_H\n#define __ASM_GENERIC_BUGS_H\n#endif\n", encoding="utf-8")
+    print("[POST-PATCH] Created include/asm-generic/bugs.h header guard")
+
+sock_h = Path("include/net/sock.h")
+if sock_h.exists():
+    text = sock_h.read_text(encoding="utf-8")
+    if "ndst = dst->ops->negative_advice(dst);" in text:
+        text = text.replace(
+            "ndst = dst->ops->negative_advice(dst);",
+            "dst->ops->negative_advice(sk, dst);\n\t\treturn;"
+        )
+        sock_h.write_text(text, encoding="utf-8")
+        print("[POST-PATCH] Aligned include/net/sock.h for negative_advice(sk, dst)")
+
+mmu_h = Path("arch/arm64/include/asm/mmu.h")
+if mmu_h.exists():
+    text = mmu_h.read_text(encoding="utf-8")
+    if "extern void *fixmap_remap_fdt(phys_addr_t dt_phys, int *size, pgprot_t prot);" in text:
+        text = text.replace(
+            "extern void *fixmap_remap_fdt(phys_addr_t dt_phys, int *size, pgprot_t prot);",
+            "extern void *fixmap_remap_fdt(phys_addr_t dt_phys);"
+        )
+        mmu_h.write_text(text, encoding="utf-8")
+        print("[POST-PATCH] Aligned arch/arm64/include/asm/mmu.h fixmap_remap_fdt for vendor")
+
+fixmap_h = Path("arch/arm64/include/asm/fixmap.h")
+if fixmap_h.exists():
+    text = fixmap_h.read_text(encoding="utf-8")
+    if "FIX_ENTRY_TRAMP_TEXT1" in text and "FIX_ENTRY_TRAMP_TEXT," not in text and "FIX_ENTRY_TRAMP_TEXT FIX_ENTRY_TRAMP_TEXT1" not in text:
+        text = text.replace(
+            "#define TRAMP_VALIAS\t\t(__fix_to_virt(FIX_ENTRY_TRAMP_TEXT1))",
+            "#define FIX_ENTRY_TRAMP_TEXT FIX_ENTRY_TRAMP_TEXT1\n#define TRAMP_VALIAS\t\t(__fix_to_virt(FIX_ENTRY_TRAMP_TEXT1))"
+        )
+        fixmap_h.write_text(text, encoding="utf-8")
+        print("[POST-PATCH] Added FIX_ENTRY_TRAMP_TEXT alias to arch/arm64/include/asm/fixmap.h")
 
 proof_lines = [
     "kernel_version=4.14.357",

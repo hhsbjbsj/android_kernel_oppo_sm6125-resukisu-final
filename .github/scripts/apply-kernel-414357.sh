@@ -444,6 +444,38 @@ if lsm_h.exists():
         lsm_h.write_text(text, encoding="utf-8")
         print("[POST-PATCH] Aligned include/linux/lsm_hooks.h binder prototypes to struct task_struct *")
 
+p_open = Path("fs/open.c")
+if p_open.is_file():
+    txt = p_open.read_text(encoding="utf-8")
+    txt = txt.replace(
+        "SYSCALL_DEFINE2(ftruncate, unsigned int, fd, unsigned long, length)",
+        "SYSCALL_DEFINE2(ftruncate, unsigned int, fd, off_t, length)"
+    ).replace(
+        "COMPAT_SYSCALL_DEFINE2(ftruncate, unsigned int, fd, compat_ulong_t, length)",
+        "COMPAT_SYSCALL_DEFINE2(ftruncate, unsigned int, fd, compat_off_t, length)"
+    )
+    p_open.write_text(txt, encoding="utf-8")
+    print("[POST-PATCH] Aligned fs/open.c ftruncate types to off_t / compat_off_t")
+
+internal_h = Path("mm/internal.h")
+if internal_h.exists():
+    text = internal_h.read_text(encoding="utf-8")
+    if "__vma_address" not in text:
+        text = text.replace(
+            "vma_address(struct page *page, struct vm_area_struct *vma)",
+            "__vma_address(struct page *page, struct vm_area_struct *vma)\n{\n\tpgoff_t pgoff = page_to_pgoff(page);\n\treturn vma->vm_start + ((pgoff - vma->vm_pgoff) << PAGE_SHIFT);\n}\n\nstatic inline unsigned long\nvma_address(struct page *page, struct vm_area_struct *vma)"
+        )
+        internal_h.write_text(text, encoding="utf-8")
+        print("[POST-PATCH] Restored __vma_address to mm/internal.h")
+
+rmap_c = Path("mm/rmap.c")
+if rmap_c.exists():
+    text = rmap_c.read_text(encoding="utf-8")
+    if "__vma_address(page, vma)" in text:
+        text = text.replace("__vma_address(page, vma)", "vma_address(page, vma)")
+        rmap_c.write_text(text, encoding="utf-8")
+        print("[POST-PATCH] Aligned mm/rmap.c __vma_address to vma_address")
+
 proof_lines = [
     "kernel_version=4.14.357",
     "sublevel=357",

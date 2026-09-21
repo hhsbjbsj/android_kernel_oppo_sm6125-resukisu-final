@@ -514,8 +514,16 @@ if sec_c2.exists():
             "int security_file_ioctl(struct file *file, unsigned int cmd, unsigned long arg)\n{\n\treturn call_int_hook(file_ioctl, 0, file, cmd, arg);\n}",
             "int security_file_ioctl(struct file *file, unsigned int cmd, unsigned long arg)\n{\n\treturn call_int_hook(file_ioctl, 0, file, cmd, arg);\n}\n\nint security_file_ioctl_compat(struct file *file, unsigned int cmd, unsigned long arg)\n{\n\treturn call_int_hook(file_ioctl_compat, 0, file, cmd, arg);\n}\nEXPORT_SYMBOL(security_file_ioctl_compat);"
         )
-        sec_c2.write_text(text, encoding="utf-8")
         print("[POST-PATCH] Implemented security_file_ioctl_compat in security/security.c")
+    old_mmap = "int security_mmap_file(struct file *file, unsigned long prot,\n\t\t\tunsigned long flags)\n{\n\tint ret;\n\tret = call_int_hook(mmap_file, 0, file, prot,\n\t\t\t\t\tmmap_prot(file, prot), flags);\n\tif (ret)\n\t\treturn ret;\n\treturn ima_file_mmap(file, prot);\n}"
+    new_mmap = "int security_mmap_file(struct file *file, unsigned long prot,\n\t\t\tunsigned long flags)\n{\n\tunsigned long prot_adj = mmap_prot(file, prot);\n\tint ret;\n\n\tret = call_int_hook(mmap_file, 0, file, prot, prot_adj, flags);\n\tif (ret)\n\t\treturn ret;\n\treturn ima_file_mmap(file, prot, prot_adj, flags);\n}"
+    if old_mmap in text:
+        text = text.replace(old_mmap, new_mmap)
+        print("[POST-PATCH] Upgraded security_mmap_file to 4.14.357 4-arg ima_file_mmap")
+    elif "return ima_file_mmap(file, prot);" in text:
+        text = text.replace("return ima_file_mmap(file, prot);", "return ima_file_mmap(file, prot, mmap_prot(file, prot), flags);")
+        print("[POST-PATCH] Aligned ima_file_mmap call to 4 arguments (fallback)")
+    sec_c2.write_text(text, encoding="utf-8")
 
 km = Path("kernel/Makefile")
 if km.exists():

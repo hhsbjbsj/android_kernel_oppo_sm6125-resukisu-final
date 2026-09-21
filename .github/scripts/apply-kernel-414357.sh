@@ -520,8 +520,51 @@ if p_xhci_h.exists():
             xh_txt = xh_txt.replace(anchor_xhci, defs_xhci + "\n" + anchor_xhci, 1)
         else:
             xh_txt += "\n" + defs_xhci
-        p_xhci_h.write_text(xh_txt, encoding="utf-8")
-        print("[POST-PATCH] Injected XHCI_RESET_SHORT/LONG_USEC into drivers/usb/host/xhci.h")
+
+    if "EP_CTX_PER_DEV" not in xh_txt:
+        anchor_ep = "struct xhci_virt_ep {"
+        defs_ep = (
+            "#ifndef EP_STATE_MASK\n#define EP_STATE_MASK\t\t(0x7)\n#endif\n"
+            "#ifndef EP_CTX_PER_DEV\n#define EP_CTX_PER_DEV\t\t31\n#endif\n\n"
+        )
+        if anchor_ep in xh_txt:
+            xh_txt = xh_txt.replace(anchor_ep, defs_ep + anchor_ep, 1)
+
+    if "MAX_SOFT_RETRY" not in xh_txt:
+        anchor_ring = "struct xhci_ring {"
+        defs_retry = (
+            "#ifndef MAX_SOFT_RETRY\n#define MAX_SOFT_RETRY\t\t3\n#endif\n"
+            "#ifndef SCT_FOR_TRB\n#define SCT_FOR_TRB(p)\t\t(((p) & 0x7) << 1)\n#endif\n\n"
+        )
+        if anchor_ring in xh_txt:
+            xh_txt = xh_txt.replace(anchor_ring, defs_retry + anchor_ring, 1)
+
+    if "err_count;" not in xh_txt:
+        target_cycle = "u32\t\t\tcycle_state;"
+        repl_cycle = "u32\t\t\tcycle_state;\n\tunsigned int            err_count;"
+        if target_cycle in xh_txt:
+            xh_txt = xh_txt.replace(target_cycle, repl_cycle, 1)
+        else:
+            xh_txt, _ = re.subn(r"(\tu32\s+cycle_state;)", r"\1\n\tunsigned int            err_count;", xh_txt, count=1)
+
+    if "run_graceperiod;" not in xh_txt:
+        target_xhc = "unsigned int\t\txhc_state;"
+        repl_xhc = "unsigned int\t\txhc_state;\n\tunsigned long\t\trun_graceperiod;"
+        if target_xhc in xh_txt:
+            xh_txt = xh_txt.replace(target_xhc, repl_xhc, 1)
+        else:
+            xh_txt, _ = re.subn(r"(\tunsigned int\s+xhc_state;)", r"\1\n\tunsigned long\t\trun_graceperiod;", xh_txt, count=1)
+
+    if "XHCI_NO_SOFT_RETRY" not in xh_txt:
+        anchor_quirks = "#define XHCI_SNPS_BROKEN_SUSPEND    BIT_ULL(35)"
+        defs_quirks = "#define XHCI_SNPS_BROKEN_SUSPEND    BIT_ULL(35)\n#define XHCI_NO_SOFT_RETRY\tBIT_ULL(40)"
+        if anchor_quirks in xh_txt:
+            xh_txt = xh_txt.replace(anchor_quirks, defs_quirks, 1)
+        else:
+            xh_txt += "\n#define XHCI_NO_SOFT_RETRY BIT_ULL(40)\n"
+
+    p_xhci_h.write_text(xh_txt, encoding="utf-8")
+    print("[POST-PATCH] Injected 4.14.357 members/macros into drivers/usb/host/xhci.h")
 
 p_xhci_mem = Path("drivers/usb/host/xhci-mem.c")
 if p_xhci_mem.exists():
@@ -551,6 +594,23 @@ if inet_hash.exists():
         ih_txt = ih_txt.replace(target_hash, repl_hash, 1)
         inet_hash.write_text(ih_txt, encoding="utf-8")
         print("[POST-PATCH] Injected CONFIG_INET_TABLE_PERTURB_ORDER fallback to net/ipv4/inet_hashtables.c")
+
+p_proto = Path("include/net/protocol.h")
+if p_proto.exists():
+    p_txt = p_proto.read_text(encoding="utf-8")
+    if "(*early_demux)" not in p_txt:
+        target_np = "struct net_protocol {\n\tint\t\t\t(*handler)(struct sk_buff *skb);"
+        repl_np = "struct net_protocol {\n\tint\t\t\t(*early_demux)(struct sk_buff *skb);\n\tint\t\t\t(*early_demux_handler)(struct sk_buff *skb);\n\tint\t\t\t(*handler)(struct sk_buff *skb);"
+        if target_np in p_txt:
+            p_txt = p_txt.replace(target_np, repl_np, 1)
+        else:
+            p_txt, _ = re.subn(
+                r"struct net_protocol\s*\{\s*int\s*\(\*handler\)",
+                "struct net_protocol {\n\tint\t\t\t(*early_demux)(struct sk_buff *skb);\n\tint\t\t\t(*early_demux_handler)(struct sk_buff *skb);\n\tint\t\t\t(*handler)",
+                p_txt, count=1
+            )
+        p_proto.write_text(p_txt, encoding="utf-8")
+        print("[POST-PATCH] Injected early_demux & early_demux_handler into include/net/protocol.h")
 
 p_ics = Path("net/ipv4/inet_connection_sock.c")
 if p_ics.exists():

@@ -566,19 +566,19 @@ if p_xhci_h.exists():
     p_xhci_h.write_text(xh_txt, encoding="utf-8")
     print("[POST-PATCH] Injected 4.14.357 members/macros into drivers/usb/host/xhci.h")
 
-p_xhci_mem = Path("drivers/usb/host/xhci-mem.c")
-if p_xhci_mem.exists():
-    xm_txt = p_xhci_mem.read_text(encoding="utf-8")
-    target_xm = "xhci_reset(xhci, XHCI_RESET_SHORT_USEC);"
-    if target_xm in xm_txt:
-        xm_txt = xm_txt.replace(target_xm, "xhci_reset(xhci);")
-        p_xhci_mem.write_text(xm_txt, encoding="utf-8")
-        print("[POST-PATCH] Aligned drivers/usb/host/xhci-mem.c xhci_reset call to 1 argument")
-    else:
-        xm_txt, n_xm = re.subn(r"xhci_reset\s*\(\s*xhci\s*,\s*XHCI_RESET_SHORT_USEC\s*\);", "xhci_reset(xhci);", xm_txt)
-        if n_xm > 0:
-            p_xhci_mem.write_text(xm_txt, encoding="utf-8")
-            print(f"[POST-PATCH] Aligned drivers/usb/host/xhci-mem.c xhci_reset call to 1 argument via regex (count={n_xm})")
+for p_xhci_c in [Path("drivers/usb/host/xhci-mem.c"), Path("drivers/usb/host/xhci-hub.c")]:
+    if p_xhci_c.exists():
+        xm_txt = p_xhci_c.read_text(encoding="utf-8")
+        target_xm = "xhci_reset(xhci, XHCI_RESET_SHORT_USEC);"
+        if target_xm in xm_txt:
+            xm_txt = xm_txt.replace(target_xm, "xhci_reset(xhci);")
+            p_xhci_c.write_text(xm_txt, encoding="utf-8")
+            print(f"[POST-PATCH] Aligned {p_xhci_c} xhci_reset call to 1 argument")
+        else:
+            xm_txt, n_xm = re.subn(r"xhci_reset\s*\(\s*xhci\s*,\s*XHCI_RESET_SHORT_USEC\s*\);", "xhci_reset(xhci);", xm_txt)
+            if n_xm > 0:
+                p_xhci_c.write_text(xm_txt, encoding="utf-8")
+                print(f"[POST-PATCH] Aligned {p_xhci_c} xhci_reset call to 1 argument via regex (count={n_xm})")
 
 inet_hash = Path("net/ipv4/inet_hashtables.c")
 if inet_hash.exists():
@@ -598,7 +598,7 @@ if inet_hash.exists():
 p_proto = Path("include/net/protocol.h")
 if p_proto.exists():
     p_txt = p_proto.read_text(encoding="utf-8")
-    if "(*early_demux)" not in p_txt:
+    if "int\t\t\t(*early_demux)" not in p_txt and "int (*early_demux)" not in p_txt:
         target_np = "struct net_protocol {\n\tint\t\t\t(*handler)(struct sk_buff *skb);"
         repl_np = "struct net_protocol {\n\tint\t\t\t(*early_demux)(struct sk_buff *skb);\n\tint\t\t\t(*early_demux_handler)(struct sk_buff *skb);\n\tint\t\t\t(*handler)(struct sk_buff *skb);"
         if target_np in p_txt:
@@ -609,8 +609,22 @@ if p_proto.exists():
                 "struct net_protocol {\n\tint\t\t\t(*early_demux)(struct sk_buff *skb);\n\tint\t\t\t(*early_demux_handler)(struct sk_buff *skb);\n\tint\t\t\t(*handler)",
                 p_txt, count=1
             )
-        p_proto.write_text(p_txt, encoding="utf-8")
-        print("[POST-PATCH] Injected early_demux & early_demux_handler into include/net/protocol.h")
+        print("[POST-PATCH] Injected early_demux & early_demux_handler into struct net_protocol")
+
+    if "void\t(*early_demux)" not in p_txt and "void (*early_demux)" not in p_txt:
+        target_i6 = "struct inet6_protocol {\n\tint\t(*handler)(struct sk_buff *skb);"
+        repl_i6 = "struct inet6_protocol {\n\tvoid\t(*early_demux)(struct sk_buff *skb);\n\tvoid    (*early_demux_handler)(struct sk_buff *skb);\n\tint\t(*handler)(struct sk_buff *skb);"
+        if target_i6 in p_txt:
+            p_txt = p_txt.replace(target_i6, repl_i6, 1)
+        else:
+            p_txt, _ = re.subn(
+                r"struct inet6_protocol\s*\{\s*int\s*\(\*handler\)",
+                "struct inet6_protocol {\n\tvoid\t(*early_demux)(struct sk_buff *skb);\n\tvoid    (*early_demux_handler)(struct sk_buff *skb);\n\tint\t(*handler)",
+                p_txt, count=1
+            )
+        print("[POST-PATCH] Injected early_demux & early_demux_handler into struct inet6_protocol")
+
+    p_proto.write_text(p_txt, encoding="utf-8")
 
 p_ics = Path("net/ipv4/inet_connection_sock.c")
 if p_ics.exists():

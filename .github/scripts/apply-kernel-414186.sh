@@ -8,9 +8,16 @@ export PROOF="${GITHUB_WORKSPACE:-.}/kernel-version-proof.txt"
 
 PATCH_FILE="${GITHUB_WORKSPACE:-.}/patch-4.14.180-to-186.patch"
 if [ ! -f "$PATCH_FILE" ]; then
-    echo "[INFO] Downloading official Linux 4.14.180 -> 4.14.186 incremental patch..."
-    curl -sSL "https://cdn.kernel.org/pub/linux/kernel/v4.x/incr/patch-4.14.180-186.xz" | unxz > "$PATCH_FILE"
+    if [ -f "${GITHUB_WORKSPACE:-.}/.github/patches/patch-4.14.180-to-186.patch" ]; then
+        PATCH_FILE="${GITHUB_WORKSPACE:-.}/.github/patches/patch-4.14.180-to-186.patch"
+    elif [ -f ".github/patches/patch-4.14.180-to-186.patch" ]; then
+        PATCH_FILE="$(pwd)/.github/patches/patch-4.14.180-to-186.patch"
+    else
+        echo "[INFO] Downloading official Linux 4.14.180 -> 4.14.186 incremental patch..."
+        curl -sSL "https://cdn.kernel.org/pub/linux/kernel/v4.x/incr/patch-4.14.180-186.xz" | unxz > "$PATCH_FILE"
+    fi
 fi
+export PATCH_FILE
 
 echo "[INFO] Applying Linux 4.14.180 -> 4.14.186 from $PATCH_FILE..."
 
@@ -23,7 +30,13 @@ import tempfile
 from pathlib import Path
 
 proof_path = Path(os.environ.get("PROOF", "kernel-version-proof.txt"))
-patch_file = Path(os.environ.get("PATCH_FILE", "patch-4.14.180-to-186.patch"))
+patch_env = os.environ.get("PATCH_FILE")
+if patch_env and Path(patch_env).is_file():
+    patch_file = Path(patch_env)
+elif (Path(os.environ.get("GITHUB_WORKSPACE", ".")) / "patch-4.14.180-to-186.patch").is_file():
+    patch_file = Path(os.environ.get("GITHUB_WORKSPACE", ".")) / "patch-4.14.180-to-186.patch"
+else:
+    patch_file = Path("patch-4.14.180-to-186.patch")
 
 print(f"[INFO] Reading patch: {patch_file}")
 patch_text = patch_file.read_text(encoding="utf-8", errors="replace")

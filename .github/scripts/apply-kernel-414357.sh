@@ -442,17 +442,7 @@ if sock_h.exists():
     if target_bound in text and "sk_for_each_bound_safe" not in text:
         text = text.replace(target_bound, repl_bound, 1)
 
-    # 9. _sock_tx_timestamp
-    target_tx = (
-        "static inline void sock_tx_timestamp(const struct sock *sk, __u16 tsflags,\n"
-        "\t\t\t\t     __u8 *tx_flags)\n"
-        "{\n"
-        "\tif (unlikely(tsflags))\n"
-        "\t\t__sock_tx_timestamp(tsflags, tx_flags);\n"
-        "\tif (unlikely(sock_flag(sk, SOCK_WIFI_STATUS)))\n"
-        "\t\t*tx_flags |= SKBTX_WIFI_STATUS;\n"
-        "}"
-    )
+    # 9. _sock_tx_timestamp & skb_setup_tx_timestamp
     repl_tx = (
         "static inline void _sock_tx_timestamp(struct sock *sk, __u16 tsflags,\n"
         "\t\t\t\t      __u8 *tx_flags, __u32 *tskey)\n"
@@ -475,10 +465,11 @@ if sock_h.exists():
         "{\n"
         "\t_sock_tx_timestamp(skb->sk, tsflags, &skb_shinfo(skb)->tx_flags,\n"
         "\t\t\t   &skb_shinfo(skb)->tskey);\n"
-        "}"
+        "}\n"
     )
-    if target_tx in text and "_sock_tx_timestamp" not in text:
-        text = text.replace(target_tx, repl_tx, 1)
+    if "skb_setup_tx_timestamp" not in text:
+        text, n = re.subn(r"static inline void sock_tx_timestamp\s*\([^)]*\)\s*\{[^}]*\}\s*", repl_tx, text, count=1)
+        print(f"[POST-PATCH] Injected _sock_tx_timestamp & skb_setup_tx_timestamp via regex (count={n})")
 
     sock_h.write_text(text, encoding="utf-8")
     print("[POST-PATCH] Comprehensively aligned include/net/sock.h to upstream 4.14.357 ABI")
@@ -526,6 +517,22 @@ if inet_hash.exists():
         ih_txt = ih_txt.replace(target_hash, repl_hash, 1)
         inet_hash.write_text(ih_txt, encoding="utf-8")
         print("[POST-PATCH] Injected CONFIG_INET_TABLE_PERTURB_ORDER fallback to net/ipv4/inet_hashtables.c")
+
+p_ics = Path("net/ipv4/inet_connection_sock.c")
+if p_ics.exists():
+    ics_txt = p_ics.read_text(encoding="utf-8")
+    if "inet_ehash_insert(req_to_sk(req), NULL);" in ics_txt:
+        ics_txt = ics_txt.replace("inet_ehash_insert(req_to_sk(req), NULL);", "inet_ehash_insert(req_to_sk(req), NULL, NULL);")
+        p_ics.write_text(ics_txt, encoding="utf-8")
+        print("[POST-PATCH] Fixed inet_ehash_insert 3-argument call in net/ipv4/inet_connection_sock.c")
+
+p_er = Path("drivers/soc/qcom/early_random.c")
+if p_er.exists():
+    er_txt = p_er.read_text(encoding="utf-8")
+    if "#include <linux/random.h>" not in er_txt and "#include <linux/hw_random.h>" in er_txt:
+        er_txt = er_txt.replace("#include <linux/hw_random.h>", "#include <linux/hw_random.h>\n#include <linux/random.h>", 1)
+        p_er.write_text(er_txt, encoding="utf-8")
+        print("[POST-PATCH] Added #include <linux/random.h> to drivers/soc/qcom/early_random.c")
 
 mmu_h = Path("arch/arm64/include/asm/mmu.h")
 if mmu_h.exists():

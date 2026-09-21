@@ -503,6 +503,40 @@ if usbnet_h.exists():
         usbnet_h.write_text(u_txt, encoding="utf-8")
         print("[POST-PATCH] Added rx_speed and tx_speed to struct usbnet in include/linux/usb/usbnet.h")
 
+p_xhci_h = Path("drivers/usb/host/xhci.h")
+if p_xhci_h.exists():
+    xh_txt = p_xhci_h.read_text(encoding="utf-8")
+    if "XHCI_RESET_SHORT_USEC" not in xh_txt:
+        defs_xhci = (
+            "#ifndef XHCI_RESET_LONG_USEC\n"
+            "#define XHCI_RESET_LONG_USEC\t\t(10 * 1000 * 1000)\n"
+            "#endif\n"
+            "#ifndef XHCI_RESET_SHORT_USEC\n"
+            "#define XHCI_RESET_SHORT_USEC\t\t(250 * 1000)\n"
+            "#endif\n"
+        )
+        anchor_xhci = "/* IMAN - Interrupt Management Register */"
+        if anchor_xhci in xh_txt:
+            xh_txt = xh_txt.replace(anchor_xhci, defs_xhci + "\n" + anchor_xhci, 1)
+        else:
+            xh_txt += "\n" + defs_xhci
+        p_xhci_h.write_text(xh_txt, encoding="utf-8")
+        print("[POST-PATCH] Injected XHCI_RESET_SHORT/LONG_USEC into drivers/usb/host/xhci.h")
+
+p_xhci_mem = Path("drivers/usb/host/xhci-mem.c")
+if p_xhci_mem.exists():
+    xm_txt = p_xhci_mem.read_text(encoding="utf-8")
+    target_xm = "xhci_reset(xhci, XHCI_RESET_SHORT_USEC);"
+    if target_xm in xm_txt:
+        xm_txt = xm_txt.replace(target_xm, "xhci_reset(xhci);")
+        p_xhci_mem.write_text(xm_txt, encoding="utf-8")
+        print("[POST-PATCH] Aligned drivers/usb/host/xhci-mem.c xhci_reset call to 1 argument")
+    else:
+        xm_txt, n_xm = re.subn(r"xhci_reset\s*\(\s*xhci\s*,\s*XHCI_RESET_SHORT_USEC\s*\);", "xhci_reset(xhci);", xm_txt)
+        if n_xm > 0:
+            p_xhci_mem.write_text(xm_txt, encoding="utf-8")
+            print(f"[POST-PATCH] Aligned drivers/usb/host/xhci-mem.c xhci_reset call to 1 argument via regex (count={n_xm})")
+
 inet_hash = Path("net/ipv4/inet_hashtables.c")
 if inet_hash.exists():
     ih_txt = inet_hash.read_text(encoding="utf-8")
@@ -525,6 +559,25 @@ if p_ics.exists():
         ics_txt = ics_txt.replace("inet_ehash_insert(req_to_sk(req), NULL);", "inet_ehash_insert(req_to_sk(req), NULL, NULL);")
         p_ics.write_text(ics_txt, encoding="utf-8")
         print("[POST-PATCH] Fixed inet_ehash_insert 3-argument call in net/ipv4/inet_connection_sock.c")
+
+for tcp_caller in [Path("net/ipv4/tcp_ipv4.c"), Path("net/ipv6/tcp_ipv6.c"), Path("net/dccp/ipv4.c"), Path("net/dccp/ipv6.c")]:
+    if tcp_caller.exists():
+        t_txt = tcp_caller.read_text(encoding="utf-8")
+        target_nl = "*own_req = inet_ehash_nolisten(newsk, req_to_sk(req_unhash));"
+        repl_nl = "*own_req = inet_ehash_nolisten(newsk, req_to_sk(req_unhash), NULL);"
+        if target_nl in t_txt:
+            t_txt = t_txt.replace(target_nl, repl_nl)
+            tcp_caller.write_text(t_txt, encoding="utf-8")
+            print(f"[POST-PATCH] Aligned {tcp_caller} inet_ehash_nolisten call to 3 arguments")
+        else:
+            t_txt, n_nl = re.subn(
+                r"inet_ehash_nolisten\s*\(\s*newsk\s*,\s*req_to_sk\s*\(\s*req_unhash\s*\)\s*\)",
+                "inet_ehash_nolisten(newsk, req_to_sk(req_unhash), NULL)",
+                t_txt
+            )
+            if n_nl > 0:
+                tcp_caller.write_text(t_txt, encoding="utf-8")
+                print(f"[POST-PATCH] Aligned {tcp_caller} inet_ehash_nolisten call to 3 arguments via regex (count={n_nl})")
 
 p_er = Path("drivers/soc/qcom/early_random.c")
 if p_er.exists():

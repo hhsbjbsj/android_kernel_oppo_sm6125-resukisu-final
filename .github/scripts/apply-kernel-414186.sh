@@ -269,3 +269,8 @@ grep -Fxq 'kernel_version=4.14.186' "$PROOF"
 echo "[PASS] Verified: $PROOF has kernel_version=4.14.186"
 
 echo "[SUCCESS] Kernel successfully upgraded to Linux 4.14.186!"
+
+git config user.name "github-actions[bot]"
+git config user.email "github-actions[bot]@users.noreply.github.com"
+git add -A
+git commit -m "kernel: upgrade to Linux 4.14.186" || true

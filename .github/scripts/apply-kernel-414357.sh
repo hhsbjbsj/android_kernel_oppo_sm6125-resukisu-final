@@ -359,3 +359,8 @@ grep -Fxq 'kernel_version=4.14.357' "$PROOF"
 echo "[PASS] Verified: $PROOF has kernel_version=4.14.357"
 
 echo "[SUCCESS] Kernel successfully upgraded to Linux 4.14.357!"
+
+git config user.name "github-actions[bot]"
+git config user.email "github-actions[bot]@users.noreply.github.com"
+git add -A
+git commit -m "kernel: upgrade to Linux 4.14.357-openela" || true

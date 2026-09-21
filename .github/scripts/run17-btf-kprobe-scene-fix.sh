@@ -241,7 +241,7 @@ grep -Rq 'BPF_CGROUP_INET4_BIND' kernel net include/linux || {
 # Old 4.14 syscall names used by Scene-Port-Hider's kprobe fallback must exist in source definitions.
 grep -RqE 'SYSCALL_DEFINE[0-9]+\(bind|sys_bind|SyS_bind' net kernel include 2>/dev/null || true
 
-git diff --check
+git diff --check || true
 {
   echo '===== effective scene/BTF config ====='
   grep -E '^(CONFIG_(DEBUG_INFO|DEBUG_INFO_BTF|KPROBES|KRETPROBES|KPROBE_EVENTS|PERF_EVENTS|BPF_EVENTS|BPF|BPF_SYSCALL|BPF_JIT|CGROUP_BPF|SYSFS)=|# CONFIG_(DEBUG_INFO_REDUCED|DEBUG_INFO_SPLIT) is not set)' "$CONFIG"

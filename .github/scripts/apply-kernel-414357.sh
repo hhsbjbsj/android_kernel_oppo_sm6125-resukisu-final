@@ -131,7 +131,8 @@ CRITICAL_VENDOR_PATHS = {
     "mm/rmap.c",
     "fs/file.c",
     "include/linux/fs.h",
-    "drivers/char/random.c"
+    "drivers/char/random.c",
+    "include/linux/clk.h"
 }
 
 def is_protected(fn: str) -> bool:
@@ -603,6 +604,68 @@ lib_crypto_mk.write_text(
     encoding="utf-8"
 )
 print("[POST-PATCH] Created lib/crypto/Makefile for libblake2s")
+
+clk_h = Path("include/linux/clk.h")
+if clk_h.exists():
+    text = clk_h.read_text(encoding="utf-8")
+    target_decl = "struct clk *devm_clk_get(struct device *dev, const char *id);"
+    new_decls = (
+        "struct clk *devm_clk_get(struct device *dev, const char *id);\n"
+        "struct clk *devm_clk_get_prepared(struct device *dev, const char *id);\n"
+        "struct clk *devm_clk_get_enabled(struct device *dev, const char *id);\n"
+        "struct clk *devm_clk_get_optional(struct device *dev, const char *id);\n"
+        "struct clk *devm_clk_get_optional_prepared(struct device *dev, const char *id);\n"
+        "struct clk *devm_clk_get_optional_enabled(struct device *dev, const char *id);\n"
+        "struct clk *devm_get_clk_from_child(struct device *dev,\n"
+        "\t\t\t\t    struct device_node *np, const char *con_id);"
+    )
+    if target_decl in text and "devm_clk_get_optional(" not in text:
+        text = text.replace(target_decl, new_decls, 1)
+
+    target_stub = "static inline struct clk *devm_clk_get(struct device *dev, const char *id)\n{\n\treturn NULL;\n}"
+    new_stubs = (
+        "static inline struct clk *devm_clk_get(struct device *dev, const char *id)\n"
+        "{\n\treturn NULL;\n}\n\n"
+        "static inline struct clk *devm_clk_get_prepared(struct device *dev,\n"
+        "\t\t\t\t\t\tconst char *id)\n"
+        "{\n\treturn NULL;\n}\n\n"
+        "static inline struct clk *devm_clk_get_enabled(struct device *dev,\n"
+        "\t\t\t\t\t       const char *id)\n"
+        "{\n\treturn NULL;\n}\n\n"
+        "static inline struct clk *devm_clk_get_optional(struct device *dev,\n"
+        "\t\t\t\t\t\tconst char *id)\n"
+        "{\n\treturn NULL;\n}\n\n"
+        "static inline struct clk *devm_clk_get_optional_prepared(struct device *dev,\n"
+        "\t\t\t\t\t\t\t const char *id)\n"
+        "{\n\treturn NULL;\n}\n\n"
+        "static inline struct clk *devm_clk_get_optional_enabled(struct device *dev,\n"
+        "\t\t\t\t\t\t\tconst char *id)\n"
+        "{\n\treturn NULL;\n}\n\n"
+        "static inline struct clk *devm_get_clk_from_child(struct device *dev,\n"
+        "\t\t\t\tstruct device_node *np, const char *con_id)\n"
+        "{\n\treturn NULL;\n}"
+    )
+    if target_stub in text and "devm_clk_get_optional(" not in text:
+        text = text.replace(target_stub, new_stubs, 1)
+
+    if "clk_get_optional(" not in text and "#if defined(CONFIG_OF)" in text:
+        clk_optional_code = (
+            "static inline struct clk *clk_get_optional(struct device *dev, const char *id)\n"
+            "{\n"
+            "\tstruct clk *clk = clk_get(dev, id);\n"
+            "\n"
+            "\tif (clk == ERR_PTR(-ENOENT))\n"
+            "\t\treturn NULL;\n"
+            "\n"
+            "\treturn clk;\n"
+            "}\n\n"
+            "#if defined(CONFIG_OF)"
+        )
+        text = text.replace("#if defined(CONFIG_OF)", clk_optional_code, 1)
+
+    clk_h.write_text(text, encoding="utf-8")
+    print("[POST-PATCH] Added clk_get_optional and devm_clk_get_optional* to include/linux/clk.h")
+
 
 proof_lines = [
     "kernel_version=4.14.357",

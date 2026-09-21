@@ -171,12 +171,8 @@ with tempfile.TemporaryDirectory() as td:
 p_exit = Path("kernel/exit.c")
 if p_exit.is_file():
     txt = p_exit.read_text(encoding="utf-8", errors="replace")
-    old_waitid = '	if (!access_ok(VERIFY_WRITE, infop, sizeof(*infop)))
-		return -EFAULT;
-
-	user_access_begin();'
-    new_waitid = '	if (!user_access_begin(VERIFY_WRITE, infop, sizeof(*infop)))
-		return -EFAULT;'
+    old_waitid = "\tif (!access_ok(VERIFY_WRITE, infop, sizeof(*infop)))\n\t\treturn -EFAULT;\n\n\tuser_access_begin();"
+    new_waitid = "\tif (!user_access_begin(VERIFY_WRITE, infop, sizeof(*infop)))\n\t\treturn -EFAULT;"
     if old_waitid in txt:
         txt = txt.replace(old_waitid, new_waitid)
     p_exit.write_text(txt, encoding="utf-8")

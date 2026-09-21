@@ -98,18 +98,33 @@ skipped_missing_count = 0
 conflict_count = 0
 total_chunks = 0
 
-# Sensitive vendor paths where vendor logic takes precedence over upstream
+# Sensitive vendor paths where vendor / Xiaomi / SUSFS logic takes precedence over upstream
 CRITICAL_VENDOR_PATHS = {
+    "Makefile",
+    "scripts/Makefile.build",
+    "scripts/link-vmlinux.sh",
     "kernel/sched/fair.c",
     "kernel/sched/core.c",
     "kernel/sched/walt.c",
+    "kernel/sched/cpufreq_schedutil.c",
     "kernel/exit.c",
     "fs/proc/task_mmu.c",
     "fs/proc/reserve_mmap.c",
     "drivers/android/binder.c",
+    "drivers/android/binder_alloc.c",
+    "drivers/android/binder_alloc.h",
     "fs/open.c",
     "fs/stat.c"
 }
+
+def is_protected(fn: str) -> bool:
+    if fn in CRITICAL_VENDOR_PATHS:
+        return True
+    if fn.startswith("kernel/bpf/"):
+        return True
+    if fn.startswith("include/linux/bpf") or fn.startswith("include/uapi/linux/bpf"):
+        return True
+    return False
 
 with tempfile.TemporaryDirectory() as td:
     tmp_patch = Path(td) / "chunk.patch"
@@ -121,6 +136,11 @@ with tempfile.TemporaryDirectory() as td:
         parts = first_line.split(" a/")[1].split(" b/")
         fn = parts[0]
 
+        # Root Makefile version & sublevel are updated explicitly in post-processing
+        if fn == "Makefile":
+            already_present_count += 1
+            continue
+
         target_file = Path(fn)
         if not target_file.exists() and "new file mode" not in chunk:
             skipped_missing_count += 1
@@ -128,7 +148,7 @@ with tempfile.TemporaryDirectory() as td:
 
         tmp_patch.write_text(chunk, encoding="utf-8")
 
-        # 1. Forward apply
+        # 1. Forward apply check
         res = subprocess.run(
             ["git", "apply", "--check", "--ignore-whitespace", "--whitespace=nowarn", str(tmp_patch)],
             capture_output=True, text=True
@@ -141,7 +161,7 @@ with tempfile.TemporaryDirectory() as td:
             applied_count += 1
             continue
 
-        # 2. Reverse apply (already present in vendor/backport)
+        # 2. Reverse apply check (already present in vendor/backport)
         res_rev = subprocess.run(
             ["git", "apply", "-R", "--check", "--ignore-whitespace", "--whitespace=nowarn", str(tmp_patch)],
             capture_output=True, text=True
@@ -150,7 +170,13 @@ with tempfile.TemporaryDirectory() as td:
             already_present_count += 1
             continue
 
-        # 3. 3-way merge attempt
+        # 3. If file is protected, keep vendor/backport version and bypass conflict
+        if is_protected(fn):
+            conflict_count += 1
+            print(f"[SHIELD] Protected vendor path {fn}: preserved vendor implementation (conflict safely bypassed)")
+            continue
+
+        # 4. 3-way merge attempt for non-protected files
         res_3w = subprocess.run(
             ["git", "apply", "-3", "--ignore-whitespace", "--whitespace=nowarn", str(tmp_patch)],
             capture_output=True, text=True
@@ -159,12 +185,10 @@ with tempfile.TemporaryDirectory() as td:
             applied_count += 1
             continue
 
-        # Conflict encountered
+        # 5. Merge conflict occurred: revert immediately so working copy is NOT contaminated with conflict markers
         conflict_count += 1
-        if fn in CRITICAL_VENDOR_PATHS:
-            print(f"[SHIELD] Protected vendor path {fn}: preserved vendor implementation (conflict safely bypassed)")
-        else:
-            print(f"[WARN] Conflict in {fn}: {res.stderr.strip()[:100]}")
+        subprocess.run(["git", "checkout", "--", fn], capture_output=True)
+        print(f"[WARN] Conflict in {fn}: safely reverted working file to maintain clean build")
 
 # Targeted post-fixes for Qualcomm / OPPO vendor compatibility:
 # 1. kernel/exit.c: ensure waitid user_access_begin and critical svc exit
@@ -219,13 +243,22 @@ print(f"Already present: {already_present_count}")
 print(f"Skipped missing: {skipped_missing_count}")
 print(f"Conflicts bypassed: {conflict_count}")
 
-# Explicitly ensure Makefile SUBLEVEL = 357
+# Explicitly ensure Makefile SUBLEVEL = 357, EXTRAVERSION =, and LINUX_VERSION_CODE cap 255
 makefile = Path("Makefile")
 if makefile.is_file():
-    m_text = makefile.read_text(encoding="utf-8")
-    m_new = re.sub(r"^SUBLEVEL\s*=\s*\d+", "SUBLEVEL = 357", m_text, flags=re.MULTILINE)
-    makefile.write_text(m_new, encoding="utf-8")
-    print("[PASS] Makefile SUBLEVEL set to 357")
+    m_lines = makefile.read_text(encoding="utf-8", errors="replace").splitlines()
+    new_lines = []
+    for line in m_lines:
+        if line.startswith("SUBLEVEL ="):
+            new_lines.append("SUBLEVEL = 357")
+        elif line.startswith("EXTRAVERSION ="):
+            new_lines.append("EXTRAVERSION =")
+        elif "expr $(VERSION) \\* 65536 + 0$(PATCHLEVEL) \\* 256 + 0$(SUBLEVEL)" in line:
+            new_lines.append(line.replace("0$(SUBLEVEL)", "255"))
+        else:
+            new_lines.append(line)
+    makefile.write_text("\n".join(new_lines) + "\n", encoding="utf-8")
+    print("[PASS] Makefile SUBLEVEL set to 357 and sanitized")
 else:
     raise SystemExit("[FATAL] Makefile not found!")
 

@@ -188,6 +188,7 @@ for script in \
   run17-bbg-lz4kd.sh \
   run19-kpm-enable.sh \
   run28-extra-features.sh \
+  apply-kernel-414186.sh \
   apply-kernel-414357.sh \
   apply-binder-419-stability.sh \
   run17-btf-kprobe-scene-fix.sh; do
@@ -203,6 +204,7 @@ git show "$GITHUB_SHA:.github/patches/patch-4.14.180-to-186.patch" > "$GITHUB_WO
 "$GITHUB_WORKSPACE/run17-bbg-lz4kd.sh"
 "$GITHUB_WORKSPACE/run19-kpm-enable.sh" --apply
 "$GITHUB_WORKSPACE/run28-extra-features.sh"
+"$GITHUB_WORKSPACE/apply-kernel-414186.sh"
 "$GITHUB_WORKSPACE/apply-kernel-414357.sh"
 "$GITHUB_WORKSPACE/apply-binder-419-stability.sh"
 "$GITHUB_WORKSPACE/run17-btf-kprobe-scene-fix.sh"
@@ -264,9 +266,6 @@ grep -q '^CONFIG_KSU_SUSFS=y$' "$OUT_DIR/.config"
 grep -q '^CONFIG_BPF_STREAM_PARSER=y$' "$OUT_DIR/.config"
 grep -q '^CONFIG_MODVERSIONS=y$' "$OUT_DIR/.config"
 
-# Avoid false exit 141 under `set -o pipefail`: grep -q may exit as soon as it
-# finds a match, which can SIGPIPE a still-writing nm/strings producer. Materialize
-# the complete streams once, then validate the files.
 RUN16_NM_ALL="$GITHUB_WORKSPACE/run16-vmlinux-nm-all.txt"
 RUN16_STRINGS_ALL="$GITHUB_WORKSPACE/run16-image-strings-all.txt"
 nm "$VMLINUX" > "$RUN16_NM_ALL"

@@ -476,6 +476,53 @@ if rmap_c.exists():
         rmap_c.write_text(text, encoding="utf-8")
         print("[POST-PATCH] Aligned mm/rmap.c __vma_address to vma_address")
 
+lsm_h2 = Path("include/linux/lsm_hooks.h")
+if lsm_h2.exists():
+    text = lsm_h2.read_text(encoding="utf-8")
+    if "file_ioctl_compat" not in text:
+        text = text.replace(
+            "int (*file_ioctl)(struct file *file, unsigned int cmd,\n\t\t\t unsigned long arg);",
+            "int (*file_ioctl)(struct file *file, unsigned int cmd,\n\t\t\t unsigned long arg);\n\tint (*file_ioctl_compat)(struct file *file, unsigned int cmd,\n\t\t\t\tunsigned long arg);"
+        ).replace(
+            "struct list_head file_ioctl;",
+            "struct list_head file_ioctl;\n\tstruct list_head file_ioctl_compat;"
+        )
+        lsm_h2.write_text(text, encoding="utf-8")
+        print("[POST-PATCH] Added file_ioctl_compat to include/linux/lsm_hooks.h")
+
+sec_h2 = Path("include/linux/security.h")
+if sec_h2.exists():
+    text = sec_h2.read_text(encoding="utf-8")
+    if "security_file_ioctl_compat" not in text:
+        text = text.replace(
+            "int security_file_ioctl(struct file *file, unsigned int cmd, unsigned long arg);",
+            "int security_file_ioctl(struct file *file, unsigned int cmd, unsigned long arg);\nint security_file_ioctl_compat(struct file *file, unsigned int cmd, unsigned long arg);"
+        ).replace(
+            "static inline int security_file_ioctl(struct file *file, unsigned int cmd,\n\t\t\t\t      unsigned long arg)\n{\n\treturn 0;\n}",
+            "static inline int security_file_ioctl(struct file *file, unsigned int cmd,\n\t\t\t\t      unsigned long arg)\n{\n\treturn 0;\n}\n\nstatic inline int security_file_ioctl_compat(struct file *file, unsigned int cmd,\n\t\t\t\t\t     unsigned long arg)\n{\n\treturn 0;\n}"
+        )
+        sec_h2.write_text(text, encoding="utf-8")
+        print("[POST-PATCH] Added security_file_ioctl_compat to include/linux/security.h")
+
+sec_c2 = Path("security/security.c")
+if sec_c2.exists():
+    text = sec_c2.read_text(encoding="utf-8")
+    if "security_file_ioctl_compat" not in text:
+        text = text.replace(
+            "int security_file_ioctl(struct file *file, unsigned int cmd, unsigned long arg)\n{\n\treturn call_int_hook(file_ioctl, 0, file, cmd, arg);\n}",
+            "int security_file_ioctl(struct file *file, unsigned int cmd, unsigned long arg)\n{\n\treturn call_int_hook(file_ioctl, 0, file, cmd, arg);\n}\n\nint security_file_ioctl_compat(struct file *file, unsigned int cmd, unsigned long arg)\n{\n\treturn call_int_hook(file_ioctl_compat, 0, file, cmd, arg);\n}\nEXPORT_SYMBOL(security_file_ioctl_compat);"
+        )
+        sec_c2.write_text(text, encoding="utf-8")
+        print("[POST-PATCH] Implemented security_file_ioctl_compat in security/security.c")
+
+km = Path("kernel/Makefile")
+if km.exists():
+    txt = km.read_text(encoding="utf-8")
+    if not Path("kernel/elfcore.c").exists() and "obj-$(CONFIG_ELFCORE) += elfcore.o" in txt:
+        txt = txt.replace("obj-$(CONFIG_ELFCORE) += elfcore.o", "# obj-$(CONFIG_ELFCORE) += elfcore.o")
+        km.write_text(txt, encoding="utf-8")
+        print("[POST-PATCH] Commented out elfcore.o in kernel/Makefile because kernel/elfcore.c was removed upstream")
+
 proof_lines = [
     "kernel_version=4.14.357",
     "sublevel=357",

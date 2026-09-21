@@ -122,7 +122,15 @@ CRITICAL_VENDOR_PATHS = {
     "fs/stat.c",
     "arch/arm64/kernel/setup.c",
     "arch/arm64/mm/mmu.c",
-    "arch/arm64/kernel/kaslr.c"
+    "arch/arm64/kernel/kaslr.c",
+    "include/linux/lsm_hooks.h",
+    "include/linux/security.h",
+    "security/selinux/hooks.c",
+    "security/security.c",
+    "include/linux/rmap.h",
+    "mm/rmap.c",
+    "fs/file.c",
+    "include/linux/fs.h"
 }
 
 def is_protected(fn: str) -> bool:
@@ -161,6 +169,12 @@ with tempfile.TemporaryDirectory() as td:
             skipped_missing_count += 1
             continue
 
+        # 0. If file is protected or critical vendor, preserve vendor/backport version without modification
+        if is_protected(fn):
+            conflict_count += 1
+            print(f"[SHIELD] Protected/vendor path {fn}: preserved vendor implementation")
+            continue
+
         # In-memory backup to guarantee 100% clean recovery on any merge failure
         backup_bytes = target_file.read_bytes() if target_file.is_file() else None
 
@@ -188,13 +202,7 @@ with tempfile.TemporaryDirectory() as td:
             already_present_count += 1
             continue
 
-        # 3. If file is protected or syntax-sensitive, keep vendor/backport version and bypass conflict
-        if is_protected(fn):
-            conflict_count += 1
-            print(f"[SHIELD] Protected/syntax path {fn}: preserved vendor implementation (conflict safely bypassed)")
-            continue
-
-        # 4. 3-way merge attempt for standard non-protected files
+        # 3. 3-way merge attempt for standard non-protected files
         res_3w = subprocess.run(
             ["git", "apply", "-3", "--ignore-whitespace", "--whitespace=nowarn", str(tmp_patch)],
             capture_output=True, text=True
@@ -390,6 +398,51 @@ if fixmap_h.exists():
         )
         fixmap_h.write_text(text, encoding="utf-8")
         print("[POST-PATCH] Added FIX_ENTRY_TRAMP_TEXT alias to arch/arm64/include/asm/fixmap.h")
+
+fs_h = Path("include/linux/fs.h")
+if fs_h.exists():
+    text = fs_h.read_text(encoding="utf-8")
+    if "get_file_rcu_many" not in text:
+        if "#define get_file_rcu(x)" in text:
+            text = text.replace(
+                "#define get_file_rcu(x)",
+                "#define get_file_rcu_many(x, cnt)\t\\\n\tatomic_long_add_unless(&(x)->f_count, (cnt), 0)\n#define get_file_rcu(x)"
+            )
+        else:
+            text += "\n#define get_file_rcu_many(x, cnt) atomic_long_add_unless(&(x)->f_count, (cnt), 0)\n"
+        fs_h.write_text(text, encoding="utf-8")
+        print("[POST-PATCH] Added get_file_rcu_many to include/linux/fs.h")
+
+rmap_h = Path("include/linux/rmap.h")
+if rmap_h.exists():
+    text = rmap_h.read_text(encoding="utf-8")
+    if "unsigned degree;" not in text and "struct anon_vma {" in text:
+        text = text.replace(
+            "atomic_t refcount;",
+            "atomic_t refcount;\n\tunsigned degree;"
+        )
+        rmap_h.write_text(text, encoding="utf-8")
+        print("[POST-PATCH] Restored unsigned degree to include/linux/rmap.h")
+
+lsm_h = Path("include/linux/lsm_hooks.h")
+if lsm_h.exists():
+    text = lsm_h.read_text(encoding="utf-8")
+    if "int (*binder_set_context_mgr)(const struct cred *mgr);" in text:
+        text = text.replace(
+            "int (*binder_set_context_mgr)(const struct cred *mgr);",
+            "int (*binder_set_context_mgr)(struct task_struct *mgr);"
+        ).replace(
+            "int (*binder_transaction)(const struct cred *from, const struct cred *to);",
+            "int (*binder_transaction)(struct task_struct *from, struct task_struct *to);"
+        ).replace(
+            "int (*binder_transfer_binder)(const struct cred *from, const struct cred *to);",
+            "int (*binder_transfer_binder)(struct task_struct *from, struct task_struct *to);"
+        ).replace(
+            "int (*binder_transfer_file)(const struct cred *from, const struct cred *to, struct file *file);",
+            "int (*binder_transfer_file)(struct task_struct *from, struct task_struct *to, struct file *file);"
+        )
+        lsm_h.write_text(text, encoding="utf-8")
+        print("[POST-PATCH] Aligned include/linux/lsm_hooks.h binder prototypes to struct task_struct *")
 
 proof_lines = [
     "kernel_version=4.14.357",

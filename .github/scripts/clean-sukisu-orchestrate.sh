@@ -188,11 +188,13 @@ for script in \
   run17-bbg-lz4kd.sh \
   run19-kpm-enable.sh \
   run28-extra-features.sh \
+  apply-kernel-414186.sh \
   apply-binder-419-stability.sh \
   run17-btf-kprobe-scene-fix.sh; do
   git show "$GITHUB_SHA:.github/scripts/$script" > "$GITHUB_WORKSPACE/$script"
   chmod +x "$GITHUB_WORKSPACE/$script"
 done
+git show "$GITHUB_SHA:.github/patches/patch-4.14.180-to-186.patch" > "$GITHUB_WORKSPACE/patch-4.14.180-to-186.patch"
 "$GITHUB_WORKSPACE/exp3-a16-runtime-compat.sh"
 "$GITHUB_WORKSPACE/exp3-btf-backport.sh"
 "$GITHUB_WORKSPACE/exp3-btf-modern-observed.sh"
@@ -201,6 +203,7 @@ done
 "$GITHUB_WORKSPACE/run17-bbg-lz4kd.sh"
 "$GITHUB_WORKSPACE/run19-kpm-enable.sh" --apply
 "$GITHUB_WORKSPACE/run28-extra-features.sh"
+"$GITHUB_WORKSPACE/apply-kernel-414186.sh"
 "$GITHUB_WORKSPACE/apply-binder-419-stability.sh"
 "$GITHUB_WORKSPACE/run17-btf-kprobe-scene-fix.sh"
 

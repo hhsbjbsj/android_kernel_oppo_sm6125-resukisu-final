@@ -126,6 +126,10 @@ jobs:
           grep -Fq 'droidspaces=off' "$GITHUB_WORKSPACE/run28-extra-features-proof.txt"
           grep -Fq 'network_enhance=y' "$GITHUB_WORKSPACE/run28-extra-features-proof.txt"
           grep -Fq 'tcp_brutal=y' "$GITHUB_WORKSPACE/run28-extra-features-proof.txt"
+          test -s "$GITHUB_WORKSPACE/kernel-version-proof.txt"
+          grep -Fxq 'kernel_version=4.14.186' "$GITHUB_WORKSPACE/kernel-version-proof.txt"
+          grep -Fxq 'sublevel=186' "$GITHUB_WORKSPACE/kernel-version-proof.txt"
+          grep -q '^SUBLEVEL = 186$' Makefile
           test -s "$GITHUB_WORKSPACE/binder-419-proof.txt"
           grep -Fq 'wake_up_pollfree=applied' "$GITHUB_WORKSPACE/binder-419-proof.txt"
           grep -Fq '__wake_up_pollfree=exported' "$GITHUB_WORKSPACE/binder-419-proof.txt"
@@ -217,6 +221,7 @@ jobs:
             run25-susfs230-proof.txt
             run28-extra-features.log
             run28-extra-features-proof.txt
+            kernel-version-proof.txt
             binder-419-proof.txt
             run18-sukisu-swap.log
             run18-sukisu-proof.txt

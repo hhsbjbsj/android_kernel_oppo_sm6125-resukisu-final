@@ -660,6 +660,34 @@ if p_pkt_int.exists():
     p_pkt_int.write_text(pkt_txt, encoding="utf-8")
     print("[POST-PATCH] Restored auxdata, origdev, and atomic_t mapped to net/packet/internal.h")
 
+p_pkt_sch = Path("include/net/pkt_sched.h")
+if p_pkt_sch.exists():
+    sch_txt = p_pkt_sch.read_text(encoding="utf-8")
+    if "rtm_tca_policy" not in sch_txt:
+        target_decl = "extern int tc_qdisc_flow_control"
+        repl_decl = "extern const struct nla_policy rtm_tca_policy[TCA_MAX + 1];\nextern int tc_qdisc_flow_control"
+        if target_decl in sch_txt:
+            sch_txt = sch_txt.replace(target_decl, repl_decl, 1)
+        else:
+            target_mtu = "static inline unsigned int psched_mtu"
+            repl_mtu = "extern const struct nla_policy rtm_tca_policy[TCA_MAX + 1];\n\nstatic inline unsigned int psched_mtu"
+            sch_txt = sch_txt.replace(target_mtu, repl_mtu, 1)
+    if "READ_ONCE(dev->mtu)" not in sch_txt:
+        sch_txt = sch_txt.replace("return dev->mtu + dev->hard_header_len;", "return READ_ONCE(dev->mtu) + dev->hard_header_len;")
+    p_pkt_sch.write_text(sch_txt, encoding="utf-8")
+    print("[POST-PATCH] Injected rtm_tca_policy and READ_ONCE(dev->mtu) into include/net/pkt_sched.h")
+
+p_cls = Path("net/sched/cls_api.c")
+if p_cls.exists():
+    cls_txt = p_cls.read_text(encoding="utf-8")
+    if "rtm_tca_policy" in cls_txt and "extern const struct nla_policy rtm_tca_policy" not in cls_txt:
+        target_cls = "#include <net/pkt_cls.h>"
+        repl_cls = "#include <net/pkt_cls.h>\n\nextern const struct nla_policy rtm_tca_policy[TCA_MAX + 1];"
+        if target_cls in cls_txt:
+            cls_txt = cls_txt.replace(target_cls, repl_cls, 1)
+            p_cls.write_text(cls_txt, encoding="utf-8")
+            print("[POST-PATCH] Injected extern rtm_tca_policy declaration into net/sched/cls_api.c")
+
 p_ics = Path("net/ipv4/inet_connection_sock.c")
 if p_ics.exists():
     ics_txt = p_ics.read_text(encoding="utf-8")

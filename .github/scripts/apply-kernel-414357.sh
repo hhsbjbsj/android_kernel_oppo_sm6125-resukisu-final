@@ -479,16 +479,18 @@ if rmap_c.exists():
 lsm_h2 = Path("include/linux/lsm_hooks.h")
 if lsm_h2.exists():
     text = lsm_h2.read_text(encoding="utf-8")
-    if "file_ioctl_compat" not in text:
+    if "(*file_ioctl_compat)" not in text:
         text = text.replace(
-            "int (*file_ioctl)(struct file *file, unsigned int cmd,\n\t\t\t unsigned long arg);",
-            "int (*file_ioctl)(struct file *file, unsigned int cmd,\n\t\t\t unsigned long arg);\n\tint (*file_ioctl_compat)(struct file *file, unsigned int cmd,\n\t\t\t\tunsigned long arg);"
-        ).replace(
+            "void (*file_free_security)(struct file *file);",
+            "void (*file_free_security)(struct file *file);\n\tint (*file_ioctl_compat)(struct file *file, unsigned int cmd, unsigned long arg);"
+        )
+    if "struct list_head file_ioctl_compat;" not in text:
+        text = text.replace(
             "struct list_head file_ioctl;",
             "struct list_head file_ioctl;\n\tstruct list_head file_ioctl_compat;"
         )
-        lsm_h2.write_text(text, encoding="utf-8")
-        print("[POST-PATCH] Added file_ioctl_compat to include/linux/lsm_hooks.h")
+    lsm_h2.write_text(text, encoding="utf-8")
+    print("[POST-PATCH] Added file_ioctl_compat to include/linux/lsm_hooks.h")
 
 sec_h2 = Path("include/linux/security.h")
 if sec_h2.exists():

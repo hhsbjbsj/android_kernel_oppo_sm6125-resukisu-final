@@ -226,7 +226,7 @@ with tempfile.TemporaryDirectory() as td:
 print("[INFO] Starting comprehensive tree conflict marker sweep...")
 conflict_cleaned = 0
 for p in Path(".").rglob("*"):
-    if not p.is_file() or ".git" in p.parts:
+    if not p.is_file() or ".git" in p.parts or ".github" in p.parts:
         continue
     try:
         if p.stat().st_size > 10 * 1024 * 1024:
@@ -317,7 +317,7 @@ else:
 # Final verification of zero conflict markers before generating proof
 unclean = []
 for p in Path(".").rglob("*"):
-    if not p.is_file() or ".git" in p.parts:
+    if not p.is_file() or ".git" in p.parts or ".github" in p.parts:
         continue
     try:
         if p.stat().st_size > 10 * 1024 * 1024:

@@ -30,6 +30,7 @@ on:
       - '.github/scripts/run29-manager-handshake.sh'
       - '.github/scripts/apply-binder-419-stability.sh'
       - '.github/scripts/apply-kernel-414186.sh'
+      - '.github/scripts/apply-kernel-414357.sh'
       - '.github/patches/patch-4.14.180-to-186.patch'
 
 env:
@@ -101,6 +102,7 @@ jobs:
           git show "$GITHUB_SHA:.github/scripts/run29-manager-handshake.sh" > "$GITHUB_WORKSPACE/run29-manager-handshake.sh"
           git show "$GITHUB_SHA:.github/scripts/apply-binder-419-stability.sh" > "$GITHUB_WORKSPACE/apply-binder-419-stability.sh"
           git show "$GITHUB_SHA:.github/scripts/apply-kernel-414186.sh" > "$GITHUB_WORKSPACE/apply-kernel-414186.sh"
+          git show "$GITHUB_SHA:.github/scripts/apply-kernel-414357.sh" > "$GITHUB_WORKSPACE/apply-kernel-414357.sh"
           git show "$GITHUB_SHA:.github/patches/patch-4.14.180-to-186.patch" > "$GITHUB_WORKSPACE/patch-4.14.180-to-186.patch"
           git show "$RUN17_BTF_FIX_COMMIT:.github/scripts/run17-btf-kprobe-scene-fix.sh" > "$GITHUB_WORKSPACE/run17-btf-kprobe-scene-fix.sh"
           chmod +x \
@@ -114,7 +116,8 @@ jobs:
             "$GITHUB_WORKSPACE/run28-extra-features.sh" \
             "$GITHUB_WORKSPACE/run29-manager-handshake.sh" \
             "$GITHUB_WORKSPACE/apply-binder-419-stability.sh" \
-            "$GITHUB_WORKSPACE/apply-kernel-414186.sh"
+            "$GITHUB_WORKSPACE/apply-kernel-414186.sh" \
+            "$GITHUB_WORKSPACE/apply-kernel-414357.sh"
 
           python3 - <<'PY'
           from pathlib import Path
@@ -144,6 +147,7 @@ jobs:
                  '"$GITHUB_WORKSPACE/run17-bbg-lz4kd.sh"\n'
                  '"$GITHUB_WORKSPACE/run28-extra-features.sh"\n'
                  '"$GITHUB_WORKSPACE/apply-kernel-414186.sh"\n'
+                 '"$GITHUB_WORKSPACE/apply-kernel-414357.sh"\n'
                  '"$GITHUB_WORKSPACE/apply-binder-419-stability.sh"\n'
                  '"$GITHUB_WORKSPACE/run17-btf-kprobe-scene-fix.sh"\n\n'
                  'run_step \'Instrument exact BTF rejection path\'')
@@ -157,6 +161,7 @@ jobs:
           grep -n 'run29-manager-handshake' "$GITHUB_WORKSPACE/run17-orchestrate.sh"
           grep -n 'run28-extra-features' "$GITHUB_WORKSPACE/run17-orchestrate.sh"
           grep -n 'apply-kernel-414186' "$GITHUB_WORKSPACE/run17-orchestrate.sh"
+          grep -n 'apply-kernel-414357' "$GITHUB_WORKSPACE/run17-orchestrate.sh"
           grep -n 'apply-binder-419-stability' "$GITHUB_WORKSPACE/run17-orchestrate.sh"
           ! grep -n 'run18-sukisu-swap' "$GITHUB_WORKSPACE/run17-orchestrate.sh"
           ! grep -n 'run19-kpm-enable' "$GITHUB_WORKSPACE/run17-orchestrate.sh"
@@ -194,9 +199,9 @@ jobs:
           test -s "$GITHUB_WORKSPACE/run29-manager-handshake-proof.txt"
           grep -Fq 'hook_guard=CONFIG_KSU' "$GITHUB_WORKSPACE/run29-manager-handshake-proof.txt"
           test -s "$GITHUB_WORKSPACE/kernel-version-proof.txt"
-          grep -Fxq 'kernel_version=4.14.186' "$GITHUB_WORKSPACE/kernel-version-proof.txt"
-          grep -Fxq 'sublevel=186' "$GITHUB_WORKSPACE/kernel-version-proof.txt"
-          grep -q '^SUBLEVEL = 186$' Makefile
+          grep -Fxq 'kernel_version=4.14.357' "$GITHUB_WORKSPACE/kernel-version-proof.txt"
+          grep -Fxq 'sublevel=357' "$GITHUB_WORKSPACE/kernel-version-proof.txt"
+          grep -q '^SUBLEVEL = 357$' Makefile
           test -s "$GITHUB_WORKSPACE/binder-419-proof.txt"
           grep -Fq 'wake_up_pollfree=applied' "$GITHUB_WORKSPACE/binder-419-proof.txt"
           grep -Fq '__wake_up_pollfree=exported' "$GITHUB_WORKSPACE/binder-419-proof.txt"
@@ -220,13 +225,13 @@ jobs:
           chmod +x "$GITHUB_WORKSPACE/package-pchm30-run26-ak3.sh"
           "$GITHUB_WORKSPACE/package-pchm30-run26-ak3.sh" \
             "$OUT_DIR/arch/arm64/boot/Image" \
-            "$GITHUB_WORKSPACE/PCHM30-A16-RUN26-RESUKISU-SUSFS230-AK3-${GITHUB_RUN_NUMBER}.zip"
+            "$GITHUB_WORKSPACE/PCHM30-A16-RUN26-RESUKISU-SUSFS230-414357-AK3-${GITHUB_RUN_NUMBER}.zip"
 
       - name: Upload Run26 ReSukiSU artifact
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: PCHM30-A16-RUN26-RESUKISU-SUSFS230-${{ github.run_number }}
+          name: PCHM30-A16-RUN26-RESUKISU-SUSFS230-414357-${{ github.run_number }}
           path: |
             run26-build.log
             run25-susfs230-adapt.log
@@ -243,8 +248,8 @@ jobs:
             run17-builtin-runtime-proof.txt
             run17-bbg-zram-stage-proof.txt
             run17-btf-kprobe-scene-stage-proof.txt
-            PCHM30-A16-RUN26-RESUKISU-SUSFS230-AK3-${{ github.run_number }}.zip
-            PCHM30-A16-RUN26-RESUKISU-SUSFS230-AK3-${{ github.run_number }}.zip.sha256
+            PCHM30-A16-RUN26-RESUKISU-SUSFS230-414357-AK3-${{ github.run_number }}.zip
+            PCHM30-A16-RUN26-RESUKISU-SUSFS230-414357-AK3-${{ github.run_number }}.zip.sha256
             source/android/kernel/msm-4.14/out-pchm30-a16-bpf/.config
             source/android/kernel/msm-4.14/out-pchm30-a16-bpf/arch/arm64/boot/Image
           include-hidden-files: true

@@ -130,7 +130,8 @@ CRITICAL_VENDOR_PATHS = {
     "include/linux/rmap.h",
     "mm/rmap.c",
     "fs/file.c",
-    "include/linux/fs.h"
+    "include/linux/fs.h",
+    "drivers/char/random.c"
 }
 
 def is_protected(fn: str) -> bool:
@@ -532,6 +533,66 @@ if km.exists():
         txt = txt.replace("obj-$(CONFIG_ELFCORE) += elfcore.o", "# obj-$(CONFIG_ELFCORE) += elfcore.o")
         km.write_text(txt, encoding="utf-8")
         print("[POST-PATCH] Commented out elfcore.o in kernel/Makefile because kernel/elfcore.c was removed upstream")
+
+p_rand = Path("drivers/char/random.c")
+res_rc = subprocess.run(["git", "checkout", "refs/tags/v4.14.357-openela", "--", "drivers/char/random.c"], capture_output=True, text=True)
+if res_rc.returncode == 0:
+    print("[POST-PATCH] Checked out upstream 4.14.357 drivers/char/random.c from tag")
+else:
+    try:
+        import urllib.request
+        url_r = "https://raw.githubusercontent.com/openela/kernel-lts/v4.14.357-openela/drivers/char/random.c"
+        req_r = urllib.request.Request(url_r, headers={"User-Agent": "AGY"})
+        with urllib.request.urlopen(req_r, timeout=30) as resp_r:
+            p_rand.write_bytes(resp_r.read())
+        print("[POST-PATCH] Downloaded upstream 4.14.357 drivers/char/random.c via fallback")
+    except Exception as e_r:
+        print(f"[WARN] Fallback download of random.c failed: {e_r}")
+
+chacha20_h = Path("include/crypto/chacha20.h")
+chacha20_content = """/* SPDX-License-Identifier: GPL-2.0 */
+#ifndef _CRYPTO_CHACHA20_H
+#define _CRYPTO_CHACHA20_H
+
+#include <crypto/chacha.h>
+
+#ifndef CHACHA20_IV_SIZE
+#define CHACHA20_IV_SIZE\t16
+#endif
+#ifndef CHACHA20_KEY_SIZE
+#define CHACHA20_KEY_SIZE\t32
+#endif
+#ifndef CHACHA20_BLOCK_SIZE
+#define CHACHA20_BLOCK_SIZE\t64
+#endif
+
+enum chacha_constants { /* expand 32-byte k */
+\tCHACHA_CONSTANT_EXPA = 0x61707865U,
+\tCHACHA_CONSTANT_ND_3 = 0x3320646eU,
+\tCHACHA_CONSTANT_2_BY = 0x79622d32U,
+\tCHACHA_CONSTANT_TE_K = 0x6b206574U
+};
+
+static inline void chacha_init_consts(u32 *state)
+{
+\tstate[0]  = CHACHA_CONSTANT_EXPA;
+\tstate[1]  = CHACHA_CONSTANT_ND_3;
+\tstate[2]  = CHACHA_CONSTANT_2_BY;
+\tstate[3]  = CHACHA_CONSTANT_TE_K;
+}
+
+#endif
+"""
+chacha20_h.write_text(chacha20_content, encoding="utf-8")
+print("[POST-PATCH] Created include/crypto/chacha20.h bridge")
+
+lib_mk = Path("lib/Makefile")
+if lib_mk.exists():
+    l_txt = lib_mk.read_text(encoding="utf-8")
+    if "obj-y += crypto/" not in l_txt:
+        l_txt += "\nobj-y += crypto/\n"
+        lib_mk.write_text(l_txt, encoding="utf-8")
+        print("[POST-PATCH] Added obj-y += crypto/ to lib/Makefile")
 
 proof_lines = [
     "kernel_version=4.14.357",

@@ -362,8 +362,141 @@ if sock_h.exists():
             "ndst = dst->ops->negative_advice(dst);",
             "dst->ops->negative_advice(sk, dst);\n\t\treturn;"
         )
-        sock_h.write_text(text, encoding="utf-8")
-        print("[POST-PATCH] Aligned include/net/sock.h for negative_advice(sk, dst)")
+    # 1. sk_peer_lock in struct sock
+    target_peer = "\tkuid_t\t\t\tsk_uid;\n\tstruct pid\t\t*sk_peer_pid;"
+    repl_peer = "\tkuid_t\t\t\tsk_uid;\n\tspinlock_t\t\tsk_peer_lock;\n\tstruct pid\t\t*sk_peer_pid;"
+    if target_peer in text and "sk_peer_lock" not in text:
+        text = text.replace(target_peer, repl_peer, 1)
+
+    # 2. sk_under_global_memory_pressure
+    target_mem = "static inline bool sk_under_memory_pressure(const struct sock *sk)"
+    repl_mem = (
+        "static inline bool sk_under_global_memory_pressure(const struct sock *sk)\n"
+        "{\n"
+        "\treturn sk->sk_prot->memory_pressure &&\n"
+        "\t\t!!READ_ONCE(*sk->sk_prot->memory_pressure);\n"
+        "}\n\n"
+        "static inline bool sk_under_memory_pressure(const struct sock *sk)"
+    )
+    if target_mem in text and "sk_under_global_memory_pressure" not in text:
+        text = text.replace(target_mem, repl_mem, 1)
+
+    # 3. SKB_FRAG_PAGE_ORDER
+    target_end = "#endif\t/* _SOCK_H */"
+    repl_end = (
+        "/* On 32bit arches, an skb frag is limited to 2^15 */\n"
+        "#define SKB_FRAG_PAGE_ORDER\tget_order(32768)\n\n"
+        "#endif\t/* _SOCK_H */"
+    )
+    if target_end in text and "SKB_FRAG_PAGE_ORDER" not in text:
+        text = text.replace(target_end, repl_end, 1)
+
+    # 4. skb_clone_and_charge_r, sk_stop_timer_sync
+    target_timer = "void sk_stop_timer(struct sock *sk, struct timer_list *timer);"
+    repl_timer = (
+        "void sk_stop_timer(struct sock *sk, struct timer_list *timer);\n"
+        "void sk_stop_timer_sync(struct sock *sk, struct timer_list *timer);\n\n"
+        "static inline struct sk_buff *skb_clone_and_charge_r(struct sk_buff *skb, struct sock *sk)\n"
+        "{\n"
+        "\tskb = skb_clone(skb, sk_gfp_mask(sk, GFP_ATOMIC));\n"
+        "\tif (skb) {\n"
+        "\t\tif (sk_rmem_schedule(sk, skb, skb->truesize)) {\n"
+        "\t\t\tskb_set_owner_r(skb, sk);\n"
+        "\t\t\treturn skb;\n"
+        "\t\t}\n"
+        "\t\t__kfree_skb(skb);\n"
+        "\t}\n"
+        "\treturn NULL;\n"
+        "}"
+    )
+    if target_timer in text and "sk_stop_timer_sync" not in text:
+        text = text.replace(target_timer, repl_timer, 1)
+
+    # 5. sock_load_diag_module
+    target_proto = "void proto_unregister(struct proto *prot);"
+    repl_proto = "void proto_unregister(struct proto *prot);\nint sock_load_diag_module(int family, int protocol);"
+    if target_proto in text and "sock_load_diag_module" not in text:
+        text = text.replace(target_proto, repl_proto, 1)
+
+    # 6. __sock_i_ino
+    target_ino = "unsigned long sock_i_ino(struct sock *sk);"
+    repl_ino = "unsigned long __sock_i_ino(struct sock *sk);\nunsigned long sock_i_ino(struct sock *sk);"
+    if target_ino in text and "__sock_i_ino" not in text:
+        text = text.replace(target_ino, repl_ino, 1)
+
+    # 7. sock_not_owned_by_me
+    target_lockdep = "static inline void sock_owned_by_me(const struct sock *sk)\n{\n#ifdef CONFIG_LOCKDEP\n\tWARN_ON_ONCE(!lockdep_sock_is_held(sk) && debug_locks);\n#endif\n}"
+    repl_lockdep = (
+        "static inline void sock_owned_by_me(const struct sock *sk)\n{\n#ifdef CONFIG_LOCKDEP\n\tWARN_ON_ONCE(!lockdep_sock_is_held(sk) && debug_locks);\n#endif\n}\n\n"
+        "static inline void sock_not_owned_by_me(const struct sock *sk)\n{\n#ifdef CONFIG_LOCKDEP\n\tWARN_ON_ONCE(lockdep_sock_is_held(sk) && debug_locks);\n#endif\n}"
+    )
+    if target_lockdep in text and "sock_not_owned_by_me" not in text:
+        text = text.replace(target_lockdep, repl_lockdep, 1)
+
+    # 8. sk_for_each_bound_safe
+    target_bound = "#define sk_for_each_bound(__sk, list) \\\n\thlist_for_each_entry(__sk, list, sk_bind_node)"
+    repl_bound = (
+        "#define sk_for_each_bound(__sk, list) \\\n\thlist_for_each_entry(__sk, list, sk_bind_node)\n"
+        "#define sk_for_each_bound_safe(__sk, tmp, list) \\\n\thlist_for_each_entry_safe(__sk, tmp, list, sk_bind_node)"
+    )
+    if target_bound in text and "sk_for_each_bound_safe" not in text:
+        text = text.replace(target_bound, repl_bound, 1)
+
+    # 9. _sock_tx_timestamp
+    target_tx = (
+        "static inline void sock_tx_timestamp(const struct sock *sk, __u16 tsflags,\n"
+        "\t\t\t\t     __u8 *tx_flags)\n"
+        "{\n"
+        "\tif (unlikely(tsflags))\n"
+        "\t\t__sock_tx_timestamp(tsflags, tx_flags);\n"
+        "\tif (unlikely(sock_flag(sk, SOCK_WIFI_STATUS)))\n"
+        "\t\t*tx_flags |= SKBTX_WIFI_STATUS;\n"
+        "}"
+    )
+    repl_tx = (
+        "static inline void _sock_tx_timestamp(struct sock *sk, __u16 tsflags,\n"
+        "\t\t\t\t      __u8 *tx_flags, __u32 *tskey)\n"
+        "{\n"
+        "\tif (unlikely(tsflags)) {\n"
+        "\t\t__sock_tx_timestamp(tsflags, tx_flags);\n"
+        "\t\tif (tsflags & SOF_TIMESTAMPING_OPT_ID && tskey &&\n"
+        "\t\t    tsflags & SOF_TIMESTAMPING_TX_RECORD_MASK)\n"
+        "\t\t\t*tskey = sk->sk_tskey++;\n"
+        "\t}\n"
+        "\tif (unlikely(sock_flag(sk, SOCK_WIFI_STATUS)))\n"
+        "\t\t*tx_flags |= SKBTX_WIFI_STATUS;\n"
+        "}\n\n"
+        "static inline void sock_tx_timestamp(struct sock *sk, __u16 tsflags,\n"
+        "\t\t\t\t     __u8 *tx_flags)\n"
+        "{\n"
+        "\t_sock_tx_timestamp(sk, tsflags, tx_flags, NULL);\n"
+        "}\n\n"
+        "static inline void skb_setup_tx_timestamp(struct sk_buff *skb, __u16 tsflags)\n"
+        "{\n"
+        "\t_sock_tx_timestamp(skb->sk, tsflags, &skb_shinfo(skb)->tx_flags,\n"
+        "\t\t\t   &skb_shinfo(skb)->tskey);\n"
+        "}"
+    )
+    if target_tx in text and "_sock_tx_timestamp" not in text:
+        text = text.replace(target_tx, repl_tx, 1)
+
+    sock_h.write_text(text, encoding="utf-8")
+    print("[POST-PATCH] Comprehensively aligned include/net/sock.h to upstream 4.14.357 ABI")
+
+hid_h = Path("include/linux/hid.h")
+if hid_h.exists():
+    h_txt = hid_h.read_text(encoding="utf-8")
+    target_hid = "\tint (*idle)(struct hid_device *hdev, int report, int idle, int reqtype);\n};"
+    repl_hid = "\tint (*idle)(struct hid_device *hdev, int report, int idle, int reqtype);\n\n\tunsigned int max_buffer_size;\n};"
+    if target_hid in h_txt and "unsigned int max_buffer_size;" not in h_txt:
+        h_txt = h_txt.replace(target_hid, repl_hid, 1)
+        print("[POST-PATCH] Added max_buffer_size to struct hid_ll_driver in include/linux/hid.h")
+    target_cp = "#define HID_CP_SELECTDISC\t0x000c00ba"
+    repl_cp = "#define HID_CP_SELECTDISC\t0x000c00ba\n#define HID_CP_VOLUMEUP\t\t0x000c00e9\n#define HID_CP_VOLUMEDOWN\t0x000c00ea"
+    if target_cp in h_txt and "HID_CP_VOLUMEUP" not in h_txt:
+        h_txt = h_txt.replace(target_cp, repl_cp, 1)
+        print("[POST-PATCH] Added HID_CP_VOLUMEUP/DOWN to include/linux/hid.h")
+    hid_h.write_text(h_txt, encoding="utf-8")
 
 mmu_h = Path("arch/arm64/include/asm/mmu.h")
 if mmu_h.exists():

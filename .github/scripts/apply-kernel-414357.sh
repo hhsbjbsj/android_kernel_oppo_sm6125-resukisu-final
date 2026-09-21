@@ -626,6 +626,21 @@ if p_proto.exists():
 
     p_proto.write_text(p_txt, encoding="utf-8")
 
+p_nfq_h = Path("include/net/netfilter/nf_queue.h")
+if p_nfq_h.exists():
+    nfq_txt = p_nfq_h.read_text(encoding="utf-8")
+    target_nfq = "void nf_queue_entry_get_refs(struct nf_queue_entry *entry);"
+    repl_nfq = "bool nf_queue_entry_get_refs(struct nf_queue_entry *entry);"
+    if target_nfq in nfq_txt:
+        nfq_txt = nfq_txt.replace(target_nfq, repl_nfq, 1)
+        p_nfq_h.write_text(nfq_txt, encoding="utf-8")
+        print("[POST-PATCH] Aligned include/net/netfilter/nf_queue.h nf_queue_entry_get_refs return type to bool")
+    else:
+        nfq_txt, n_nfq = re.subn(r"void\s+nf_queue_entry_get_refs\s*\(\s*struct\s+nf_queue_entry\s*\*\s*entry\s*\);", "bool nf_queue_entry_get_refs(struct nf_queue_entry *entry);", nfq_txt)
+        if n_nfq > 0:
+            p_nfq_h.write_text(nfq_txt, encoding="utf-8")
+            print(f"[POST-PATCH] Aligned include/net/netfilter/nf_queue.h nf_queue_entry_get_refs return type to bool via regex (count={n_nfq})")
+
 p_ics = Path("net/ipv4/inet_connection_sock.c")
 if p_ics.exists():
     ics_txt = p_ics.read_text(encoding="utf-8")

@@ -144,6 +144,8 @@ def is_protected(fn: str) -> bool:
     # Syntax-sensitive files: never attempt 3-way merge on Kconfig, Makefiles, or linker scripts
     if fn.endswith("Kconfig") or fn == "Kconfig" or "/Kconfig" in fn:
         return True
+    if fn == "lib/crypto/Makefile":
+        return False
     if fn.endswith("Makefile") or fn == "Makefile":
         return True
     if fn.endswith(".lds") or fn.endswith(".lds.S") or fn.endswith(".dts") or fn.endswith(".dtsi"):
@@ -593,6 +595,14 @@ if lib_mk.exists():
         l_txt += "\nobj-y += crypto/\n"
         lib_mk.write_text(l_txt, encoding="utf-8")
         print("[POST-PATCH] Added obj-y += crypto/ to lib/Makefile")
+
+lib_crypto_mk = Path("lib/crypto/Makefile")
+lib_crypto_mk.parent.mkdir(parents=True, exist_ok=True)
+lib_crypto_mk.write_text(
+    "# SPDX-License-Identifier: GPL-2.0\n\nobj-y += libblake2s.o\nlibblake2s-y += blake2s.o blake2s-generic.o\nifneq ($(CONFIG_CRYPTO_MANAGER_DISABLE_TESTS),y)\nlibblake2s-y += blake2s-selftest.o\nendif\n",
+    encoding="utf-8"
+)
+print("[POST-PATCH] Created lib/crypto/Makefile for libblake2s")
 
 proof_lines = [
     "kernel_version=4.14.357",

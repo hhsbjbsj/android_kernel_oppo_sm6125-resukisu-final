@@ -552,6 +552,63 @@ else:
     except Exception as e_r:
         print(f"[WARN] Fallback download of random.c failed: {e_r}")
 
+if p_rand.exists():
+    rc_txt = p_rand.read_text(encoding="utf-8")
+    if "EXPORT_SYMBOL(register_random_ready_notifier);" not in rc_txt:
+        rc_txt += "\nEXPORT_SYMBOL(register_random_ready_notifier);\nEXPORT_SYMBOL(unregister_random_ready_notifier);\n"
+        p_rand.write_text(rc_txt, encoding="utf-8")
+        print("[POST-PATCH] Exported register_random_ready_notifier in drivers/char/random.c")
+
+rnd_h = Path("include/linux/random.h")
+if rnd_h.exists():
+    r_txt = rnd_h.read_text(encoding="utf-8")
+    anchor_r = "int unregister_random_ready_notifier(struct notifier_block *nb);"
+    bridge_r = (
+        "int unregister_random_ready_notifier(struct notifier_block *nb);\n\n"
+        "#include <linux/notifier.h>\n\n"
+        "struct random_ready_callback {\n"
+        "\tstruct notifier_block nb;\n"
+        "\tvoid (*func)(struct random_ready_callback *rdy);\n"
+        "\tstruct module *owner;\n"
+        "};\n\n"
+        "static inline int __random_ready_callback_wrapper(struct notifier_block *nb, unsigned long action, void *data)\n"
+        "{\n"
+        "\tstruct random_ready_callback *rdy = container_of(nb, struct random_ready_callback, nb);\n"
+        "\tif (rdy && rdy->func)\n"
+        "\t\trdy->func(rdy);\n"
+        "\treturn 0;\n"
+        "}\n\n"
+        "static inline int add_random_ready_callback(struct random_ready_callback *rdy)\n"
+        "{\n"
+        "\tif (!rdy)\n"
+        "\t\treturn -EINVAL;\n"
+        "\trdy->nb.notifier_call = __random_ready_callback_wrapper;\n"
+        "\trdy->nb.priority = 0;\n"
+        "\treturn register_random_ready_notifier(&rdy->nb);\n"
+        "}\n\n"
+        "static inline int del_random_ready_callback(struct random_ready_callback *rdy)\n"
+        "{\n"
+        "\tif (!rdy)\n"
+        "\t\treturn -EINVAL;\n"
+        "\treturn unregister_random_ready_notifier(&rdy->nb);\n"
+        "}"
+    )
+    if anchor_r in r_txt and "struct random_ready_callback" not in r_txt:
+        r_txt = r_txt.replace(anchor_r, bridge_r, 1)
+        rnd_h.write_text(r_txt, encoding="utf-8")
+        print("[POST-PATCH] Added random_ready_callback compatibility bridge to include/linux/random.h")
+
+p_vsprintf = Path("lib/vsprintf.c")
+if p_vsprintf.exists():
+    vs_txt = p_vsprintf.read_text(encoding="utf-8")
+    if "#include <linux/random.h>" not in vs_txt:
+        anchor_vs = "#include <linux/siphash.h>"
+        if anchor_vs in vs_txt:
+            vs_txt = vs_txt.replace(anchor_vs, f"{anchor_vs}\n#include <linux/random.h>", 1)
+            p_vsprintf.write_text(vs_txt, encoding="utf-8")
+            print("[POST-PATCH] Added #include <linux/random.h> to lib/vsprintf.c")
+
+
 chacha20_h = Path("include/crypto/chacha20.h")
 chacha20_content = """/* SPDX-License-Identifier: GPL-2.0 */
 #ifndef _CRYPTO_CHACHA20_H

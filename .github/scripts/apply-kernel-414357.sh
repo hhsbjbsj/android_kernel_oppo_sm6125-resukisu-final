@@ -619,7 +619,7 @@ if clk_h.exists():
         "struct clk *devm_get_clk_from_child(struct device *dev,\n"
         "\t\t\t\t    struct device_node *np, const char *con_id);"
     )
-    if target_decl in text and "devm_clk_get_optional(" not in text:
+    if target_decl in text and "devm_clk_get_prepared(" not in text:
         text = text.replace(target_decl, new_decls, 1)
 
     target_stub = "static inline struct clk *devm_clk_get(struct device *dev, const char *id)\n{\n\treturn NULL;\n}"
@@ -645,10 +645,10 @@ if clk_h.exists():
         "\t\t\t\tstruct device_node *np, const char *con_id)\n"
         "{\n\treturn NULL;\n}"
     )
-    if target_stub in text and "devm_clk_get_optional(" not in text:
+    if target_stub in text and "static inline struct clk *devm_clk_get_prepared(" not in text:
         text = text.replace(target_stub, new_stubs, 1)
 
-    if "clk_get_optional(" not in text and "#if defined(CONFIG_OF)" in text:
+    if "static inline struct clk *clk_get_optional(" not in text and "#if defined(CONFIG_OF)" in text:
         clk_optional_code = (
             "static inline struct clk *clk_get_optional(struct device *dev, const char *id)\n"
             "{\n"

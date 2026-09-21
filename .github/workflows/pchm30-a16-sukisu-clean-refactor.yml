@@ -3,7 +3,7 @@ name: PCHM30 A16 SukiSU Clean Refactor SUSFS 2.3.0
 on:
   workflow_dispatch:
   push:
-    branches: [pchm30-a16-sukisu-clean-refactor]
+    branches: [pchm30-a16-exp-414357-sukisu, pchm30-a16-sukisu-clean-refactor]
 
 env:
   TOOLCHAIN_RELEASE_TAG: pchm30-build-environment-20260810
@@ -127,9 +127,9 @@ jobs:
           grep -Fq 'network_enhance=y' "$GITHUB_WORKSPACE/run28-extra-features-proof.txt"
           grep -Fq 'tcp_brutal=y' "$GITHUB_WORKSPACE/run28-extra-features-proof.txt"
           test -s "$GITHUB_WORKSPACE/kernel-version-proof.txt"
-          grep -Fxq 'kernel_version=4.14.186' "$GITHUB_WORKSPACE/kernel-version-proof.txt"
-          grep -Fxq 'sublevel=186' "$GITHUB_WORKSPACE/kernel-version-proof.txt"
-          grep -q '^SUBLEVEL = 186$' Makefile
+          grep -Fxq 'kernel_version=4.14.357' "$GITHUB_WORKSPACE/kernel-version-proof.txt"
+          grep -Fxq 'sublevel=357' "$GITHUB_WORKSPACE/kernel-version-proof.txt"
+          grep -q '^SUBLEVEL = 357$' Makefile
           test -s "$GITHUB_WORKSPACE/binder-419-proof.txt"
           grep -Fq 'wake_up_pollfree=applied' "$GITHUB_WORKSPACE/binder-419-proof.txt"
           grep -Fq '__wake_up_pollfree=exported' "$GITHUB_WORKSPACE/binder-419-proof.txt"
@@ -207,14 +207,14 @@ jobs:
           chmod +x "$GITHUB_WORKSPACE/package-pchm30-clean-ak3.sh"
           "$GITHUB_WORKSPACE/package-pchm30-clean-ak3.sh" \
             "$OUT_DIR/arch/arm64/boot/Image" \
-            "$GITHUB_WORKSPACE/PCHM30-A16-CLEAN-SUKISU-SUSFS230-AK3-${GITHUB_RUN_NUMBER}.zip"
+            "$GITHUB_WORKSPACE/PCHM30-A16-EXP-SUKISU-SUSFS230-414357-AK3-${GITHUB_RUN_NUMBER}.zip"
           echo '[PASS] Clean AnyKernel3 ZIP generated'
 
       - name: Upload Clean SukiSU artifact
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: PCHM30-A16-CLEAN-SUKISU-SUSFS230-${{ github.run_number }}
+          name: PCHM30-A16-EXP-SUKISU-SUSFS230-414357-${{ github.run_number }}
           path: |
             clean-sukisu-build.log
             run25-susfs230-adapt.log
@@ -229,8 +229,8 @@ jobs:
             run19-kpm-config-proof.txt
             clean-kpm-patcher.log
             clean-kpm-final-proof.txt
-            PCHM30-A16-CLEAN-SUKISU-SUSFS230-AK3-${{ github.run_number }}.zip
-            PCHM30-A16-CLEAN-SUKISU-SUSFS230-AK3-${{ github.run_number }}.zip.sha256
+            PCHM30-A16-EXP-SUKISU-SUSFS230-414357-AK3-${{ github.run_number }}.zip
+            PCHM30-A16-EXP-SUKISU-SUSFS230-414357-AK3-${{ github.run_number }}.zip.sha256
             source/android/kernel/msm-4.14/out-pchm30-a16-bpf/.config
             source/android/kernel/msm-4.14/out-pchm30-a16-bpf/arch/arm64/boot/Image
           include-hidden-files: true

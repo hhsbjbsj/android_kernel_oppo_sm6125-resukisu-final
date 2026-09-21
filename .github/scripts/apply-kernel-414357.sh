@@ -121,7 +121,8 @@ CRITICAL_VENDOR_PATHS = {
     "fs/open.c",
     "fs/stat.c",
     "arch/arm64/kernel/setup.c",
-    "arch/arm64/mm/mmu.c"
+    "arch/arm64/mm/mmu.c",
+    "arch/arm64/kernel/kaslr.c"
 }
 
 def is_protected(fn: str) -> bool:
@@ -336,10 +337,10 @@ print("[PASS] Final verification: Zero conflict markers across entire repository
 
 # Post-patch ABI alignments between vendor implementation and 4.14.357 headers
 bugs_h = Path("include/asm-generic/bugs.h")
-if not bugs_h.exists() or bugs_h.stat().st_size == 0:
-    bugs_h.parent.mkdir(parents=True, exist_ok=True)
-    bugs_h.write_text("#ifndef __ASM_GENERIC_BUGS_H\n#define __ASM_GENERIC_BUGS_H\n#endif\n", encoding="utf-8")
-    print("[POST-PATCH] Created include/asm-generic/bugs.h header guard")
+bugs_content = "/* SPDX-License-Identifier: GPL-2.0 */\n#ifndef __ASM_GENERIC_BUGS_H\n#define __ASM_GENERIC_BUGS_H\nstatic inline void check_bugs(void) { }\n#endif\n"
+bugs_h.parent.mkdir(parents=True, exist_ok=True)
+bugs_h.write_text(bugs_content, encoding="utf-8")
+print("[POST-PATCH] Created include/asm-generic/bugs.h with check_bugs() implementation")
 
 sock_h = Path("include/net/sock.h")
 if sock_h.exists():
@@ -358,10 +359,26 @@ if mmu_h.exists():
     if "extern void *fixmap_remap_fdt(phys_addr_t dt_phys, int *size, pgprot_t prot);" in text:
         text = text.replace(
             "extern void *fixmap_remap_fdt(phys_addr_t dt_phys, int *size, pgprot_t prot);",
-            "extern void *fixmap_remap_fdt(phys_addr_t dt_phys);"
+            "extern void *fixmap_remap_fdt(phys_addr_t dt_phys);\nextern void *__fixmap_remap_fdt(phys_addr_t dt_phys, int *size, pgprot_t prot);"
         )
-        mmu_h.write_text(text, encoding="utf-8")
-        print("[POST-PATCH] Aligned arch/arm64/include/asm/mmu.h fixmap_remap_fdt for vendor")
+    elif "extern void *fixmap_remap_fdt(phys_addr_t dt_phys);" in text and "__fixmap_remap_fdt" not in text:
+        text = text.replace(
+            "extern void *fixmap_remap_fdt(phys_addr_t dt_phys);",
+            "extern void *fixmap_remap_fdt(phys_addr_t dt_phys);\nextern void *__fixmap_remap_fdt(phys_addr_t dt_phys, int *size, pgprot_t prot);"
+        )
+    mmu_h.write_text(text, encoding="utf-8")
+    print("[POST-PATCH] Aligned arch/arm64/include/asm/mmu.h fixmap_remap_fdt and __fixmap_remap_fdt")
+
+kaslr_c = Path("arch/arm64/kernel/kaslr.c")
+if kaslr_c.exists():
+    text = kaslr_c.read_text(encoding="utf-8")
+    if "fdt = fixmap_remap_fdt(dt_phys, &size, PAGE_KERNEL);" in text:
+        text = text.replace(
+            "fdt = fixmap_remap_fdt(dt_phys, &size, PAGE_KERNEL);",
+            "fdt = __fixmap_remap_fdt(dt_phys, &size, PAGE_KERNEL);"
+        )
+        kaslr_c.write_text(text, encoding="utf-8")
+        print("[POST-PATCH] Fixed arch/arm64/kernel/kaslr.c __fixmap_remap_fdt call")
 
 fixmap_h = Path("arch/arm64/include/asm/fixmap.h")
 if fixmap_h.exists():

@@ -76,10 +76,20 @@ jobs:
           sudo sed -i 's|http://azure.archive.ubuntu.com/ubuntu/|http://archive.ubuntu.com/ubuntu/|g' /etc/apt/sources.list
           sudo sed -i 's|http://.*.clouds.archive.ubuntu.com/ubuntu/|http://archive.ubuntu.com/ubuntu/|g' /etc/apt/sources.list
           sudo apt-get update -o Acquire::Retries=3 -o Acquire::http::Timeout="30"
-          sudo apt-get install -y --no-install-recommends dwarves binutils libelf-dev
+          sudo apt-get install -y --no-install-recommends dwarves binutils libelf-dev ccache
+          ccache --version
           set -e
           command -v pahole >/dev/null
           pahole --version
+
+      - name: Setup ccache
+        uses: actions/cache@v4
+        with:
+          path: ~/.ccache
+          key: kernel-ccache-${{ runner.os }}-${{ github.workflow }}-${{ github.ref }}-${{ github.sha }}
+          restore-keys: |
+            kernel-ccache-${{ runner.os }}-${{ github.workflow }}-${{ github.ref }}-
+            kernel-ccache-${{ runner.os }}-${{ github.workflow }}-
 
       - name: Build clean single-pass SukiSU stack with SUSFS 2.3.0, Xiaomi BPF, Run28, and KPM
         working-directory: source/android/kernel/msm-4.14
@@ -110,7 +120,12 @@ jobs:
             "$GITHUB_WORKSPACE/apply-binder-419-stability.sh" \
             "$GITHUB_WORKSPACE/run17-btf-kprobe-scene-fix.sh"
 
+          export CCACHE_DIR="$HOME/.ccache"
+          export CCACHE_MAXSIZE="5G"
+          export CCACHE_COMPILERCHECK="content"
+          ccache -s || true
           "$GITHUB_WORKSPACE/clean-sukisu-orchestrate.sh" 2>&1 | tee "$GITHUB_WORKSPACE/clean-sukisu-build.log"
+          ccache -s || true
 
       - name: Verify generated source, SUSFS 2.3.0 and KPM
         working-directory: source/android/kernel/msm-4.14

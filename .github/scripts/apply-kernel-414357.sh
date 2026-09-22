@@ -698,30 +698,31 @@ if p_cdch.is_file():
         p_cdch.write_text(cdc_txt, encoding="utf-8")
         print("[POST-PATCH] Defined CDC_NCM_FLAG_RESET_NTB16 in include/linux/usb/cdc_ncm.h")
 
-# 17. random_init and random_get_entropy_fallback bridge
+# 17. random_init bridge and randomize_page deduplication
 p_rand = Path("drivers/char/random.c")
 if p_rand.is_file():
     r_txt = p_rand.read_text(encoding="utf-8", errors="replace")
+    # Defuse randomize_page in drivers/char/random.c to prevent collision with mm/util.c
+    old_rnd_page = "unsigned long\nrandomize_page(unsigned long start, unsigned long range)\n{\n\tif (!PAGE_ALIGNED(start)) {"
+    new_rnd_page = "#if 0\nunsigned long\nrandomize_page(unsigned long start, unsigned long range)\n{\n\tif (!PAGE_ALIGNED(start)) {"
+    end_marker = "return start + (get_random_long() % range << PAGE_SHIFT);\n}"
+    if old_rnd_page in r_txt and end_marker in r_txt:
+        r_txt = r_txt.replace(old_rnd_page, new_rnd_page, 1).replace(end_marker, end_marker + "\n#endif", 1)
+        print("[POST-PATCH] Defused randomize_page in drivers/char/random.c in favor of mm/util.c")
     if "random_init" not in r_txt:
         r_txt += """
 
 int __init random_init(const char *command_line)
 {
-\tadd_latent_entropy();
-\tif (command_line)
-\t\tadd_device_randomness(command_line, strlen(command_line));
-\treturn 0;
+	add_latent_entropy();
+	if (command_line)
+		add_device_randomness(command_line, strlen(command_line));
+	return 0;
 }
 EXPORT_SYMBOL_GPL(random_init);
-
-unsigned long random_get_entropy_fallback(void)
-{
-\treturn 0;
-}
-EXPORT_SYMBOL_GPL(random_get_entropy_fallback);
 """
-        p_rand.write_text(r_txt, encoding="utf-8")
-        print("[POST-PATCH] Defined random_init and random_get_entropy_fallback in drivers/char/random.c")
+        print("[POST-PATCH] Defined random_init in drivers/char/random.c")
+    p_rand.write_text(r_txt, encoding="utf-8")
 
 p_randh = Path("include/linux/random.h")
 if p_randh.is_file():

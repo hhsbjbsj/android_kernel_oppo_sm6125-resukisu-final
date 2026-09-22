@@ -553,19 +553,14 @@ if p_irqh.exists():
         p_irqh.write_text(irq_txt, encoding="utf-8")
         print("[POST-PATCH] Fixed kernel/irq/handle.c add_interrupt_randomness call to 2 arguments")
 
-# 13. fs/compat_ioctl.c and include/linux/security.h: security_file_ioctl_compat
-sec_h = Path("include/linux/security.h")
-if sec_h.exists():
-    s_txt = sec_h.read_text(encoding="utf-8")
-    if "security_file_ioctl_compat" not in s_txt:
-        s_txt += """
-static inline int security_file_ioctl_compat(struct file *file, unsigned int cmd, unsigned long arg)
-{
-\treturn security_file_ioctl(file, cmd, arg);
-}
-"""
-        sec_h.write_text(s_txt, encoding="utf-8")
-        print("[POST-PATCH] Injected security_file_ioctl_compat into include/linux/security.h")
+# 13. fs/compat_ioctl.c: map security_file_ioctl_compat to security_file_ioctl
+p_cioctl = Path("fs/compat_ioctl.c")
+if p_cioctl.exists():
+    c_txt = p_cioctl.read_text(encoding="utf-8")
+    if "security_file_ioctl_compat" in c_txt:
+        c_txt = c_txt.replace("security_file_ioctl_compat", "security_file_ioctl")
+        p_cioctl.write_text(c_txt, encoding="utf-8")
+        print("[POST-PATCH] Mapped security_file_ioctl_compat -> security_file_ioctl in fs/compat_ioctl.c")
 
 print(f"=== 4.14.186 -> 4.14.357 Summary ===")
 print(f"Total chunks: {total_chunks}")

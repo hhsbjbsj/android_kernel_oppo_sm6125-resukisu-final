@@ -194,7 +194,8 @@ scripts/config --file "$CONFIG" \
   -e BPF_SYSCALL \
   -e BPF_JIT \
   -e CGROUP_BPF \
-  -e SYSFS
+  -e SYSFS \
+  -e SECTION_MISMATCH_WARN_ONLY
 
 make O="$OUT_DIR" ARCH=arm64 olddefconfig
 
@@ -211,7 +212,8 @@ for cfg in \
   CONFIG_BPF_SYSCALL=y \
   CONFIG_BPF_JIT=y \
   CONFIG_CGROUP_BPF=y \
-  CONFIG_SYSFS=y; do
+  CONFIG_SYSFS=y \
+  CONFIG_SECTION_MISMATCH_WARN_ONLY=y; do
   grep -qx "$cfg" "$CONFIG" || { echo "[FATAL] missing $cfg"; exit 71; }
 done
 

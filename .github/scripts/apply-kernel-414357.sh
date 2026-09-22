@@ -364,7 +364,7 @@ EXCLUDE_PREFIXES = (
         "include/linux/trace_seq.h",
         "include/linux/nodemask.h",
         "include/linux/kernel_stat.h",
-        "include/linux/blkdev.h",
+            "include/linux/elfcore.h",
     "kernel/",
     "include/linux/sched.h",
     "include/linux/sched/",

@@ -721,6 +721,23 @@ if p_ncompat.exists():
             p_ncompat.write_text(nc_txt, encoding="utf-8")
             print("[POST-PATCH] Injected __receive_sock declaration into net/compat.c")
 
+p_def = Path("arch/arm64/configs/vendor/trinket-perf_defconfig")
+if p_def.exists():
+    d_txt = p_def.read_text(encoding="utf-8")
+    if "# CONFIG_SECTION_MISMATCH_WARN_ONLY is not set" in d_txt:
+        d_txt = d_txt.replace("# CONFIG_SECTION_MISMATCH_WARN_ONLY is not set", "CONFIG_SECTION_MISMATCH_WARN_ONLY=y")
+        p_def.write_text(d_txt, encoding="utf-8")
+        print("[POST-PATCH] Enabled CONFIG_SECTION_MISMATCH_WARN_ONLY in trinket-perf_defconfig")
+
+p_mkmod = Path("scripts/Makefile.modpost")
+if p_mkmod.exists():
+    mk_txt = p_mkmod.read_text(encoding="utf-8")
+    target_mod = "$(if $(CONFIG_SECTION_MISMATCH_WARN_ONLY),,-E)"
+    if target_mod in mk_txt:
+        mk_txt = mk_txt.replace(target_mod, "$(if $(CONFIG_SECTION_MISMATCH_WARN_ONLY),,)", 1)
+        p_mkmod.write_text(mk_txt, encoding="utf-8")
+        print("[POST-PATCH] Defused -E flag in scripts/Makefile.modpost for section mismatches")
+
 p_ics = Path("net/ipv4/inet_connection_sock.c")
 if p_ics.exists():
     ics_txt = p_ics.read_text(encoding="utf-8")

@@ -81,6 +81,7 @@ EXCLUDE_PREFIXES = (
     "include/linux/icmpv6.h",
     "include/linux/can/",
     "include/linux/usb/usbnet.h",
+    "include/linux/usb/cdc_ncm.h",
     "include/linux/virtio_net.h",
     "include/linux/virtio_vsock.h",
     "include/linux/bpf.h",
@@ -106,6 +107,7 @@ EXCLUDE_PREFIXES = (
     "include/linux/prandom.h",
     "include/trace/events/random.h",
     "lib/random32.c",
+    "include/linux/timex.h",
     # Crypto subsystem, hardware crypto, and byteorder
     "crypto/",
     "include/crypto/",
@@ -218,6 +220,7 @@ CRITICAL_VENDOR_PATHS = {
     "kernel/sched/walt.c",
     "kernel/sched/cpufreq_schedutil.c",
     "kernel/exit.c",
+    "init/main.c",
     "fs/proc/task_mmu.c",
     "fs/proc/reserve_mmap.c",
     "drivers/android/binder.c",
@@ -682,6 +685,48 @@ static inline bool irqd_affinity_on_activate(struct irq_data *d)
             irq_txt = irq_txt.replace(target_pos, bridge_code, 1)
             p_irqh.write_text(irq_txt, encoding="utf-8")
             print("[POST-PATCH] Defined irqd_set_affinity_on_activate in include/linux/irq.h before #undef")
+
+# 16. include/linux/usb/cdc_ncm.h: CDC_NCM_FLAG_RESET_NTB16 bridge
+p_cdch = Path("include/linux/usb/cdc_ncm.h")
+if p_cdch.is_file():
+    cdc_txt = p_cdch.read_text(encoding="utf-8", errors="replace")
+    if "CDC_NCM_FLAG_RESET_NTB16" not in cdc_txt:
+        cdc_txt += "\n#ifndef CDC_NCM_FLAG_RESET_NTB16\n#define CDC_NCM_FLAG_RESET_NTB16 0x08\n#endif\n"
+        p_cdch.write_text(cdc_txt, encoding="utf-8")
+        print("[POST-PATCH] Defined CDC_NCM_FLAG_RESET_NTB16 in include/linux/usb/cdc_ncm.h")
+
+# 17. random_init and random_get_entropy_fallback bridge
+p_rand = Path("drivers/char/random.c")
+if p_rand.is_file():
+    r_txt = p_rand.read_text(encoding="utf-8", errors="replace")
+    if "random_init" not in r_txt:
+        r_txt += """
+
+int __init random_init(const char *command_line)
+{
+\tadd_latent_entropy();
+\tif (command_line)
+\t\tadd_device_randomness(command_line, strlen(command_line));
+\treturn 0;
+}
+EXPORT_SYMBOL_GPL(random_init);
+
+unsigned long random_get_entropy_fallback(void)
+{
+\treturn 0;
+}
+EXPORT_SYMBOL_GPL(random_get_entropy_fallback);
+"""
+        p_rand.write_text(r_txt, encoding="utf-8")
+        print("[POST-PATCH] Defined random_init and random_get_entropy_fallback in drivers/char/random.c")
+
+p_randh = Path("include/linux/random.h")
+if p_randh.is_file():
+    rh_txt = p_randh.read_text(encoding="utf-8", errors="replace")
+    if "random_init" not in rh_txt:
+        rh_txt += "\nint __init random_init(const char *command_line);\n"
+        p_randh.write_text(rh_txt, encoding="utf-8")
+        print("[POST-PATCH] Declared random_init in include/linux/random.h")
 
 print(f"=== 4.14.186 -> 4.14.357 Summary ===")
 print(f"Total chunks: {total_chunks}")

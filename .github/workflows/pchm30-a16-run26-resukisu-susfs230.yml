@@ -81,8 +81,18 @@ jobs:
         run: |
           set -Eeuo pipefail
           sudo apt-get update
-          sudo apt-get install -y dwarves binutils
+          sudo apt-get install -y dwarves binutils ccache
           pahole --version
+          ccache --version
+
+      - name: Setup ccache
+        uses: actions/cache@v4
+        with:
+          path: ~/.ccache
+          key: kernel-ccache-${{ runner.os }}-${{ github.workflow }}-${{ github.ref }}-${{ github.sha }}
+          restore-keys: |
+            kernel-ccache-${{ runner.os }}-${{ github.workflow }}-${{ github.ref }}-
+            kernel-ccache-${{ runner.os }}-${{ github.workflow }}-
 
       - name: Build Run17 ReSukiSU stack with SUSFS 2.3 overlay and KPM off
         working-directory: source/android/kernel/msm-4.14
@@ -165,7 +175,14 @@ jobs:
           grep -n 'apply-binder-419-stability' "$GITHUB_WORKSPACE/run17-orchestrate.sh"
           ! grep -n 'run18-sukisu-swap' "$GITHUB_WORKSPACE/run17-orchestrate.sh"
           ! grep -n 'run19-kpm-enable' "$GITHUB_WORKSPACE/run17-orchestrate.sh"
+          export CCACHE_DIR="$HOME/.ccache"
+          export CCACHE_MAXSIZE="5G"
+          export CCACHE_COMPILERCHECK="content"
+          export CC="ccache $SDCLANG_DIR/bin/clang"
+          export REAL_CC="ccache $SDCLANG_DIR/bin/clang"
+          ccache -s || true
           "$GITHUB_WORKSPACE/run17-orchestrate.sh" 2>&1 | tee "$GITHUB_WORKSPACE/run26-build.log"
+          ccache -s || true
 
       - name: Verify ReSukiSU SUSFS 2.3.0 and KPM off
         working-directory: source/android/kernel/msm-4.14

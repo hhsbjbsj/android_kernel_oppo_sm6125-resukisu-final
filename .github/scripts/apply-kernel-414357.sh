@@ -74,8 +74,9 @@ EXCLUDE_PREFIXES = (
     # SCSI UFS storage driver
     "drivers/scsi/ufs/",
     "include/linux/ufs",
-    # Scheduler (Qualcomm WALT scheduler)
+    # Scheduler & IRQ (Qualcomm WALT scheduler & GIC/PDC interrupts)
     "kernel/sched/",
+    "kernel/irq/",
     # USB host (avoid desktop xhci changes)
     "drivers/usb/host/",
     # TTY / serial
@@ -522,6 +523,49 @@ if clk_h.exists():
 
     clk_h.write_text(text, encoding="utf-8")
     print("[POST-PATCH] Added clk_get_optional and devm_clk_get_optional* to include/linux/clk.h")
+
+# 11. mm/rmap.c and mm/internal.h: __vma_address -> vma_address
+rmap_c = Path("mm/rmap.c")
+if rmap_c.exists():
+    r_txt = rmap_c.read_text(encoding="utf-8")
+    if "__vma_address(page, vma)" in r_txt:
+        r_txt = r_txt.replace("__vma_address(page, vma)", "vma_address(page, vma)")
+        rmap_c.write_text(r_txt, encoding="utf-8")
+        print("[POST-PATCH] Aligned mm/rmap.c __vma_address to vma_address")
+
+internal_h = Path("mm/internal.h")
+if internal_h.exists():
+    in_txt = internal_h.read_text(encoding="utf-8")
+    if "__vma_address" not in in_txt:
+        in_txt += "\n#define __vma_address(page, vma) vma_address(page, vma)\n"
+        internal_h.write_text(in_txt, encoding="utf-8")
+        print("[POST-PATCH] Defined __vma_address in mm/internal.h")
+
+# 12. kernel/irq/handle.c: add_interrupt_randomness 2-arg compatibility
+p_irqh = Path("kernel/irq/handle.c")
+if p_irqh.exists():
+    irq_txt = p_irqh.read_text(encoding="utf-8")
+    if "add_interrupt_randomness(desc->irq_data.irq);" in irq_txt:
+        irq_txt = irq_txt.replace(
+            "add_interrupt_randomness(desc->irq_data.irq);",
+            "add_interrupt_randomness(desc->irq_data.irq, 0);"
+        )
+        p_irqh.write_text(irq_txt, encoding="utf-8")
+        print("[POST-PATCH] Fixed kernel/irq/handle.c add_interrupt_randomness call to 2 arguments")
+
+# 13. fs/compat_ioctl.c and include/linux/security.h: security_file_ioctl_compat
+sec_h = Path("include/linux/security.h")
+if sec_h.exists():
+    s_txt = sec_h.read_text(encoding="utf-8")
+    if "security_file_ioctl_compat" not in s_txt:
+        s_txt += """
+static inline int security_file_ioctl_compat(struct file *file, unsigned int cmd, unsigned long arg)
+{
+\treturn security_file_ioctl(file, cmd, arg);
+}
+"""
+        sec_h.write_text(s_txt, encoding="utf-8")
+        print("[POST-PATCH] Injected security_file_ioctl_compat into include/linux/security.h")
 
 print(f"=== 4.14.186 -> 4.14.357 Summary ===")
 print(f"Total chunks: {total_chunks}")

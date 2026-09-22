@@ -133,6 +133,9 @@ EXCLUDE_PREFIXES = (
     "kernel/irq/",
     "drivers/irqchip/",
     "include/linux/irq.h",
+    # Timerqueue & timers (keep Qualcomm event_timer & timerqueue atomic)
+    "include/linux/timerqueue.h",
+    "lib/timerqueue.c",
     # USB host (avoid desktop xhci changes)
     "drivers/usb/host/",
     # TTY / serial subsystem (100% atomic)
@@ -727,6 +730,73 @@ if p_randh.is_file():
         rh_txt += "\nint __init random_init(const char *command_line);\n"
         p_randh.write_text(rh_txt, encoding="utf-8")
         print("[POST-PATCH] Declared random_init in include/linux/random.h")
+
+# 18. include/linux/timerqueue.h: ensure struct timerqueue_head has head and next for Qualcomm event_timer
+p_tq = Path("include/linux/timerqueue.h")
+if p_tq.is_file():
+    tq_txt = p_tq.read_text(encoding="utf-8", errors="replace")
+    if "struct timerqueue_node *next;" not in tq_txt:
+        baseline_tq = """/* SPDX-License-Identifier: GPL-2.0 */
+#ifndef _LINUX_TIMERQUEUE_H
+#define _LINUX_TIMERQUEUE_H
+
+#include <linux/rbtree.h>
+#include <linux/ktime.h>
+
+
+struct timerqueue_node {
+\tstruct rb_node node;
+\tktime_t expires;
+};
+
+struct timerqueue_head {
+\tstruct rb_root head;
+\tstruct timerqueue_node *next;
+};
+
+
+extern bool timerqueue_add(struct timerqueue_head *head,
+\t\t\t   struct timerqueue_node *node);
+extern bool timerqueue_del(struct timerqueue_head *head,
+\t\t\t   struct timerqueue_node *node);
+extern struct timerqueue_node *timerqueue_iterate_next(
+\t\t\t\t\t\tstruct timerqueue_node *node);
+
+/**
+ * timerqueue_getnext - Returns the timer with the earliest expiration time
+ *
+ * @head: head of timerqueue
+ *
+ * Returns a pointer to the timer node that has the
+ * earliest expiration time.
+ */
+static inline
+struct timerqueue_node *timerqueue_getnext(struct timerqueue_head *head)
+{
+\treturn head->next;
+}
+
+static inline void timerqueue_init(struct timerqueue_node *node)
+{
+\tRB_CLEAR_NODE(&node->node);
+}
+
+static inline void timerqueue_init_head(struct timerqueue_head *head)
+{
+\thead->head = RB_ROOT;
+\thead->next = NULL;
+}
+#endif /* _LINUX_TIMERQUEUE_H */
+"""
+        p_tq.write_text(baseline_tq, encoding="utf-8")
+        print("[POST-PATCH] Restored baseline 4.14.186 timerqueue.h with head and next")
+
+p_tqc = Path("lib/timerqueue.c")
+if p_tqc.is_file():
+    tqc_txt = p_tqc.read_text(encoding="utf-8", errors="replace")
+    if "rb_erase_cached" in tqc_txt:
+        subprocess.run(["git", "checkout", "HEAD", "--", "lib/timerqueue.c"], capture_output=True)
+        print("[POST-PATCH] Restored baseline lib/timerqueue.c from HEAD")
 
 print(f"=== 4.14.186 -> 4.14.357 Summary ===")
 print(f"Total chunks: {total_chunks}")

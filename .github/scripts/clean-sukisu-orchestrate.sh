@@ -162,6 +162,33 @@ run_step 'Patch netbpfload uname compatibility'
 run_step 'Prepare proven A16 root config'
 "$GITHUB_WORKSPACE/run18-sukisu-swap.sh"
 
+if command -v ccache >/dev/null 2>&1; then
+  echo '===== INITIALIZING CCACHE WRAPPER ====='
+  export CCACHE_DIR="$HOME/.ccache"
+  export CCACHE_MAXSIZE="5G"
+  export CCACHE_COMPILERCHECK="content"
+  mkdir -p "$CCACHE_DIR"
+  ccache -s || true
+  if [ -n "${CC:-}" ] && [ -f "$CC" ] && [ ! -f "${CC}.real" ]; then
+    mv "$CC" "${CC}.real"
+    cat > "$CC" << 'EOF_CCACHE'
+#!/usr/bin/env bash
+exec ccache "${0}.real" "$@"
+EOF_CCACHE
+    chmod +x "$CC"
+    echo "[PASS] Successfully wrapped $CC with ccache"
+  fi
+  if [ -n "${CC:-}" ] && [ -f "${CC}++" ] && [ ! -f "${CC}++.real" ]; then
+    mv "${CC}++" "${CC}++.real"
+    cat > "${CC}++" << 'EOF_CCACHE'
+#!/usr/bin/env bash
+exec ccache "${0}.real" "$@"
+EOF_CCACHE
+    chmod +x "${CC}++"
+    echo "[PASS] Successfully wrapped ${CC}++ with ccache"
+  fi
+fi
+
 echo '===== SMOKE-COMPILE REPAIRED BPF CLOSURE BEFORE LONG BUILD ====='
 unset LLVM LLVM_IAS KBUILD_COMPILER_STRING
 make O="$OUT_DIR" ARCH=arm64 LOCALVERSION=+ \
@@ -307,3 +334,8 @@ sha256sum "$IMAGE" | tee "$GITHUB_WORKSPACE/Image-run16-builtin.sha256"
 cp -a "$OUT_DIR/Module.symvers" "$GITHUB_WORKSPACE/Module.symvers.run16-builtin"
 
 echo '[PASS] Run16 links WLAN + msm_11ad + complete Run15 audio closure into vmlinux/Image; no matching KSU driver module required'
+
+if command -v ccache >/dev/null 2>&1; then
+  echo '===== FINAL CCACHE STATISTICS ====='
+  ccache -s || true
+fi

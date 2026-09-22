@@ -65,6 +65,7 @@ EXCLUDE_PREFIXES = (
     "drivers/char/hw_random/",
     "include/linux/random.h",
     "include/uapi/linux/random.h",
+    "crypto/",
     "include/crypto/",
     "lib/crypto/",
     # Block loop device (keep loop device working for Oppo oplus.fstab 8 loop mounts)

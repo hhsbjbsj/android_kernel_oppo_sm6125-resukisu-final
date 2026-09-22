@@ -1459,54 +1459,23 @@ if p_cdch.is_file():
 
 
 
-# 17. random_init bridge and randomize_page deduplication
-
+# 17. random_init bridge (preserve randomize_page intact in drivers/char/random.c for 4.14.186 mm baseline)
 p_rand = Path("drivers/char/random.c")
-
 if p_rand.is_file():
-
     r_txt = p_rand.read_text(encoding="utf-8", errors="replace")
-
-    # Defuse randomize_page in drivers/char/random.c to prevent collision with mm/util.c
-
-    old_rnd_page = "unsigned long\nrandomize_page(unsigned long start, unsigned long range)\n{\n\tif (!PAGE_ALIGNED(start)) {"
-
-    new_rnd_page = "#if 0\nunsigned long\nrandomize_page(unsigned long start, unsigned long range)\n{\n\tif (!PAGE_ALIGNED(start)) {"
-
-    end_marker = "return start + (get_random_long() % range << PAGE_SHIFT);\n}"
-
-    if old_rnd_page in r_txt and end_marker in r_txt:
-
-        r_txt = r_txt.replace(old_rnd_page, new_rnd_page, 1).replace(end_marker, end_marker + "\n#endif", 1)
-
-        print("[POST-PATCH] Defused randomize_page in drivers/char/random.c in favor of mm/util.c")
-
     if "random_init" not in r_txt:
-
         r_txt += """
 
-
-
 int __init random_init(const char *command_line)
-
 {
-
 	add_latent_entropy();
-
 	if (command_line)
-
 		add_device_randomness(command_line, strlen(command_line));
-
 	return 0;
-
 }
-
 EXPORT_SYMBOL_GPL(random_init);
-
 """
-
         print("[POST-PATCH] Defined random_init in drivers/char/random.c")
-
     p_rand.write_text(r_txt, encoding="utf-8")
 
 
@@ -1806,6 +1775,60 @@ EXPORT_SYMBOL_GPL(check_panic_on_warn);
         print("[POST-PATCH] Defined check_panic_on_warn in kernel/panic.c")
 
 
+
+# 21. fs/sysfs/file.c: define sysfs_emit and sysfs_emit_at for drivers/base/cpu.c
+p_sysfs = Path("fs/sysfs/file.c")
+if p_sysfs.is_file():
+    sysfs_txt = p_sysfs.read_text(encoding="utf-8", errors="replace")
+    if "sysfs_emit" not in sysfs_txt:
+        sysfs_txt += """
+
+int sysfs_emit(char *buf, const char *fmt, ...)
+{
+	va_list args;
+	int len;
+
+	if (WARN(!buf, "invalid sysfs_emit: buf:%p\n", buf))
+		return 0;
+
+	va_start(args, fmt);
+	len = vscnprintf(buf, PAGE_SIZE, fmt, args);
+	va_end(args);
+
+	return len;
+}
+EXPORT_SYMBOL_GPL(sysfs_emit);
+
+int sysfs_emit_at(char *buf, int at, const char *fmt, ...)
+{
+	va_list args;
+	int len;
+
+	if (WARN(!buf || at < 0 || at >= PAGE_SIZE,
+		 "invalid sysfs_emit_at: buf:%p at:%d\n", buf, at))
+		return 0;
+
+	va_start(args, fmt);
+	len = vscnprintf(buf + at, PAGE_SIZE - at, fmt, args);
+	va_end(args);
+
+	return len;
+}
+EXPORT_SYMBOL_GPL(sysfs_emit_at);
+"""
+        p_sysfs.write_text(sysfs_txt, encoding="utf-8")
+        print("[POST-PATCH] Defined sysfs_emit and sysfs_emit_at in fs/sysfs/file.c")
+
+p_sysfsh = Path("include/linux/sysfs.h")
+if p_sysfsh.is_file():
+    sysfsh_txt = p_sysfsh.read_text(encoding="utf-8", errors="replace")
+    if "sysfs_emit" not in sysfsh_txt:
+        sysfsh_txt += """
+int sysfs_emit(char *buf, const char *fmt, ...);
+int sysfs_emit_at(char *buf, int at, const char *fmt, ...);
+"""
+        p_sysfsh.write_text(sysfsh_txt, encoding="utf-8")
+        print("[POST-PATCH] Declared sysfs_emit and sysfs_emit_at in include/linux/sysfs.h")
 
 print(f"=== 4.14.186 -> 4.14.357 Summary ===")
 

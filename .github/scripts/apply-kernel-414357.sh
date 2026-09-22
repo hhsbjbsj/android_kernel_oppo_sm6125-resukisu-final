@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env bash
+#!/usr/bin/env bash
 
 # Apply Linux 4.14.186 -> Linux 4.14.357 (OpenELA LTS) patchset
 
@@ -313,6 +313,49 @@ EXCLUDE_PREFIXES = (
     "drivers/pinctrl/qcom/",
 
     # Core kernel execution, task lifecycle, scheduler & IRQ (keep proven 4.14.186 baseline)
+    "include/linux/cred.h",
+    "include/linux/cgroup.h",
+    "include/linux/cgroup-defs.h",
+    "include/linux/kthread.h",
+    "include/linux/sysctl.h",
+    "include/linux/kprobes.h",
+    "include/linux/perf_event.h",
+    "include/linux/ptrace.h",
+    "include/linux/workqueue.h",
+    "include/linux/wait.h",
+    "include/linux/cpu.h",
+    "include/linux/cpuhotplug.h",
+    "include/linux/stop_machine.h",
+    "include/linux/smp.h",
+    "include/linux/tracepoint.h",
+    "include/linux/trace_events.h",
+    "include/trace/events/sched.h",
+    "include/linux/nls.h",
+    "include/linux/file.h",
+    "include/linux/fsnotify.h",
+    "include/linux/jbd2.h",
+    "include/linux/buffer_head.h",
+    "include/linux/pagemap.h",
+    "include/linux/poll.h",
+    "include/linux/xattr.h",
+    "include/linux/sunrpc/",
+    "include/linux/nfs_fs.h",
+    "include/linux/nfs_page.h",
+    "include/trace/events/writeback.h",
+    "include/linux/syscalls.h",
+    "include/linux/compat.h",
+    "include/asm-generic/pgtable.h",
+    "include/asm-generic/tlb.h",
+    "include/linux/gfp.h",
+    "include/linux/hugetlb.h",
+    "include/linux/khugepaged.h",
+    "include/linux/memory_hotplug.h",
+    "include/linux/mmdebug.h",
+    "include/linux/oom.h",
+    "include/linux/zsmalloc.h",
+    "include/trace/events/vmscan.h",
+    "include/uapi/linux/memfd.h",
+    "include/uapi/linux/mman.h",
     "kernel/",
     "include/linux/sched.h",
     "include/linux/sched/",
@@ -1950,8 +1993,7 @@ echo "[PASS] Verified: $PROOF has kernel_version=4.14.357"
 # 1. Export OPPO stock signing key so system_certificate_list embeds OPPO's official cert
 if [ -f "certs/pchm30-stock-signing-key.x509" ]; then
     CERT_PATH="$(pwd)/certs/pchm30-stock-signing-key.x509"
-    export OPPO_STOCK_SIGNING_X509="$CERT_PATH"
-    if [ -n "${GITHUB_ENV:-}" ] && [ -f "$GITHUB_ENV" ]; then
+        if [ -n "${GITHUB_ENV:-}" ] && [ -f "$GITHUB_ENV" ]; then
         echo "OPPO_STOCK_SIGNING_X509=$CERT_PATH" >> "$GITHUB_ENV"
     fi
     echo "[PASS] Set OPPO_STOCK_SIGNING_X509=$CERT_PATH"

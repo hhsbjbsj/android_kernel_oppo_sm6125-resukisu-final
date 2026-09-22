@@ -471,6 +471,18 @@ if sock_h.exists():
         text, n = re.subn(r"static inline void sock_tx_timestamp\s*\([^)]*\)\s*\{[^}]*\}\s*", repl_tx, text, count=1)
         print(f"[POST-PATCH] Injected _sock_tx_timestamp & skb_setup_tx_timestamp via regex (count={n})")
 
+    if "void __receive_sock" not in text:
+        target_mem = "static inline int sk_memalloc_socks(void)\n{\n\treturn static_key_false(&memalloc_socks);\n}"
+        repl_mem = "static inline int sk_memalloc_socks(void)\n{\n\treturn static_key_false(&memalloc_socks);\n}\n\nvoid __receive_sock(struct file *file);"
+        if target_mem in text:
+            text = text.replace(target_mem, repl_mem, 1)
+
+        target_else = "static inline int sk_memalloc_socks(void)\n{\n\treturn 0;\n}\n\n#endif"
+        repl_else = "static inline int sk_memalloc_socks(void)\n{\n\treturn 0;\n}\n\nstatic inline void __receive_sock(struct file *file)\n{\n}\n\n#endif"
+        if target_else in text:
+            text = text.replace(target_else, repl_else, 1)
+        print("[POST-PATCH] Injected __receive_sock declaration into include/net/sock.h")
+
     sock_h.write_text(text, encoding="utf-8")
     print("[POST-PATCH] Comprehensively aligned include/net/sock.h to upstream 4.14.357 ABI")
 
@@ -697,6 +709,17 @@ if p_xfrm.exists():
         if n_xfrm > 0:
             p_xfrm.write_text(xfrm_txt, encoding="utf-8")
             print("[POST-PATCH] Aligned xfrm_negative_advice signature in net/xfrm/xfrm_policy.c")
+
+p_ncompat = Path("net/compat.c")
+if p_ncompat.exists():
+    nc_txt = p_ncompat.read_text(encoding="utf-8")
+    if "__receive_sock" in nc_txt and "void __receive_sock" not in nc_txt:
+        target_nc = "#include <net/sock.h>"
+        repl_nc = "#include <net/sock.h>\n\nstruct file;\nvoid __receive_sock(struct file *file);"
+        if target_nc in nc_txt:
+            nc_txt = nc_txt.replace(target_nc, repl_nc, 1)
+            p_ncompat.write_text(nc_txt, encoding="utf-8")
+            print("[POST-PATCH] Injected __receive_sock declaration into net/compat.c")
 
 p_ics = Path("net/ipv4/inet_connection_sock.c")
 if p_ics.exists():

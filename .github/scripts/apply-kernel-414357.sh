@@ -350,6 +350,17 @@ bugs_h.parent.mkdir(parents=True, exist_ok=True)
 bugs_h.write_text(bugs_content, encoding="utf-8")
 print("[POST-PATCH] Created include/asm-generic/bugs.h with check_bugs() implementation")
 
+p_memh = Path("arch/arm64/include/asm/memory.h")
+if p_memh.exists():
+    m_txt = p_memh.read_text(encoding="utf-8")
+    if "#define UL(x) _AC(x, UL)" in m_txt and "#ifndef UL" not in m_txt:
+        m_txt = m_txt.replace(
+            "#define UL(x) _AC(x, UL)",
+            "#ifndef UL\n#define UL(x) _AC(x, UL)\n#endif"
+        )
+        p_memh.write_text(m_txt, encoding="utf-8")
+        print("[POST-PATCH] Wrapped UL macro in arch/arm64/include/asm/memory.h with #ifndef UL")
+
 sock_h = Path("include/net/sock.h")
 if sock_h.exists():
     text = sock_h.read_text(encoding="utf-8")

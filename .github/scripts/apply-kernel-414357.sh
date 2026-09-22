@@ -1781,7 +1781,7 @@ p_sysfs = Path("fs/sysfs/file.c")
 if p_sysfs.is_file():
     sysfs_txt = p_sysfs.read_text(encoding="utf-8", errors="replace")
     if "sysfs_emit" not in sysfs_txt:
-        sysfs_txt += """
+        sysfs_txt += r"""
 
 int sysfs_emit(char *buf, const char *fmt, ...)
 {

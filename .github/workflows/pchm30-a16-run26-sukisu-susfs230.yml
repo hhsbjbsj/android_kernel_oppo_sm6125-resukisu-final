@@ -85,6 +85,15 @@ jobs:
           fetch-depth: 1
           submodules: false
 
+      - name: Setup ccache
+        uses: actions/cache@v4
+        with:
+          path: ~/.ccache
+          key: kernel-ccache-${{ runner.os }}-${{ github.workflow }}-${{ github.ref }}-${{ github.sha }}
+          restore-keys: |
+            kernel-ccache-${{ runner.os }}-${{ github.workflow }}-${{ github.ref }}-
+            kernel-ccache-${{ runner.os }}-${{ github.workflow }}-
+
       - name: Resolve latest ReSukiSU main and SukiSU-Ultra builtin at build time
         shell: bash
         run: |
@@ -170,6 +179,7 @@ jobs:
           test -f "$GITHUB_WORKSPACE/run-run19-step.py"
           git show "$GITHUB_SHA:.github/scripts/run28-extra-features.sh" > "$GITHUB_WORKSPACE/run28-extra-features.sh"
           chmod +x "$GITHUB_WORKSPACE/run28-extra-features.sh"
+          sudo apt-get update && sudo apt-get install -y ccache
           git show "$GITHUB_SHA:.github/scripts/inject-run28-sukisu.py" > "$GITHUB_WORKSPACE/inject-run28-sukisu.py"
           python3 "$GITHUB_WORKSPACE/inject-run28-sukisu.py"
 
@@ -177,7 +187,14 @@ jobs:
         shell: bash
         run: |
           set -Eeuo pipefail
+          export CCACHE_DIR="$HOME/.ccache"
+          export CCACHE_MAXSIZE="5G"
+          export CCACHE_COMPILERCHECK="content"
+          export CC="ccache $SDCLANG_DIR/bin/clang"
+          export REAL_CC="ccache $SDCLANG_DIR/bin/clang"
+          ccache -s || true
           python3 "$GITHUB_WORKSPACE/run-run19-step.py" 'Build Run19 from proven Run18 stack with KPM compiled in' 2>&1 | tee "$GITHUB_WORKSPACE/run26-sukisu-build.log"
+          ccache -s || true
 
       - name: Verify generated source and SUSFS 2.3.0
         working-directory: source/android/kernel/msm-4.14

@@ -738,13 +738,388 @@ if p_mkmod.exists():
         p_mkmod.write_text(mk_txt, encoding="utf-8")
         print("[POST-PATCH] Defused -E flag in scripts/Makefile.modpost for section mismatches")
 
+# 1. make_task_dead in include/linux/sched/task.h & kernel/exit.c
+p_taskh = Path("include/linux/sched/task.h")
+if p_taskh.exists():
+    th_txt = p_taskh.read_text(encoding="utf-8")
+    if "make_task_dead" not in th_txt:
+        th_txt = th_txt.replace("void __noreturn do_task_dead(void);", "void __noreturn do_task_dead(void);\nvoid __noreturn make_task_dead(int signr);")
+        p_taskh.write_text(th_txt, encoding="utf-8")
+        print("[POST-PATCH] Declared make_task_dead in include/linux/sched/task.h")
+
+p_kexit = Path("kernel/exit.c")
+if p_kexit.exists():
+    ke_txt = p_kexit.read_text(encoding="utf-8")
+    if "make_task_dead" not in ke_txt:
+        ke_txt += "\n\nvoid __noreturn make_task_dead(int signr)\n{\n\tdo_exit(signr);\n}\nEXPORT_SYMBOL_GPL(make_task_dead);\n"
+        p_kexit.write_text(ke_txt, encoding="utf-8")
+        print("[POST-PATCH] Defined make_task_dead in kernel/exit.c")
+
+# 2. usb_endpoint_is_blacklisted in drivers/usb/core/usb.h & drivers/usb/core/quirks.c
+p_usbh = Path("drivers/usb/core/usb.h")
+if p_usbh.exists():
+    uh_txt = p_usbh.read_text(encoding="utf-8")
+    if "usb_endpoint_is_blacklisted" not in uh_txt:
+        uh_txt += "\nstruct usb_host_interface;\nstruct usb_endpoint_descriptor;\nextern bool usb_endpoint_is_blacklisted(struct usb_device *udev, struct usb_host_interface *intf, struct usb_endpoint_descriptor *epd);\n"
+        p_usbh.write_text(uh_txt, encoding="utf-8")
+        print("[POST-PATCH] Declared usb_endpoint_is_blacklisted in drivers/usb/core/usb.h")
+
+p_quirks = Path("drivers/usb/core/quirks.c")
+if p_quirks.exists():
+    qk_txt = p_quirks.read_text(encoding="utf-8")
+    if "usb_endpoint_is_blacklisted" not in qk_txt:
+        qk_func = """
+static const struct usb_device_id usb_endpoint_blacklist[] = {
+\t{ USB_DEVICE_INTERFACE_NUMBER(0x06f8, 0xb000, 5), .driver_info = 0x01 },
+\t{ USB_DEVICE_INTERFACE_NUMBER(0x06f8, 0xb000, 5), .driver_info = 0x81 },
+\t{ }
+};
+
+bool usb_endpoint_is_blacklisted(struct usb_device *udev,
+\t\tstruct usb_host_interface *intf,
+\t\tstruct usb_endpoint_descriptor *epd)
+{
+\tconst struct usb_device_id *id;
+\tunsigned int address;
+
+\tfor (id = usb_endpoint_blacklist; id->match_flags; ++id) {
+\t\tif (!usb_match_device(udev, id))
+\t\t\tcontinue;
+
+\t\tif (!usb_match_one_id_intf(udev, intf, id))
+\t\t\tcontinue;
+
+\t\taddress = id->driver_info;
+\t\tif (address == epd->bEndpointAddress)
+\t\t\treturn true;
+\t}
+
+\treturn false;
+}
+EXPORT_SYMBOL_GPL(usb_endpoint_is_blacklisted);
+"""
+        qk_txt += "\n" + qk_func
+        p_quirks.write_text(qk_txt, encoding="utf-8")
+        print("[POST-PATCH] Defined usb_endpoint_is_blacklisted in drivers/usb/core/quirks.c")
+
+# 3. bpf_jit_limit_max in include/linux/filter.h & kernel/bpf/core.c
+p_filth = Path("include/linux/filter.h")
+if p_filth.exists():
+    fh_txt = p_filth.read_text(encoding="utf-8")
+    if "bpf_jit_limit_max" not in fh_txt:
+        fh_txt += "\nextern long bpf_jit_limit_max;\n"
+        p_filth.write_text(fh_txt, encoding="utf-8")
+        print("[POST-PATCH] Declared bpf_jit_limit_max in include/linux/filter.h")
+
+p_bpfcore = Path("kernel/bpf/core.c")
+if p_bpfcore.exists():
+    bc_txt = p_bpfcore.read_text(encoding="utf-8")
+    if "bpf_jit_limit_max" not in bc_txt:
+        bc_txt += "\nlong bpf_jit_limit_max __read_mostly;\nEXPORT_SYMBOL_GPL(bpf_jit_limit_max);\n"
+        p_bpfcore.write_text(bc_txt, encoding="utf-8")
+        print("[POST-PATCH] Defined bpf_jit_limit_max in kernel/bpf/core.c")
+
+# 4 & 5. inet_csk_update_fastreuse & inet_csk_clear_xmit_timers_sync in include/net/inet_connection_sock.h & net/ipv4/inet_connection_sock.c
+p_icsh = Path("include/net/inet_connection_sock.h")
+if p_icsh.exists():
+    ih_txt = p_icsh.read_text(encoding="utf-8")
+    if "inet_csk_update_fastreuse" not in ih_txt:
+        ih_txt += "\nvoid inet_csk_update_fastreuse(struct inet_bind_bucket *tb, struct sock *sk);\nvoid inet_csk_clear_xmit_timers_sync(struct sock *sk);\n"
+        p_icsh.write_text(ih_txt, encoding="utf-8")
+        print("[POST-PATCH] Declared fastreuse & clear_xmit_timers_sync in inet_connection_sock.h")
+
 p_ics = Path("net/ipv4/inet_connection_sock.c")
 if p_ics.exists():
     ics_txt = p_ics.read_text(encoding="utf-8")
     if "inet_ehash_insert(req_to_sk(req), NULL);" in ics_txt:
         ics_txt = ics_txt.replace("inet_ehash_insert(req_to_sk(req), NULL);", "inet_ehash_insert(req_to_sk(req), NULL, NULL);")
-        p_ics.write_text(ics_txt, encoding="utf-8")
         print("[POST-PATCH] Fixed inet_ehash_insert 3-argument call in net/ipv4/inet_connection_sock.c")
+    if "inet_csk_update_fastreuse" not in ics_txt:
+        ic_funcs = """
+void inet_csk_update_fastreuse(struct inet_bind_bucket *tb,
+\t\t\t       struct sock *sk)
+{
+\tkuid_t uid = sock_i_uid(sk);
+\tbool reuse = sk->sk_reuse && sk->sk_state != TCP_LISTEN;
+
+\tif (hlist_empty(&tb->owners)) {
+\t\ttb->fastreuse = reuse;
+\t\tif (sk->sk_reuseport) {
+\t\t\ttb->fastreuseport = FASTREUSEPORT_ANY;
+\t\t\ttb->fastuid = uid;
+\t\t\ttb->fast_rcv_saddr = sk->sk_rcv_saddr;
+\t\t\ttb->fast_ipv6_only = ipv6_only_sock(sk);
+\t\t\ttb->fast_sk_family = sk->sk_family;
+#if IS_ENABLED(CONFIG_IPV6)
+\t\t\ttb->fast_v6_rcv_saddr = sk->sk_v6_rcv_saddr;
+#endif
+\t\t} else {
+\t\t\ttb->fastreuseport = 0;
+\t\t}
+\t} else {
+\t\tif (!reuse)
+\t\t\ttb->fastreuse = 0;
+\t\tif (sk->sk_reuseport) {
+\t\t\tif (!sk_reuseport_match(tb, sk)) {
+\t\t\t\ttb->fastreuseport = FASTREUSEPORT_STRICT;
+\t\t\t\ttb->fastuid = uid;
+\t\t\t\ttb->fast_rcv_saddr = sk->sk_rcv_saddr;
+\t\t\t\ttb->fast_ipv6_only = ipv6_only_sock(sk);
+\t\t\ttb->fast_sk_family = sk->sk_family;
+#if IS_ENABLED(CONFIG_IPV6)
+\t\t\ttb->fast_v6_rcv_saddr = sk->sk_v6_rcv_saddr;
+#endif
+\t\t\t}
+\t\t} else {
+\t\t\ttb->fastreuseport = 0;
+\t\t}
+\t}
+}
+EXPORT_SYMBOL_GPL(inet_csk_update_fastreuse);
+
+void inet_csk_clear_xmit_timers_sync(struct sock *sk)
+{
+\tstruct inet_connection_sock *icsk = inet_csk(sk);
+
+\tsock_not_owned_by_me(sk);
+
+\ticsk->icsk_pending = icsk->icsk_ack.pending = 0;
+
+\tsk_stop_timer_sync(sk, &icsk->icsk_retransmit_timer);
+\tsk_stop_timer_sync(sk, &icsk->icsk_delack_timer);
+\tsk_stop_timer_sync(sk, &sk->sk_timer);
+}
+EXPORT_SYMBOL(inet_csk_clear_xmit_timers_sync);
+"""
+        ics_txt += "\n" + ic_funcs
+        print("[POST-PATCH] Defined fastreuse & clear_xmit_timers_sync in inet_connection_sock.c")
+    p_ics.write_text(ics_txt, encoding="utf-8")
+
+# 6. sysctl_tcp_early_retrans in net/ipv4/tcp_input.c
+p_tcpinput = Path("net/ipv4/tcp_input.c")
+if p_tcpinput.exists():
+    ti_txt = p_tcpinput.read_text(encoding="utf-8")
+    if "int sysctl_tcp_early_retrans" not in ti_txt:
+        ti_txt += "\nint sysctl_tcp_early_retrans __read_mostly = 3;\nEXPORT_SYMBOL(sysctl_tcp_early_retrans);\n"
+        p_tcpinput.write_text(ti_txt, encoding="utf-8")
+        print("[POST-PATCH] Defined sysctl_tcp_early_retrans in net/ipv4/tcp_input.c")
+
+# 7. net/unix/scm.c & net/unix/scm.h & net/unix/Makefile & include/net/af_unix.h
+p_scmh = Path("net/unix/scm.h")
+p_scmh.write_text('''#ifndef NET_UNIX_SCM_H
+#define NET_UNIX_SCM_H
+
+extern struct list_head gc_inflight_list;
+extern spinlock_t unix_gc_lock;
+
+int unix_attach_fds(struct scm_cookie *scm, struct sk_buff *skb);
+void unix_detach_fds(struct scm_cookie *scm, struct sk_buff *skb);
+
+#endif
+''', encoding="utf-8")
+print("[POST-PATCH] Created net/unix/scm.h")
+
+p_scmc = Path("net/unix/scm.c")
+p_scmc.write_text('''// SPDX-License-Identifier: GPL-2.0
+#include <linux/module.h>
+#include <linux/kernel.h>
+#include <linux/string.h>
+#include <linux/socket.h>
+#include <linux/net.h>
+#include <linux/fs.h>
+#include <net/af_unix.h>
+#include <net/scm.h>
+#include <linux/init.h>
+#include <linux/sched/signal.h>
+
+#include "scm.h"
+
+unsigned int unix_tot_inflight;
+EXPORT_SYMBOL(unix_tot_inflight);
+
+LIST_HEAD(gc_inflight_list);
+EXPORT_SYMBOL(gc_inflight_list);
+
+DEFINE_SPINLOCK(unix_gc_lock);
+EXPORT_SYMBOL(unix_gc_lock);
+
+struct sock *unix_get_socket(struct file *filp)
+{
+\tstruct sock *u_sock = NULL;
+\tstruct inode *inode = file_inode(filp);
+
+\t/* Socket ? */
+\tif (S_ISSOCK(inode->i_mode) && !(filp->f_mode & FMODE_PATH)) {
+\t\tstruct socket *sock = SOCKET_I(inode);
+\t\tstruct sock *s = sock->sk;
+
+\t\t/* PF_UNIX ? */
+\t\tif (s && sock->ops && sock->ops->family == PF_UNIX)
+\t\t\tu_sock = s;
+\t}
+\treturn u_sock;
+}
+EXPORT_SYMBOL(unix_get_socket);
+
+/* Keep the number of times in flight count for the file
+ * descriptor if it is for an AF_UNIX socket.
+ */
+void unix_inflight(struct user_struct *user, struct file *fp)
+{
+\tstruct sock *s = unix_get_socket(fp);
+
+\tspin_lock(&unix_gc_lock);
+
+\tif (s) {
+\t\tstruct unix_sock *u = unix_sk(s);
+
+\t\tif (!u->inflight) {
+\t\t\tBUG_ON(!list_empty(&u->link));
+\t\t\tlist_add_tail(&u->link, &gc_inflight_list);
+\t\t} else {
+\t\t\tBUG_ON(list_empty(&u->link));
+\t\t}
+\t\tu->inflight++;
+\t\t/* Paired with READ_ONCE() in wait_for_unix_gc() */
+\t\tWRITE_ONCE(unix_tot_inflight, unix_tot_inflight + 1);
+\t}
+\tWRITE_ONCE(user->unix_inflight, user->unix_inflight + 1);
+\tspin_unlock(&unix_gc_lock);
+}
+
+void unix_notinflight(struct user_struct *user, struct file *fp)
+{
+\tstruct sock *s = unix_get_socket(fp);
+
+\tspin_lock(&unix_gc_lock);
+
+\tif (s) {
+\t\tstruct unix_sock *u = unix_sk(s);
+
+\t\tBUG_ON(!u->inflight);
+\t\tBUG_ON(list_empty(&u->link));
+
+\t\tu->inflight--;
+\t\tif (!u->inflight)
+\t\t\tlist_del_init(&u->link);
+\t\t/* Paired with READ_ONCE() in wait_for_unix_gc() */
+\t\tWRITE_ONCE(unix_tot_inflight, unix_tot_inflight - 1);
+\t}
+\tWRITE_ONCE(user->unix_inflight, user->unix_inflight - 1);
+\tspin_unlock(&unix_gc_lock);
+}
+
+static inline bool too_many_unix_fds(struct task_struct *p)
+{
+\tstruct user_struct *user = current_user();
+
+\tif (unlikely(READ_ONCE(user->unix_inflight) > task_rlimit(p, RLIMIT_NOFILE)))
+\t\treturn !capable(CAP_SYS_RESOURCE) && !capable(CAP_SYS_ADMIN);
+\treturn false;
+}
+
+int unix_attach_fds(struct scm_cookie *scm, struct sk_buff *skb)
+{
+\tint i;
+
+\tif (too_many_unix_fds(current))
+\t\treturn -ETOOMANYREFS;
+
+\tUNIXCB(skb).fp = scm_fp_dup(scm->fp);
+\tif (!UNIXCB(skb).fp)
+\t\treturn -ENOMEM;
+
+\tfor (i = scm->fp->count - 1; i >= 0; i--)
+\t\tunix_inflight(scm->fp->user, scm->fp->fp[i]);
+\treturn 0;
+}
+EXPORT_SYMBOL(unix_attach_fds);
+
+void unix_detach_fds(struct scm_cookie *scm, struct sk_buff *skb)
+{
+\tint i;
+
+\tscm->fp = UNIXCB(skb).fp;
+\tUNIXCB(skb).fp = NULL;
+
+\tfor (i = scm->fp->count-1; i >= 0; i--)
+\t\tunix_notinflight(scm->fp->user, scm->fp->fp[i]);
+}
+EXPORT_SYMBOL(unix_detach_fds);
+
+void unix_destruct_scm(struct sk_buff *skb)
+{
+\tstruct scm_cookie scm;
+
+\tmemset(&scm, 0, sizeof(scm));
+\tscm.pid  = UNIXCB(skb).pid;
+\tif (UNIXCB(skb).fp)
+\t\tunix_detach_fds(&scm, skb);
+
+\tscm_destroy(&scm);
+\tsock_wfree(skb);
+}
+EXPORT_SYMBOL(unix_destruct_scm);
+''', encoding="utf-8")
+print("[POST-PATCH] Created net/unix/scm.c")
+
+p_umk = Path("net/unix/Makefile")
+if p_umk.exists():
+    umk_txt = p_umk.read_text(encoding="utf-8")
+    if "scm.o" not in umk_txt:
+        umk_txt = umk_txt.replace("unix-y\t\t\t:= af_unix.o garbage.o", "unix-y\t\t\t:= af_unix.o garbage.o scm.o")
+        p_umk.write_text(umk_txt, encoding="utf-8")
+        print("[POST-PATCH] Added scm.o to net/unix/Makefile unix-y")
+
+p_afuh = Path("include/net/af_unix.h")
+if p_afuh.exists():
+    afu_txt = p_afuh.read_text(encoding="utf-8")
+    if "unix_destruct_scm" not in afu_txt:
+        afu_decl = """
+struct scm_cookie;
+int unix_attach_fds(struct scm_cookie *scm, struct sk_buff *skb);
+void unix_detach_fds(struct scm_cookie *scm, struct sk_buff *skb);
+void unix_destruct_scm(struct sk_buff *skb);
+void unix_gc(void);
+void wait_for_unix_gc(void);
+struct sock *unix_get_socket(struct file *filp);
+void unix_inflight(struct user_struct *user, struct file *fp);
+void unix_notinflight(struct user_struct *user, struct file *fp);
+"""
+        afu_txt += "\n" + afu_decl
+        p_afuh.write_text(afu_txt, encoding="utf-8")
+        print("[POST-PATCH] Declared scm functions in include/net/af_unix.h")
+
+# 8. inet6_cleanup_sock & inet6_sock_destruct in include/net/ipv6.h & net/ipv6/af_inet6.c
+p_ip6h = Path("include/net/ipv6.h")
+if p_ip6h.exists():
+    ip6h_txt = p_ip6h.read_text(encoding="utf-8")
+    if "inet6_cleanup_sock" not in ip6h_txt:
+        ip6h_txt += "\nvoid inet6_cleanup_sock(struct sock *sk);\nvoid inet6_sock_destruct(struct sock *sk);\n"
+        p_ip6h.write_text(ip6h_txt, encoding="utf-8")
+        print("[POST-PATCH] Declared inet6_cleanup_sock in include/net/ipv6.h")
+
+p_af6c = Path("net/ipv6/af_inet6.c")
+if p_af6c.exists():
+    af6_txt = p_af6c.read_text(encoding="utf-8")
+    if "inet6_cleanup_sock" not in af6_txt:
+        af6_funcs = """
+void inet6_cleanup_sock(struct sock *sk)
+{
+\tinet6_destroy_sock(sk);
+}
+EXPORT_SYMBOL_GPL(inet6_cleanup_sock);
+
+void inet6_sock_destruct(struct sock *sk)
+{
+\tinet6_cleanup_sock(sk);
+\tinet_sock_destruct(sk);
+}
+EXPORT_SYMBOL_GPL(inet6_sock_destruct);
+"""
+        af6_txt += "\n" + af6_funcs
+        p_af6c.write_text(af6_txt, encoding="utf-8")
+        print("[POST-PATCH] Defined inet6_cleanup_sock & inet6_sock_destruct in net/ipv6/af_inet6.c")
 
 for tcp_caller in [Path("net/ipv4/tcp_ipv4.c"), Path("net/ipv6/tcp_ipv6.c"), Path("net/dccp/ipv4.c"), Path("net/dccp/ipv6.c")]:
     if tcp_caller.exists():

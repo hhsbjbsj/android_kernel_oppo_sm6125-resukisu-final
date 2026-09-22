@@ -688,6 +688,16 @@ if p_cls.exists():
             p_cls.write_text(cls_txt, encoding="utf-8")
             print("[POST-PATCH] Injected extern rtm_tca_policy declaration into net/sched/cls_api.c")
 
+p_xfrm = Path("net/xfrm/xfrm_policy.c")
+if p_xfrm.exists():
+    xfrm_txt = p_xfrm.read_text(encoding="utf-8")
+    if "static struct dst_entry *xfrm_negative_advice(struct dst_entry *dst)" in xfrm_txt:
+        new_xfrm_fn = "static void xfrm_negative_advice(struct sock *sk, struct dst_entry *dst)\n{\n\tif (dst->obsolete)\n\t\tsk_dst_reset(sk);\n}"
+        xfrm_txt, n_xfrm = re.subn(r"static struct dst_entry \*xfrm_negative_advice\(struct dst_entry \*dst\)[\s\S]*?return dst;\s*}", new_xfrm_fn, xfrm_txt, count=1)
+        if n_xfrm > 0:
+            p_xfrm.write_text(xfrm_txt, encoding="utf-8")
+            print("[POST-PATCH] Aligned xfrm_negative_advice signature in net/xfrm/xfrm_policy.c")
+
 p_ics = Path("net/ipv4/inet_connection_sock.c")
 if p_ics.exists():
     ics_txt = p_ics.read_text(encoding="utf-8")

@@ -163,7 +163,41 @@ jobs:
                  'run_step \'Instrument exact BTF rejection path\'')
           if old not in s:
               raise SystemExit('cannot locate Run16 staging call in orchestrator')
-          p.write_text(s.replace(old, new, 1))
+          s = s.replace(old, new, 1)
+
+          old_smoke = "echo '===== SMOKE-COMPILE REPAIRED BPF CLOSURE BEFORE LONG BUILD ====='\n"
+          new_smoke = (
+              "if command -v ccache >/dev/null 2>&1; then\n"
+              "  echo '===== INITIALIZING CCACHE WRAPPER ====='\n"
+              "  export CCACHE_DIR=\"$HOME/.ccache\"\n"
+              "  export CCACHE_MAXSIZE=\"5G\"\n"
+              "  export CCACHE_COMPILERCHECK=\"content\"\n"
+              "  ccache -s || true\n"
+              "  if [ -n \"${CC:-}\" ] && [ -f \"$CC\" ] && [ ! -f \"${CC}.real\" ]; then\n"
+              "    mv \"$CC\" \"${CC}.real\"\n"
+              "    cat > \"$CC\" << 'EOF_CCACHE'\n"
+              "#!/usr/bin/env bash\n"
+              "exec ccache \"${0}.real\" \"$@\"\n"
+              "EOF_CCACHE\n"
+              "    chmod +x \"$CC\"\n"
+              "    echo \"[PASS] Successfully wrapped $CC with ccache\"\n"
+              "  fi\n"
+              "  if [ -n \"${CC:-}\" ] && [ -f \"${CC}++\" ] && [ ! -f \"${CC}++.real\" ]; then\n"
+              "    mv \"${CC}++\" \"${CC}++.real\"\n"
+              "    cat > \"${CC}++\" << 'EOF_CCACHE'\n"
+              "#!/usr/bin/env bash\n"
+              "exec ccache \"${0}.real\" \"$@\"\n"
+              "EOF_CCACHE\n"
+              "    chmod +x \"${CC}++\"\n"
+              "    echo \"[PASS] Successfully wrapped ${CC}++ with ccache\"\n"
+              "  fi\n"
+              "fi\n\n"
+              + old_smoke
+          )
+          if old_smoke not in s:
+              raise SystemExit('cannot locate smoke compile in orchestrator')
+          s = s.replace(old_smoke, new_smoke, 1)
+          p.write_text(s)
           PY
 
           grep -n 'run25-susfs230-adapt' "$GITHUB_WORKSPACE/run17-orchestrate.sh"
@@ -178,8 +212,6 @@ jobs:
           export CCACHE_DIR="$HOME/.ccache"
           export CCACHE_MAXSIZE="5G"
           export CCACHE_COMPILERCHECK="content"
-          export CC="ccache $SDCLANG_DIR/bin/clang"
-          export REAL_CC="ccache $SDCLANG_DIR/bin/clang"
           ccache -s || true
           "$GITHUB_WORKSPACE/run17-orchestrate.sh" 2>&1 | tee "$GITHUB_WORKSPACE/run26-build.log"
           ccache -s || true

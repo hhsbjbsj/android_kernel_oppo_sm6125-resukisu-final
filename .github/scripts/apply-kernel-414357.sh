@@ -64,6 +64,12 @@ EXCLUDE_PREFIXES = (
     "include/uapi/linux/netfilter/",
     "include/uapi/linux/netfilter.h",
     "include/uapi/linux/netfilter_decnet.h",
+    "include/uapi/linux/ethtool.h",
+    "include/uapi/linux/can/",
+    "include/rdma/",
+    "include/linux/qed/",
+    "include/linux/mlx5/",
+    "include/linux/mdio.h",
     "include/linux/skbuff.h",
     "include/linux/filter.h",
     "include/linux/tcp.h",
@@ -127,20 +133,25 @@ EXCLUDE_PREFIXES = (
     "include/linux/irq.h",
     # USB host (avoid desktop xhci changes)
     "drivers/usb/host/",
-    # TTY / serial
+    # TTY / serial subsystem (100% atomic)
     "drivers/tty/",
-    "include/linux/tty.h",
-    "include/uapi/linux/tty_flags.h",
+    "include/linux/tty",
+    "include/linux/serial",
+    "include/uapi/linux/tty",
+    "include/uapi/linux/serial",
+    # Power subsystem
+    "drivers/power/",
+    "include/linux/power/",
     # HID subsystem (keep vendor input/hid unified)
     "drivers/hid/",
-    "include/linux/hid.h",
+    "include/linux/hid",
+    "include/uapi/linux/hid",
     # Qualcomm BSP drivers
     "drivers/soc/qcom/",
     "drivers/clk/qcom/",
     "drivers/pinctrl/qcom/",
-    "drivers/power/",
-    # Documentation, tools, unused server/desktop drivers
-    "Documentation/", "tools/",
+    # Documentation, metadata, tools, unused server/desktop drivers
+    ".elts/", "Documentation/", "tools/",
     "drivers/gpu/drm/amd/", "drivers/gpu/drm/nouveau/", "drivers/gpu/drm/i915/",
     "drivers/gpu/drm/radeon/", "drivers/infiniband/",
     "drivers/scsi/mpt3sas/", "drivers/scsi/pm8001/", "drivers/staging/lustre/",
@@ -216,7 +227,20 @@ CRITICAL_VENDOR_PATHS = {
     "fs/stat.c",
     "include/linux/rmap.h",
     "mm/rmap.c",
-    "include/linux/clk.h"
+    "include/linux/clk.h",
+    "drivers/clocksource/arm_arch_timer.c",
+    "drivers/spi/spi.c",
+    "drivers/rpmsg/qcom_glink_native.c",
+    "drivers/md/dm-verity-target.c",
+    "drivers/of/fdt.c",
+    "drivers/thermal/thermal_core.c",
+    "drivers/usb/dwc3/core.c",
+    "drivers/usb/dwc3/gadget.c",
+    "drivers/usb/gadget/composite.c",
+    "drivers/usb/gadget/configfs.c",
+    "drivers/usb/gadget/function/f_fs.c",
+    "drivers/usb/gadget/function/rndis.c",
+    "drivers/usb/gadget/function/u_ether.c"
 }
 
 def is_protected(fn: str) -> bool:
@@ -638,8 +662,8 @@ p_irqh = Path("include/linux/irq.h")
 if p_irqh.is_file():
     irq_txt = p_irqh.read_text(encoding="utf-8", errors="replace")
     if "irqd_set_affinity_on_activate" not in irq_txt:
-        bridge_code = """
-#ifndef IRQD_AFFINITY_ON_ACTIVATE
+        target_pos = "#undef __irqd_to_state"
+        bridge_code = """#ifndef IRQD_AFFINITY_ON_ACTIVATE
 #define IRQD_AFFINITY_ON_ACTIVATE (1 << 29)
 #endif
 
@@ -652,10 +676,12 @@ static inline bool irqd_affinity_on_activate(struct irq_data *d)
 {
 \treturn __irqd_to_state(d) & IRQD_AFFINITY_ON_ACTIVATE;
 }
-"""
-        irq_txt += "\n" + bridge_code
-        p_irqh.write_text(irq_txt, encoding="utf-8")
-        print("[POST-PATCH] Defined irqd_set_affinity_on_activate in include/linux/irq.h")
+
+#undef __irqd_to_state"""
+        if target_pos in irq_txt:
+            irq_txt = irq_txt.replace(target_pos, bridge_code, 1)
+            p_irqh.write_text(irq_txt, encoding="utf-8")
+            print("[POST-PATCH] Defined irqd_set_affinity_on_activate in include/linux/irq.h before #undef")
 
 print(f"=== 4.14.186 -> 4.14.357 Summary ===")
 print(f"Total chunks: {total_chunks}")

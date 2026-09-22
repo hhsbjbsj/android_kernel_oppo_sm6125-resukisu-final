@@ -362,7 +362,6 @@ EXCLUDE_PREFIXES = (
         "include/linux/debugfs.h",
         "include/linux/ftrace.h",
         "include/linux/trace_seq.h",
-        "include/linux/nodemask.h",
         "include/linux/kernel_stat.h",
             "include/linux/elfcore.h",
     "kernel/",

@@ -799,6 +799,79 @@ if p_tqc.is_file():
         subprocess.run(["git", "checkout", "HEAD", "--", "lib/timerqueue.c"], capture_output=True)
         print("[POST-PATCH] Restored baseline lib/timerqueue.c from HEAD")
 
+# 19. fs/file_table.c: define fput_many to satisfy fs/file.c lockless RCU
+p_ft = Path("fs/file_table.c")
+if p_ft.is_file():
+    ft_txt = p_ft.read_text(encoding="utf-8", errors="replace")
+    if "fput_many" not in ft_txt:
+        old_fput_def = """void fput(struct file *file)
+{
+\tif (atomic_long_dec_and_test(&file->f_count)) {
+\t\tstruct task_struct *task = current;
+
+\t\tif (likely(!in_interrupt() && !(task->flags & PF_KTHREAD))) {
+\t\t\tinit_task_work(&file->f_u.fu_rcuhead, ____fput);
+\t\t\tif (!task_work_add(task, &file->f_u.fu_rcuhead, true))
+\t\t\t\treturn;
+\t\t\t/*
+\t\t\t * After this task has run exit_task_work(),
+\t\t\t * task_work_add() will fail.  Fall through to delayed
+\t\t\t * fput to avoid leaking *file.
+\t\t\t */
+\t\t}
+
+\t\tif (llist_add(&file->f_u.fu_llist, &delayed_fput_list))
+\t\t\tschedule_delayed_work(&delayed_fput_work, 1);
+\t}
+}"""
+        new_fput_def = """void fput_many(struct file *file, unsigned int refs)
+{
+\tif (atomic_long_sub_and_test(refs, &file->f_count)) {
+\t\tstruct task_struct *task = current;
+
+\t\tif (likely(!in_interrupt() && !(task->flags & PF_KTHREAD))) {
+\t\t\tinit_task_work(&file->f_u.fu_rcuhead, ____fput);
+\t\t\tif (!task_work_add(task, &file->f_u.fu_rcuhead, true))
+\t\t\t\treturn;
+\t\t\t/*
+\t\t\t * After this task has run exit_task_work(),
+\t\t\t * task_work_add() will fail.  Fall through to delayed
+\t\t\t * fput to avoid leaking *file.
+\t\t\t */
+\t\t}
+
+\t\tif (llist_add(&file->f_u.fu_llist, &delayed_fput_list))
+\t\t\tschedule_delayed_work(&delayed_fput_work, 1);
+\t}
+}
+EXPORT_SYMBOL(fput_many);
+
+void fput(struct file *file)
+{
+\tfput_many(file, 1);
+}"""
+        if old_fput_def in ft_txt:
+            ft_txt = ft_txt.replace(old_fput_def, new_fput_def, 1)
+            p_ft.write_text(ft_txt, encoding="utf-8")
+            print("[POST-PATCH] Defined fput_many and updated fput in fs/file_table.c")
+
+# 20. kernel/panic.c: check_panic_on_warn bridge
+p_panic = Path("kernel/panic.c")
+if p_panic.is_file():
+    pan_txt = p_panic.read_text(encoding="utf-8", errors="replace")
+    if "check_panic_on_warn" not in pan_txt:
+        pan_txt += """
+
+void check_panic_on_warn(const char *origin)
+{
+\tif (panic_on_warn)
+\t\tpanic("%s: panic_on_warn set ...\\n", origin);
+}
+EXPORT_SYMBOL_GPL(check_panic_on_warn);
+"""
+        p_panic.write_text(pan_txt, encoding="utf-8")
+        print("[POST-PATCH] Defined check_panic_on_warn in kernel/panic.c")
+
 print(f"=== 4.14.186 -> 4.14.357 Summary ===")
 print(f"Total chunks: {total_chunks}")
 print(f"Applied: {applied_count}")

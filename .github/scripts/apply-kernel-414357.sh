@@ -49,25 +49,70 @@ EXCLUDE_PREFIXES = (
     "include/linux/security.h",
     "include/linux/lsm_hooks.h",
     "include/linux/ima.h",
-    # Network subsystem & headers (keep netfilter, unix domain sockets, packet, tcp, and Xiaomi BPF 100% unified)
+    # Network subsystem & all network headers (keep socket IPC, netfilter, packet, tcp, and Xiaomi BPF 100% unified)
     "net/",
     "drivers/net/",
     "include/net/",
     "include/linux/net.h",
+    "include/linux/netdevice.h",
+    "include/linux/etherdevice.h",
+    "include/linux/netdev_features.h",
     "include/linux/netfilter.h",
     "include/linux/netfilter/",
+    "include/linux/netfilter_bridge/",
+    "include/linux/netfilter_defs.h",
+    "include/uapi/linux/netfilter/",
+    "include/uapi/linux/netfilter.h",
+    "include/uapi/linux/netfilter_decnet.h",
     "include/linux/skbuff.h",
     "include/linux/filter.h",
     "include/linux/tcp.h",
+    "include/linux/if_arp.h",
+    "include/linux/if_vlan.h",
+    "include/linux/if_macvlan.h",
+    "include/linux/if_team.h",
+    "include/linux/ipv6.h",
+    "include/linux/icmpv6.h",
+    "include/linux/can/",
+    "include/linux/usb/usbnet.h",
+    "include/linux/virtio_net.h",
+    "include/linux/virtio_vsock.h",
+    "include/linux/bpf.h",
+    "include/linux/bpf_verifier.h",
     "include/uapi/linux/bpf",
+    "include/uapi/linux/netlink.h",
+    "include/uapi/linux/wireless.h",
+    "include/uapi/linux/in.h",
+    "include/uapi/linux/dn.h",
+    "include/uapi/linux/mroute6.h",
+    "include/uapi/linux/if_alg.h",
+    "include/uapi/linux/gtp.h",
+    "include/uapi/linux/ncsi.h",
+    "include/uapi/linux/xfrm.h",
+    "include/trace/events/sock.h",
+    "include/trace/events/rxrpc.h",
     # Random / PRNG (keep Qualcomm early_random & PRNG intact, avoid BLAKE2s rewrite)
     "drivers/char/random.c",
     "drivers/char/hw_random/",
     "include/linux/random.h",
     "include/uapi/linux/random.h",
+    "include/linux/hw_random.h",
+    "include/linux/prandom.h",
+    "include/trace/events/random.h",
+    "lib/random32.c",
+    # Crypto subsystem, hardware crypto, and byteorder
     "crypto/",
     "include/crypto/",
     "lib/crypto/",
+    "drivers/crypto/",
+    "include/linux/byteorder/",
+    # Sound subsystem & ALSA headers (keep unified with Qualcomm techpack/audio)
+    "sound/",
+    "include/sound/",
+    "include/uapi/sound/",
+    "include/trace/events/asoc.h",
+    # Android Binder & staging
+    "drivers/android/",
     # Block loop device (keep loop device working for Oppo oplus.fstab 8 loop mounts)
     "drivers/block/loop.c",
     "include/linux/loop.h",
@@ -78,11 +123,13 @@ EXCLUDE_PREFIXES = (
     # Scheduler & IRQ (Qualcomm WALT scheduler & GIC/PDC interrupts)
     "kernel/sched/",
     "kernel/irq/",
+    "include/linux/irq.h",
     # USB host (avoid desktop xhci changes)
     "drivers/usb/host/",
     # TTY / serial
     "drivers/tty/",
     "include/linux/tty.h",
+    "include/uapi/linux/tty_flags.h",
     # HID subsystem (keep vendor input/hid unified)
     "drivers/hid/",
     "include/linux/hid.h",
@@ -96,7 +143,6 @@ EXCLUDE_PREFIXES = (
     "drivers/gpu/drm/amd/", "drivers/gpu/drm/nouveau/", "drivers/gpu/drm/i915/",
     "drivers/gpu/drm/radeon/", "drivers/infiniband/",
     "drivers/scsi/mpt3sas/", "drivers/scsi/pm8001/", "drivers/staging/lustre/",
-    "sound/pci/", "sound/isa/"
 )
 
 text = raw_patch.read_text(encoding="utf-8", errors="replace")
@@ -562,6 +608,29 @@ if p_cioctl.exists():
         c_txt = c_txt.replace("security_file_ioctl_compat", "security_file_ioctl")
         p_cioctl.write_text(c_txt, encoding="utf-8")
         print("[POST-PATCH] Mapped security_file_ioctl_compat -> security_file_ioctl in fs/compat_ioctl.c")
+
+# 14. crypto/md5.c & crypto/md4.c: le32_to_cpu_array double-insurance guards
+for f_crypto in [Path("crypto/md5.c"), Path("crypto/md4.c")]:
+    if f_crypto.is_file():
+        txt = f_crypto.read_text(encoding="utf-8", errors="replace")
+        if "static inline void le32_to_cpu_array" in txt and "#ifndef le32_to_cpu_array" not in txt:
+            txt = txt.replace(
+                "static inline void le32_to_cpu_array(u32 *buf, unsigned int words)",
+                "#ifndef le32_to_cpu_array\n#define le32_to_cpu_array le32_to_cpu_array\nstatic inline void le32_to_cpu_array(u32 *buf, unsigned int words)"
+            )
+            txt = txt.replace(
+                "static inline void cpu_to_le32_array(u32 *buf, unsigned int words)",
+                "#endif\n#ifndef cpu_to_le32_array\n#define cpu_to_le32_array cpu_to_le32_array\nstatic inline void cpu_to_le32_array(u32 *buf, unsigned int words)"
+            )
+            txt = txt.replace(
+                "static void md5_transform",
+                "#endif\n\nstatic void md5_transform"
+            ).replace(
+                "static void md4_transform",
+                "#endif\n\nstatic void md4_transform"
+            )
+            f_crypto.write_text(txt, encoding="utf-8")
+            print(f"[POST-PATCH] Guarded le32_to_cpu_array in {f_crypto}")
 
 print(f"=== 4.14.186 -> 4.14.357 Summary ===")
 print(f"Total chunks: {total_chunks}")

@@ -123,6 +123,7 @@ EXCLUDE_PREFIXES = (
     # Scheduler & IRQ (Qualcomm WALT scheduler & GIC/PDC interrupts)
     "kernel/sched/",
     "kernel/irq/",
+    "drivers/irqchip/",
     "include/linux/irq.h",
     # USB host (avoid desktop xhci changes)
     "drivers/usb/host/",
@@ -631,6 +632,30 @@ for f_crypto in [Path("crypto/md5.c"), Path("crypto/md4.c")]:
             )
             f_crypto.write_text(txt, encoding="utf-8")
             print(f"[POST-PATCH] Guarded le32_to_cpu_array in {f_crypto}")
+
+# 15. include/linux/irq.h: irqd_set_affinity_on_activate bridge
+p_irqh = Path("include/linux/irq.h")
+if p_irqh.is_file():
+    irq_txt = p_irqh.read_text(encoding="utf-8", errors="replace")
+    if "irqd_set_affinity_on_activate" not in irq_txt:
+        bridge_code = """
+#ifndef IRQD_AFFINITY_ON_ACTIVATE
+#define IRQD_AFFINITY_ON_ACTIVATE (1 << 29)
+#endif
+
+static inline void irqd_set_affinity_on_activate(struct irq_data *d)
+{
+\t__irqd_to_state(d) |= IRQD_AFFINITY_ON_ACTIVATE;
+}
+
+static inline bool irqd_affinity_on_activate(struct irq_data *d)
+{
+\treturn __irqd_to_state(d) & IRQD_AFFINITY_ON_ACTIVATE;
+}
+"""
+        irq_txt += "\n" + bridge_code
+        p_irqh.write_text(irq_txt, encoding="utf-8")
+        print("[POST-PATCH] Defined irqd_set_affinity_on_activate in include/linux/irq.h")
 
 print(f"=== 4.14.186 -> 4.14.357 Summary ===")
 print(f"Total chunks: {total_chunks}")

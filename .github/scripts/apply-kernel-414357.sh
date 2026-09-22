@@ -35,15 +35,11 @@ from pathlib import Path
 raw_patch = Path(os.environ.get("GITHUB_WORKSPACE", ".")) / "patch-4.14.186-to-357-raw.patch"
 filtered_patch = Path(os.environ.get("GITHUB_WORKSPACE", ".")) / "patch-4.14.186-to-357-filtered.patch"
 
-# Exclude non-arm64 architectures, documentation, tools, and unused server/desktop drivers
+# Exclude architectures (to preserve Qualcomm vendor CPU/entry/vectors), documentation, tools, and unused server/desktop drivers
 EXCLUDE_PREFIXES = (
-    "arch/alpha/", "arch/arc/", "arch/arm/", "arch/c6x/", "arch/cris/",
-    "arch/frv/", "arch/h8300/", "arch/hexagon/", "arch/ia64/", "arch/m32r/",
-    "arch/m68k/", "arch/metag/", "arch/microblaze/", "arch/mips/", "arch/mn10300/",
-    "arch/nios2/", "arch/openrisc/", "arch/parisc/", "arch/powerpc/", "arch/s390/",
-    "arch/score/", "arch/sh/", "arch/sparc/", "arch/tile/", "arch/unicore32/",
-    "arch/v850/", "arch/x86/", "arch/xtensa/",
+    "arch/",
     "Documentation/", "tools/",
+    "drivers/soc/qcom/", "drivers/clk/qcom/", "drivers/pinctrl/qcom/", "drivers/power/",
     "drivers/gpu/drm/amd/", "drivers/gpu/drm/nouveau/", "drivers/gpu/drm/i915/",
     "drivers/gpu/drm/radeon/", "drivers/infiniband/",
     "drivers/net/ethernet/intel/", "drivers/net/ethernet/broadcom/",

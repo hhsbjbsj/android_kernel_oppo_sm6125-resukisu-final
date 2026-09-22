@@ -356,6 +356,15 @@ EXCLUDE_PREFIXES = (
     "include/trace/events/vmscan.h",
     "include/uapi/linux/memfd.h",
     "include/uapi/linux/mman.h",
+        "include/linux/ring_buffer.h",
+        "include/linux/module.h",
+        "include/linux/kexec.h",
+        "include/linux/debugfs.h",
+        "include/linux/ftrace.h",
+        "include/linux/trace_seq.h",
+        "include/linux/nodemask.h",
+        "include/linux/kernel_stat.h",
+        "include/linux/blkdev.h",
     "kernel/",
     "include/linux/sched.h",
     "include/linux/sched/",
@@ -1105,31 +1114,7 @@ if km.exists():
 
 
 
-# 8. fs/open.c ftruncate types
-
-p_open = Path("fs/open.c")
-
-if p_open.is_file():
-
-    txt = p_open.read_text(encoding="utf-8")
-
-    txt = txt.replace(
-
-        "SYSCALL_DEFINE2(ftruncate, unsigned int, fd, unsigned long, length)",
-
-        "SYSCALL_DEFINE2(ftruncate, unsigned int, fd, off_t, length)"
-
-    ).replace(
-
-        "COMPAT_SYSCALL_DEFINE2(ftruncate, unsigned int, fd, compat_ulong_t, length)",
-
-        "COMPAT_SYSCALL_DEFINE2(ftruncate, unsigned int, fd, compat_off_t, length)"
-
-    )
-
-    p_open.write_text(txt, encoding="utf-8")
-
-
+# 8. fs/open.c: ftruncate types preserved at 4.14.186 baseline
 
 # 9. fs.h get_file_rcu_many
 
@@ -1988,25 +1973,6 @@ grep -Fxq 'kernel_version=4.14.357' "$PROOF"
 echo "[PASS] Verified: $PROOF has kernel_version=4.14.357"
 
 
-
-# OPPO PCHM30 Verification & Security hardening
-# 1. Export OPPO stock signing key so system_certificate_list embeds OPPO's official cert
-if [ -f "certs/pchm30-stock-signing-key.x509" ]; then
-    CERT_PATH="$(pwd)/certs/pchm30-stock-signing-key.x509"
-        if [ -n "${GITHUB_ENV:-}" ] && [ -f "$GITHUB_ENV" ]; then
-        echo "OPPO_STOCK_SIGNING_X509=$CERT_PATH" >> "$GITHUB_ENV"
-    fi
-    echo "[PASS] Set OPPO_STOCK_SIGNING_X509=$CERT_PATH"
-fi
-
-# 2. Relax module signature enforcement and embed Android verity key in config
-if [ -n "${OUT_DIR:-}" ] && [ -f "$OUT_DIR/.config" ]; then
-    ./scripts/config --file "$OUT_DIR/.config" -d MODULE_SIG_FORCE || true
-    ./scripts/config --file "$OUT_DIR/.config" --set-str SYSTEM_TRUSTED_KEYS "certs/verity.x509.pem" || true
-    ./scripts/config --file "$OUT_DIR/.config" -e SECURITY_SELINUX_DEVELOP || true
-    ./scripts/config --file "$OUT_DIR/.config" -e DM_VERITY_AVB || true
-    echo "[PASS] Config verified: MODULE_SIG_FORCE=n, SYSTEM_TRUSTED_KEYS=certs/verity.x509.pem, SELINUX_DEVELOP=y, DM_VERITY_AVB=y"
-fi
 
 echo "[SUCCESS] Kernel successfully upgraded to Linux 4.14.357!"
 

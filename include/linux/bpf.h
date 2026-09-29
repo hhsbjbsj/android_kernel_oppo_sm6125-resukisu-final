@@ -639,11 +639,10 @@ static inline bool unprivileged_ebpf_enabled(void)
 
 #endif /* CONFIG_BPF_SYSCALL */
 
+#if defined(CONFIG_BPF_OFFLOAD)
+int bpf_prog_offload_init(struct bpf_prog *prog, union bpf_attr *attr);
 int bpf_prog_offload_compile(struct bpf_prog *prog);
 void bpf_prog_offload_destroy(struct bpf_prog *prog);
-
-#if defined(CONFIG_NET) && defined(CONFIG_BPF_SYSCALL)
-int bpf_prog_offload_init(struct bpf_prog *prog, union bpf_attr *attr);
 
 static inline bool bpf_prog_is_dev_bound(struct bpf_prog_aux *aux)
 {
@@ -660,7 +659,16 @@ static inline bool bpf_prog_is_dev_bound(struct bpf_prog_aux *aux)
 {
 	return false;
 }
-#endif /* CONFIG_NET && CONFIG_BPF_SYSCALL */
+
+static inline int bpf_prog_offload_compile(struct bpf_prog *prog)
+{
+	return 0;
+}
+
+static inline void bpf_prog_offload_destroy(struct bpf_prog *prog)
+{
+}
+#endif
 
 #if defined(CONFIG_STREAM_PARSER) && defined(CONFIG_BPF_SYSCALL)
 struct sock  *__sock_map_lookup_elem(struct bpf_map *map, u32 key);

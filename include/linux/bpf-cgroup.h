@@ -199,7 +199,8 @@ int __cgroup_bpf_run_filter_getsockopt(struct sock *sk, int level,
 	__ret;								       \
 })
 
-#define BPF_CGROUP_RUN_PROG_SYSCTL(head, table, write, buf, count, pos, nbuf)  \
+#define _BPF_CGROUP_RUN_PROG_SYSCTL_3(head, table, write) ({ 0; })
+#define _BPF_CGROUP_RUN_PROG_SYSCTL_7(head, table, write, buf, count, pos, nbuf) \
 ({									       \
 	int __ret = 0;							       \
 	if (cgroup_bpf_enabled)						       \
@@ -208,6 +209,11 @@ int __cgroup_bpf_run_filter_getsockopt(struct sock *sk, int level,
 						       BPF_CGROUP_SYSCTL);     \
 	__ret;								       \
 })
+#define _BPF_SYSCTL_CHOOSER(_1, _2, _3, _4, _5, _6, _7, NAME, ...) NAME
+#define BPF_CGROUP_RUN_PROG_SYSCTL(...) \
+	_BPF_SYSCTL_CHOOSER(__VA_ARGS__, \
+		_BPF_CGROUP_RUN_PROG_SYSCTL_7, _unused6, _unused5, _unused4, \
+		_BPF_CGROUP_RUN_PROG_SYSCTL_3)(__VA_ARGS__)
 
 #define BPF_CGROUP_RUN_PROG_SETSOCKOPT(sk, level, optname, optval, optlen,    \
 				       kernel_optval)                         \
@@ -262,7 +268,7 @@ static inline int cgroup_bpf_inherit(struct cgroup *cgrp) { return 0; }
 #define BPF_CGROUP_RUN_PROG_UDP4_RECVMSG_LOCK(sk, uaddr) ({ 0; })
 #define BPF_CGROUP_RUN_PROG_UDP6_RECVMSG_LOCK(sk, uaddr) ({ 0; })
 #define BPF_CGROUP_RUN_PROG_SOCK_OPS(sock_ops) ({ 0; })
-#define BPF_CGROUP_RUN_PROG_SYSCTL(head,table,write,buf,count,pos,nbuf) ({ 0; })
+#define BPF_CGROUP_RUN_PROG_SYSCTL(...) ({ 0; })
 #define BPF_CGROUP_RUN_PROG_SETSOCKOPT(sk,level,optname,optval,optlen,koptval) ({ 0; })
 #define BPF_CGROUP_GETSOCKOPT_MAX_OPTLEN(optlen) ({ 0; })
 #define BPF_CGROUP_RUN_PROG_GETSOCKOPT(sk,level,optname,optval,optlen,maxlen,retval) ({ retval; })

@@ -593,17 +593,25 @@ struct bpf_skb_data_end {
 #if __has_include(<net/xdp.h>)
 #include <net/xdp.h>
 #else
+struct xdp_rxq_info;
+
 struct xdp_buff {
 	void *data;
 	void *data_end;
+	void *data_meta;
 	void *data_hard_start;
+	struct xdp_rxq_info *rxq;
 };
 #endif
 #else
+struct xdp_rxq_info;
+
 struct xdp_buff {
 	void *data;
 	void *data_end;
+	void *data_meta;
 	void *data_hard_start;
+	struct xdp_rxq_info *rxq;
 };
 #endif
 

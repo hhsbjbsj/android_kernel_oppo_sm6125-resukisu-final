@@ -3,8 +3,28 @@
 #define _LINUX_NET_XDP_H__
 
 #include <linux/types.h>
+#include <linux/compiler.h>
 
 struct net_device;
+struct xdp_rxq_info;
+
+struct xdp_buff {
+	void *data;
+	void *data_end;
+	void *data_meta;
+	void *data_hard_start;
+	struct xdp_rxq_info *rxq;
+};
+
+static inline void xdp_set_data_meta_invalid(struct xdp_buff *xdp)
+{
+	xdp->data_meta = xdp->data + 1;
+}
+
+static inline bool xdp_data_meta_unsupported(const struct xdp_buff *xdp)
+{
+	return unlikely(xdp->data_meta > xdp->data);
+}
 
 enum xdp_mem_type {
 	MEM_TYPE_PAGE_SHARED = 0,

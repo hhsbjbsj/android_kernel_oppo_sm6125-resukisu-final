@@ -61,6 +61,7 @@ ip6_dgram_sock_seq_show(struct seq_file *seq, struct sock *sp, __u16 srcp,
 extern const struct inet_connection_sock_af_ops ipv4_specific;
 
 void inet6_destroy_sock(struct sock *sk);
+void inet6_sock_destruct(struct sock *sk);
 
 #define IPV6_SEQ_DGRAM_HEADER					       \
 	"  sl  "						       \

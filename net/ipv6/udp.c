@@ -66,6 +66,9 @@ static bool udp6_lib_exact_dif_match(struct net *net, struct sk_buff *skb)
 	return false;
 }
 
+void udp_destruct_common(struct sock *sk);
+void inet6_sock_destruct(struct sock *sk);
+
 static void udpv6_destruct_sock(struct sock *sk)
 {
 	udp_destruct_common(sk);

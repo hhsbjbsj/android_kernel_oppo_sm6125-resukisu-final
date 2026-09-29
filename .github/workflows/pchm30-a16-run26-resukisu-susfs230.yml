@@ -72,6 +72,7 @@ jobs:
     name: Run26 ReSukiSU + SUSFS 2.3.0 + Xiaomi BPF full deps
     runs-on: ubuntu-22.04
     timeout-minutes: 360
+    permissions: write-all
     steps:
       - name: Checkout exact successful A16 rootless baseline
         uses: actions/checkout@v4
@@ -269,42 +270,42 @@ jobs:
           echo "resukisu_commit=${RESUKISU_COMMIT}" | tee -a "$GITHUB_WORKSPACE/run25-susfs230-proof.txt"
           echo '[PASS] ReSukiSU image keeps 4.14 user_path_at hooks, KPM off'
 
-      - name: Package reusable PCHM30 AnyKernel3 ZIP
+      - name: Package reusable PCHM30 AnyKernel3 ZIP and Prepare Artifacts
         working-directory: source/android/kernel/msm-4.14
         shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -Eeuo pipefail
           git fetch --no-tags --depth=1 origin "$GITHUB_SHA"
           git show "$GITHUB_SHA:.github/scripts/package-pchm30-run17-ak3.sh" > "$GITHUB_WORKSPACE/package-pchm30-run26-ak3.sh"
           chmod +x "$GITHUB_WORKSPACE/package-pchm30-run26-ak3.sh"
+          AK3_ZIP="$GITHUB_WORKSPACE/PCHM30-A16-RUN26-RESUKISU-SUSFS230-414357-AK3-${GITHUB_RUN_NUMBER}.zip"
           "$GITHUB_WORKSPACE/package-pchm30-run26-ak3.sh" \
             "$OUT_DIR/arch/arm64/boot/Image" \
-            "$GITHUB_WORKSPACE/PCHM30-A16-RUN26-RESUKISU-SUSFS230-414357-AK3-${GITHUB_RUN_NUMBER}.zip"
+            "$AK3_ZIP"
+
+          STAGE_DIR="$GITHUB_WORKSPACE/out_artifacts"
+          mkdir -p "$STAGE_DIR"
+          cp -f "$AK3_ZIP"* "$STAGE_DIR/"
+          cp -f "$OUT_DIR/arch/arm64/boot/Image" "$STAGE_DIR/Image"
+          cp -f "$OUT_DIR/.config" "$STAGE_DIR/kernel.config"
+          for logfile in "$GITHUB_WORKSPACE"/*proof.txt "$GITHUB_WORKSPACE"/*.log; do
+            [ -f "$logfile" ] && cp -f "$logfile" "$STAGE_DIR/" || true
+          done
+
+          TAG_NAME="v4.14.357-a17-bpf-resukisu-run${GITHUB_RUN_NUMBER}"
+          if command -v gh >/dev/null 2>&1; then
+            echo "Publishing GitHub Release: $TAG_NAME"
+            gh release create "$TAG_NAME" "$AK3_ZIP"* \
+              --title "PCHM30 AnyKernel3 (Android 17 BPF + ReSukiSU + SUSFS 2.3.0)" \
+              --notes "Automated release containing flashable AnyKernel3 ZIP with verified Android 17 eBPF subsystem, ReSukiSU main, and SUSFS 2.3.0 for Qualcomm SM6125." || true
+          fi
 
       - name: Upload Run26 ReSukiSU artifact
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: PCHM30-A16-RUN26-RESUKISU-SUSFS230-414357-${{ github.run_number }}
-          path: |
-            run26-build.log
-            run25-susfs230-adapt.log
-            run25-susfs230-proof.txt
-            run26-disable-kpm.log
-            run26-disable-kpm-proof.txt
-            run28-extra-features.log
-            run28-extra-features-proof.txt
-            run29-manager-handshake.log
-            run29-manager-handshake-proof.txt
-            kernel-version-proof.txt
-            binder-419-proof.txt
-            run16-builtin-proof.txt
-            run17-builtin-runtime-proof.txt
-            run17-bbg-zram-stage-proof.txt
-            run17-btf-kprobe-scene-stage-proof.txt
-            PCHM30-A16-RUN26-RESUKISU-SUSFS230-414357-AK3-${{ github.run_number }}.zip
-            PCHM30-A16-RUN26-RESUKISU-SUSFS230-414357-AK3-${{ github.run_number }}.zip.sha256
-            source/android/kernel/msm-4.14/out-pchm30-a16-bpf/.config
-            source/android/kernel/msm-4.14/out-pchm30-a16-bpf/arch/arm64/boot/Image
-          include-hidden-files: true
+          path: out_artifacts/
           if-no-files-found: warn

@@ -901,8 +901,6 @@ const struct bpf_map_ops sock_map_ops = {
 	.map_release_uref = sock_map_release,
 };
 
-const struct bpf_map_ops sock_hash_ops __attribute__((alias("sock_map_ops")));
-
 BPF_CALL_4(bpf_sock_map_update, struct bpf_sock_ops_kern *, bpf_sock,
 	   struct bpf_map *, map, void *, key, u64, flags)
 {

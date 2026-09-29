@@ -1007,6 +1007,12 @@ out:
 	mutex_unlock(&bpf_event_mutex);
 }
 
+int perf_event_query_prog_array(struct perf_event *event, void __user *info)
+{
+	return -EOPNOTSUPP;
+}
+EXPORT_SYMBOL_GPL(perf_event_query_prog_array);
+
 extern struct bpf_raw_event_map __start__bpf_raw_tp[];
 extern struct bpf_raw_event_map __stop__bpf_raw_tp[];
 

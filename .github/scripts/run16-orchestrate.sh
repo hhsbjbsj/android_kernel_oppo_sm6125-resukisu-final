@@ -109,6 +109,7 @@ git checkout "$GITHUB_SHA" -- \
   net/core/filter.c \
   net/core/sock.c \
   net/core/bpf_sk_storage.c \
+  net/core/xdp.c \
   net/ipv4/af_inet.c \
   net/ipv4/tcp_ipv4.c \
   net/ipv4/udp.c \
@@ -164,7 +165,7 @@ make O="$OUT_DIR" ARCH=arm64 LOCALVERSION=+ \
   CROSS_COMPILE="$CROSS_COMPILE" \
   CROSS_COMPILE_ARM32="$CROSS_COMPILE_ARM32" \
   CLANG_TRIPLE="$CLANG_TRIPLE" \
-  kernel/bpf/verifier.o kernel/bpf/core.o kernel/bpf/helpers.o kernel/bpf/syscall.o fs/proc/proc_sysctl.o kernel/trace/bpf_trace.o drivers/net/imq.o net/core/filter.o drivers/net/tun.o net/bpf/test_run.o net/core/flow_dissector.o net/ipv4/tcp.o net/core/dev.o net/ipv4/tcp_ipv4.o net/ipv4/tcp_ulp.o net/ipv4/udp.o net/ipv6/udp.o net/netfilter/xt_connmark.o net/netfilter/xt_mark.o -j"$(nproc)"
+  kernel/bpf/verifier.o kernel/bpf/core.o kernel/bpf/helpers.o kernel/bpf/syscall.o fs/proc/proc_sysctl.o kernel/trace/bpf_trace.o drivers/net/imq.o net/core/filter.o drivers/net/tun.o net/bpf/test_run.o net/core/flow_dissector.o net/ipv4/tcp.o net/core/dev.o net/ipv4/tcp_ipv4.o net/ipv4/tcp_ulp.o net/ipv4/udp.o net/ipv6/udp.o net/netfilter/xt_connmark.o net/netfilter/xt_mark.o net/core/xdp.o -j"$(nproc)"
 test -s "$OUT_DIR/kernel/bpf/verifier.o"
 test -s "$OUT_DIR/kernel/bpf/core.o"
 test -s "$OUT_DIR/kernel/bpf/helpers.o"
@@ -184,7 +185,8 @@ test -s "$OUT_DIR/net/ipv4/udp.o"
 test -s "$OUT_DIR/net/ipv6/udp.o"
 test -s "$OUT_DIR/net/netfilter/xt_connmark.o"
 test -s "$OUT_DIR/net/netfilter/xt_mark.o"
-echo '[PASS] repaired verifier/core/helpers/syscall/proc_sysctl/bpf_trace/imq/filter/tun/test_run/flow_dissector/tcp/dev/tcp_ipv4/tcp_ulp/udp/xt_connmark/xt_mark smoke compile before long build'
+test -s "$OUT_DIR/net/core/xdp.o"
+echo '[PASS] repaired verifier/core/helpers/syscall/proc_sysctl/bpf_trace/imq/filter/tun/test_run/flow_dissector/tcp/dev/tcp_ipv4/tcp_ulp/udp/xt_connmark/xt_mark/xdp smoke compile before long build'
 
 run_step 'Enable BPF stream parser for sockmap sockhash'
 run_step 'Relax module signature enforcement for WiFi experiment only'

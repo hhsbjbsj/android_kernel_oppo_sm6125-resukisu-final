@@ -211,14 +211,10 @@ static inline struct bpf_reg_state *cur_regs(struct bpf_verifier_env *env)
 	return env->cur_state->regs;
 }
 
-#if defined(CONFIG_NET) && defined(CONFIG_BPF_SYSCALL)
-int bpf_prog_offload_verifier_prep(struct bpf_verifier_env *env);
-#else
-int bpf_prog_offload_verifier_prep(struct bpf_verifier_env *env)
+static inline int bpf_prog_offload_verifier_prep(struct bpf_verifier_env *env)
 {
 	return -EOPNOTSUPP;
 }
-#endif
 
 int bpf_analyzer(struct bpf_prog *prog, const struct bpf_ext_analyzer_ops *ops,
 		 void *priv);

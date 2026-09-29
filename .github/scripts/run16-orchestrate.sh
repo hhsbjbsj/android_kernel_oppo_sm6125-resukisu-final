@@ -104,9 +104,6 @@ git checkout "$GITHUB_SHA" -- \
   include/net/transp_v6.h \
   include/uapi/linux/bpf.h \
   include/uapi/linux/btf.h \
-  include/uapi/linux/netfilter \
-  include/uapi/linux/netfilter_ipv4 \
-  include/uapi/linux/netfilter_ipv6 \
   mm/maccess.c \
   net/core/Makefile \
   net/core/filter.c \
@@ -118,10 +115,6 @@ git checkout "$GITHUB_SHA" -- \
   net/ipv6/af_inet6.c \
   net/ipv6/tcp_ipv6.c \
   net/ipv6/udp.c \
-  net/netfilter/xt_DSCP.c \
-  net/netfilter/xt_HL.c \
-  net/netfilter/xt_RATEEST.c \
-  net/netfilter/xt_TCPMSS.c \
   tools/include/linux/filter.h \
   tools/include/uapi/linux/bpf.h \
   tools/include/uapi/linux/btf.h \
@@ -144,13 +137,17 @@ fi
 
 git add -A \
   kernel/bpf \
-  kernel/trace \
+  kernel/trace/bpf_trace.c \
   drivers/net \
   include/linux \
   include/net \
-  include/uapi/linux \
+  include/uapi/linux/bpf.h \
+  include/uapi/linux/btf.h \
   mm/maccess.c \
-  net \
+  net/bpf \
+  net/core \
+  net/ipv4 \
+  net/ipv6 \
   tools/include \
   arch/arm64/net/bpf_jit_comp.c
 git commit -m 'feat(bpf): integrate Android 17-verified BPF suite from nabu' || true
@@ -167,7 +164,7 @@ make O="$OUT_DIR" ARCH=arm64 LOCALVERSION=+ \
   CROSS_COMPILE="$CROSS_COMPILE" \
   CROSS_COMPILE_ARM32="$CROSS_COMPILE_ARM32" \
   CLANG_TRIPLE="$CLANG_TRIPLE" \
-  kernel/bpf/verifier.o kernel/bpf/core.o kernel/bpf/helpers.o kernel/bpf/syscall.o fs/proc/proc_sysctl.o kernel/trace/bpf_trace.o drivers/net/imq.o net/core/filter.o drivers/net/tun.o net/bpf/test_run.o net/core/flow_dissector.o net/ipv4/tcp.o net/core/dev.o net/ipv4/tcp_ipv4.o net/ipv4/tcp_ulp.o net/ipv4/udp.o net/ipv6/udp.o -j"$(nproc)"
+  kernel/bpf/verifier.o kernel/bpf/core.o kernel/bpf/helpers.o kernel/bpf/syscall.o fs/proc/proc_sysctl.o kernel/trace/bpf_trace.o drivers/net/imq.o net/core/filter.o drivers/net/tun.o net/bpf/test_run.o net/core/flow_dissector.o net/ipv4/tcp.o net/core/dev.o net/ipv4/tcp_ipv4.o net/ipv4/tcp_ulp.o net/ipv4/udp.o net/ipv6/udp.o net/netfilter/xt_connmark.o net/netfilter/xt_mark.o -j"$(nproc)"
 test -s "$OUT_DIR/kernel/bpf/verifier.o"
 test -s "$OUT_DIR/kernel/bpf/core.o"
 test -s "$OUT_DIR/kernel/bpf/helpers.o"
@@ -185,7 +182,9 @@ test -s "$OUT_DIR/net/ipv4/tcp_ipv4.o"
 test -s "$OUT_DIR/net/ipv4/tcp_ulp.o"
 test -s "$OUT_DIR/net/ipv4/udp.o"
 test -s "$OUT_DIR/net/ipv6/udp.o"
-echo '[PASS] repaired verifier/core/helpers/syscall/proc_sysctl/bpf_trace/imq/filter/tun/test_run/flow_dissector/tcp/dev/tcp_ipv4/tcp_ulp/udp smoke compile before long build'
+test -s "$OUT_DIR/net/netfilter/xt_connmark.o"
+test -s "$OUT_DIR/net/netfilter/xt_mark.o"
+echo '[PASS] repaired verifier/core/helpers/syscall/proc_sysctl/bpf_trace/imq/filter/tun/test_run/flow_dissector/tcp/dev/tcp_ipv4/tcp_ulp/udp/xt_connmark/xt_mark smoke compile before long build'
 
 run_step 'Enable BPF stream parser for sockmap sockhash'
 run_step 'Relax module signature enforcement for WiFi experiment only'

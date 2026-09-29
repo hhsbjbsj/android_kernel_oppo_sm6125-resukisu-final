@@ -124,7 +124,9 @@ git checkout "$GITHUB_SHA" -- \
   tools/include/uapi/linux/bpf.h \
   tools/include/uapi/linux/btf.h \
   arch/arm64/net/bpf_jit_comp.c \
-  include/linux/device_cgroup.h
+  include/linux/device_cgroup.h \
+  kernel/trace/bpf_trace.c \
+  drivers/net/imq_a16_xfrm_compat.h
 
 rm -f kernel/bpf/vfs_mkobj_compat.* kernel/bpf/atomic_cond_read_compat.h
 
@@ -134,6 +136,8 @@ fi
 
 git add -A \
   kernel/bpf \
+  kernel/trace \
+  drivers/net \
   include/linux \
   include/net \
   include/uapi/linux \
@@ -155,14 +159,16 @@ make O="$OUT_DIR" ARCH=arm64 LOCALVERSION=+ \
   CROSS_COMPILE="$CROSS_COMPILE" \
   CROSS_COMPILE_ARM32="$CROSS_COMPILE_ARM32" \
   CLANG_TRIPLE="$CLANG_TRIPLE" \
-  kernel/bpf/verifier.o kernel/bpf/core.o kernel/bpf/helpers.o kernel/bpf/syscall.o fs/proc/proc_sysctl.o net/core/filter.o -j"$(nproc)"
+  kernel/bpf/verifier.o kernel/bpf/core.o kernel/bpf/helpers.o kernel/bpf/syscall.o fs/proc/proc_sysctl.o kernel/trace/bpf_trace.o drivers/net/imq.o net/core/filter.o -j"$(nproc)"
 test -s "$OUT_DIR/kernel/bpf/verifier.o"
 test -s "$OUT_DIR/kernel/bpf/core.o"
 test -s "$OUT_DIR/kernel/bpf/helpers.o"
 test -s "$OUT_DIR/kernel/bpf/syscall.o"
 test -s "$OUT_DIR/fs/proc/proc_sysctl.o"
+test -s "$OUT_DIR/kernel/trace/bpf_trace.o"
+test -s "$OUT_DIR/drivers/net/imq.o"
 test -s "$OUT_DIR/net/core/filter.o"
-echo '[PASS] repaired verifier/core/helpers/syscall/proc_sysctl/filter smoke compile before long build'
+echo '[PASS] repaired verifier/core/helpers/syscall/proc_sysctl/bpf_trace/imq/filter smoke compile before long build'
 
 run_step 'Enable BPF stream parser for sockmap sockhash'
 run_step 'Relax module signature enforcement for WiFi experiment only'

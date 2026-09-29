@@ -15,21 +15,7 @@
  * The macro is object-local via CFLAGS_imq.o, so no other networking caller is
  * affected.
  */
-#define validate_xmit_skb_list(skb, dev) ({				\
-	bool __imq_again = false;					\
-	struct sk_buff *__imq_skb;					\
-	__imq_skb = validate_xmit_skb_list((skb), (dev), &__imq_again); \
-	if (unlikely(__imq_again) && __imq_skb) {			\
-		spin_lock(root_lock);					\
-		q->gso_skb = __imq_skb;				\
-		q->qstats.requeues++;					\
-		qdisc_qstats_backlog_inc(q, __imq_skb);			\
-		q->q.qlen++;						\
-		__netif_schedule(q);					\
-		spin_unlock(root_lock);					\
-		__imq_skb = NULL;					\
-	}								\
-	__imq_skb;							\
-})
+#undef validate_xmit_skb_list
+#define validate_xmit_skb_list(skb, dev) (validate_xmit_skb_list)((skb), (dev))
 
 #endif /* _DRIVERS_NET_IMQ_A16_XFRM_COMPAT_H */

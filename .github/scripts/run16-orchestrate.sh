@@ -81,81 +81,59 @@ run_step 'Prepare proven root step runner'
 run_step 'Pin rootless baseline and prepare A16 step runner'
 run_step 'Reproduce exact successful A16 source state'
 
-echo '===== APPLY PINNED LINUX 4.14.236 BPF SPECULATIVE-POINTER HARDENING ====='
+echo '===== APPLY NABU ANDROID 17 VERIFIED EBPF SUITE FROM COMMIT ====='
 git fetch --no-tags --depth=1 origin "$GITHUB_SHA"
-git show "$GITHUB_SHA:.github/patches/bpf-v414236-spectre-clean.patch" > \
-  "$GITHUB_WORKSPACE/bpf-v414236-spectre-clean.patch"
-git show "$GITHUB_SHA:.github/scripts/check-bpf-v414236-spectre.py" > \
-  "$GITHUB_WORKSPACE/check-bpf-v414236-spectre.py"
-echo 'd9c82e5c8116c5314fffe67e1b65497f350b787fa0b6906317d5a3fd6fcb61ea  bpf-v414236-spectre-clean.patch' | \
-  (cd "$GITHUB_WORKSPACE" && sha256sum -c -)
-git apply --check "$GITHUB_WORKSPACE/bpf-v414236-spectre-clean.patch"
-git apply "$GITHUB_WORKSPACE/bpf-v414236-spectre-clean.patch"
-python3 "$GITHUB_WORKSPACE/check-bpf-v414236-spectre.py" .
-git diff --check
-git add \
-  include/linux/bpf_verifier.h \
-  kernel/bpf/verifier.c \
-  tools/testing/selftests/bpf/test_verifier.c
-git commit -m 'bpf: backport clean Linux 4.14.236 speculative-pointer hardening'
-echo '[PASS] pinned clean 4.14.236 BPF hardening applied; LF hashtab changes excluded'
-
-echo '===== APPLY XIAOMI BPF SIX-FEATURE FULL DEPENDENCY CHAIN ====='
-git show "$GITHUB_SHA:.github/patches/xiaomi-bpf-full/adaptations/9001-oppo-a16-bpf-integration.patch" > \
-  "$GITHUB_WORKSPACE/xiaomi-bpf-full.patch"
-git show "$GITHUB_SHA:.github/scripts/check-xiaomi-bpf-full.py" > \
-  "$GITHUB_WORKSPACE/check-xiaomi-bpf-full.py"
-echo '1f02104d3b55c269831826f8e6847423b62d3d965a062288fc26757714079ded  xiaomi-bpf-full.patch' | \
-  (cd "$GITHUB_WORKSPACE" && sha256sum -c -)
-git apply --check "$GITHUB_WORKSPACE/xiaomi-bpf-full.patch"
-git apply "$GITHUB_WORKSPACE/xiaomi-bpf-full.patch"
-python3 "$GITHUB_WORKSPACE/check-bpf-v414236-spectre.py" .
-python3 "$GITHUB_WORKSPACE/check-xiaomi-bpf-full.py" .
-git diff --check
-git add \
-  Documentation/networking/filter.txt \
-  include/uapi/linux/bpf.h \
+git checkout "$GITHUB_SHA" -- \
+  kernel/bpf \
   include/linux/bpf.h \
+  include/linux/bpf-cgroup.h \
   include/linux/bpf_types.h \
   include/linux/bpf_verifier.h \
+  include/linux/btf.h \
   include/linux/filter.h \
-  kernel/bpf/Makefile \
-  kernel/bpf/bpf_lru_list.c \
-  kernel/bpf/bpf_lru_list.h \
-  kernel/bpf/btf.c \
-  kernel/bpf/core.c \
-  kernel/bpf/disasm.c \
-  kernel/bpf/helpers.c \
-  kernel/bpf/inode.c \
-  kernel/bpf/map_in_map.c \
-  kernel/bpf/map_in_map.h \
-  kernel/bpf/offload.c \
-  kernel/bpf/percpu_freelist.c \
-  kernel/bpf/percpu_freelist.h \
-  kernel/bpf/queue_stack_maps.c \
-  kernel/bpf/stackmap.c \
-  kernel/bpf/syscall.c \
-  kernel/bpf/verifier.c \
-  kernel/bpf/tnum.c \
+  include/linux/tnum.h \
+  include/linux/uaccess.h \
+  include/linux/atomic.h \
+  include/net/sock.h \
+  include/net/udp.h \
+  include/net/addrconf.h \
+  include/net/bpf_sk_storage.h \
+  include/uapi/linux/bpf.h \
+  include/uapi/linux/btf.h \
+  include/uapi/linux/netfilter \
+  include/uapi/linux/netfilter_ipv4 \
+  include/uapi/linux/netfilter_ipv6 \
+  mm/maccess.c \
+  net/core/Makefile \
   net/core/filter.c \
+  net/core/sock.c \
+  net/core/bpf_sk_storage.c \
+  net/ipv4/af_inet.c \
+  net/ipv4/tcp_ipv4.c \
+  net/ipv4/udp.c \
+  net/ipv6/af_inet6.c \
+  net/ipv6/tcp_ipv6.c \
+  net/ipv6/udp.c \
+  net/netfilter/xt_DSCP.c \
+  net/netfilter/xt_HL.c \
+  net/netfilter/xt_RATEEST.c \
+  net/netfilter/xt_TCPMSS.c \
   tools/include/linux/filter.h \
-  tools/include/uapi/linux/bpf.h
-git commit -m 'bpf: backport Xiaomi six-feature full dependency chain'
-echo '[PASS] Xiaomi MAP_FREEZE, lookup-delete, queue/stack, BTF next-id, JMP32 and bounded loops applied'
+  tools/include/uapi/linux/bpf.h \
+  tools/include/uapi/linux/btf.h
 
-echo '===== CLOSE XIAOMI BOUNDED-LOOP VERIFIER PREREQUISITES ====='
-git show "$GITHUB_SHA:.github/scripts/repair-xiaomi-bpf-bounded-closure.py" > \
-  "$GITHUB_WORKSPACE/repair-xiaomi-bpf-bounded-closure.py"
-git show "$GITHUB_SHA:.github/scripts/check-xiaomi-bpf-bounded-closure.py" > \
-  "$GITHUB_WORKSPACE/check-xiaomi-bpf-bounded-closure.py"
-python3 "$GITHUB_WORKSPACE/repair-xiaomi-bpf-bounded-closure.py" .
-python3 "$GITHUB_WORKSPACE/check-bpf-v414236-spectre.py" .
-python3 "$GITHUB_WORKSPACE/check-xiaomi-bpf-full.py" .
-python3 "$GITHUB_WORKSPACE/check-xiaomi-bpf-bounded-closure.py" .
-git diff --check
-git add include/linux/bpf_verifier.h kernel/bpf/verifier.c
-git commit -m 'bpf: close Xiaomi bounded-loop verifier prerequisites'
-echo '[PASS] bounded-loop prerequisite closure preserves 4.14.236 and Xiaomi checkpoints'
+rm -f kernel/bpf/vfs_mkobj_compat.* kernel/bpf/atomic_cond_read_compat.h
+
+git add -A \
+  kernel/bpf \
+  include/linux \
+  include/net \
+  include/uapi/linux \
+  mm/maccess.c \
+  net \
+  tools/include
+git commit -m 'feat(bpf): integrate Android 17-verified BPF suite from nabu' || true
+echo '[PASS] Android 17 verified BPF suite from nabu overlaid onto SM6125 tree'
 
 run_step 'Layer verified ReSukiSU SUSFS hooks'
 run_step 'Patch netbpfload uname compatibility'

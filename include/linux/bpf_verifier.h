@@ -51,6 +51,8 @@ struct bpf_reg_state {
 		 */
 		struct bpf_map *map_ptr;
 
+		u32 mem_size; /* for PTR_TO_MEM | PTR_TO_MEM_OR_NULL */
+
 		/* Max size from any of the above. */
 		unsigned long raw;
 	};
@@ -60,6 +62,8 @@ struct bpf_reg_state {
 	 * offset, so they can share range knowledge.
 	 * For PTR_TO_MAP_VALUE_OR_NULL this is used to share which map value we
 	 * came from, when one is tested for != NULL.
+	 * For PTR_TO_SOCKET this is used to share which pointers retain the
+	 * same reference to the socket, to determine proper reference freeing.
 	 */
 	u32 id;
 	/* Ordering of fields matters.  See states_equal() */
@@ -96,12 +100,19 @@ struct bpf_stack_state {
 	u8 slot_type[BPF_REG_SIZE];
 };
 
+struct bpf_reference_state {
+	int id;
+	int insn_idx;
+};
+
 /* state of the program:
  * type of all registers and stack info
  */
 struct bpf_verifier_state {
 	struct bpf_reg_state regs[MAX_BPF_REG];
 	struct bpf_verifier_state *parent;
+	int acquired_refs;
+	struct bpf_reference_state *refs;
 	int allocated_stack;
 	struct bpf_stack_state *stack;
 	bool speculative;
@@ -114,10 +125,11 @@ struct bpf_verifier_state_list {
 };
 
 /* Possible states for alu_state member. */
-#define BPF_ALU_SANITIZE_SRC		1U
-#define BPF_ALU_SANITIZE_DST		2U
+#define BPF_ALU_SANITIZE_SRC		(1U << 0)
+#define BPF_ALU_SANITIZE_DST		(1U << 1)
 #define BPF_ALU_NEG_VALUE		(1U << 2)
 #define BPF_ALU_NON_POINTER		(1U << 3)
+#define BPF_ALU_IMMEDIATE		(1U << 4)
 #define BPF_ALU_SANITIZE		(BPF_ALU_SANITIZE_SRC | \
 					 BPF_ALU_SANITIZE_DST)
 
@@ -126,6 +138,10 @@ struct bpf_insn_aux_data {
 		enum bpf_reg_type ptr_type;	/* pointer type for load/store insns */
 		struct bpf_map *map_ptr;	/* pointer for call insn into lookup_elem */
 		u32 alu_limit;			/* limit for add/sub register with pointer */
+		struct {
+			u32 map_index;
+			u32 map_off;
+		};
 	};
 	int ctx_field_size; /* the ctx field size for load insn, maybe 0 */
 	int sanitize_stack_off; /* stack slot to be cleared */
@@ -134,6 +150,32 @@ struct bpf_insn_aux_data {
 };
 
 #define MAX_USED_MAPS 64 /* max number of maps accessed by one eBPF program */
+
+#define BPF_VERIFIER_TMP_LOG_SIZE	1024
+
+struct bpf_verifier_log {
+	u32 level;
+	char kbuf[BPF_VERIFIER_TMP_LOG_SIZE];
+	char __user *ubuf;
+	u32 len_used;
+	u32 len_total;
+};
+
+static inline bool bpf_verifier_log_full(const struct bpf_verifier_log *log)
+{
+	return log->len_used >= log->len_total - 1;
+}
+
+static inline bool bpf_verifier_log_needed(const struct bpf_verifier_log *log)
+{
+	return log->level && log->ubuf && !bpf_verifier_log_full(log);
+}
+
+__printf(2, 3) void bpf_verifier_log_write(struct bpf_verifier_log *log,
+					   const char *fmt, ...);
+
+void bpf_verifier_vlog(struct bpf_verifier_log *log, const char *fmt,
+		       va_list args);
 
 struct bpf_verifier_env;
 struct bpf_ext_analyzer_ops {
@@ -154,6 +196,7 @@ struct bpf_verifier_env {
 	struct bpf_verifier_state *cur_state; /* current verifier state */
 	struct bpf_verifier_state_list **explored_states; /* search pruning optimization */
 	const struct bpf_ext_analyzer_ops *analyzer_ops; /* external analyzer ops */
+	const struct bpf_ext_analyzer_ops *dev_ops; /* device analyzer ops */
 	void *analyzer_priv; /* pointer to external analyzer's private data */
 	struct bpf_map *used_maps[MAX_USED_MAPS]; /* array of map's used by eBPF program */
 	u32 used_map_cnt;		/* number of used maps */
@@ -167,6 +210,15 @@ static inline struct bpf_reg_state *cur_regs(struct bpf_verifier_env *env)
 {
 	return env->cur_state->regs;
 }
+
+#if defined(CONFIG_NET) && defined(CONFIG_BPF_SYSCALL)
+int bpf_prog_offload_verifier_prep(struct bpf_verifier_env *env);
+#else
+int bpf_prog_offload_verifier_prep(struct bpf_verifier_env *env)
+{
+	return -EOPNOTSUPP;
+}
+#endif
 
 int bpf_analyzer(struct bpf_prog *prog, const struct bpf_ext_analyzer_ops *ops,
 		 void *priv);

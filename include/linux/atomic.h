@@ -23,6 +23,10 @@
  * See Documentation/memory-barriers.txt for ACQUIRE/RELEASE definitions.
  */
 
+#ifndef atomic_cond_read_relaxed
+#define atomic_cond_read_relaxed(v, c)	smp_cond_load_relaxed(&(v)->counter, (c))
+#endif
+
 #ifndef atomic_read_acquire
 #define  atomic_read_acquire(v)		smp_load_acquire(&(v)->counter)
 #endif

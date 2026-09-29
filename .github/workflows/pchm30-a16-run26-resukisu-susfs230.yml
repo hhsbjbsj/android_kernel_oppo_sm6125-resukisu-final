@@ -9,8 +9,13 @@ name: PCHM30 A16 Xiaomi BPF FULL DEPS
 on:
   workflow_dispatch:
   push:
-    branches: [pchm30-a16-xiaomi-bpf-full-deps, pchm30-a16-resukisu-main-test]
+    branches: [pchm30-a16-xiaomi-bpf-full-deps, pchm30-a16-resukisu-main-test, pchm30-a17-nabu-bpf-test]
     paths:
+      - 'kernel/bpf/**'
+      - 'net/**'
+      - 'include/**'
+      - 'mm/**'
+      - 'tools/**'
       - '.github/workflows/pchm30-a16-run26-resukisu-susfs230.yml'
       - '.github/scripts/run16-orchestrate.sh'
       - '.github/scripts/check-bpf-v414236-spectre.py'

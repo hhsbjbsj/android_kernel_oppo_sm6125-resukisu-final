@@ -28,6 +28,8 @@ struct sk_buff;
 struct sock;
 struct seccomp_data;
 struct bpf_prog_aux;
+struct ctl_table;
+struct ctl_table_header;
 
 /* ArgX, context and stack frame pointer register positions. Note,
  * Arg1, Arg2, Arg3, etc are used as argument mappings of function
@@ -66,6 +68,14 @@ struct bpf_prog_aux;
 /* Helper macros for filter block array initializers. */
 
 /* ALU ops on registers, bpf_add|sub|...: dst_reg += src_reg */
+
+#define BPF_ALU_REG(CLASS, OP, DST, SRC)			\
+	((struct bpf_insn) {					\
+		.code  = CLASS | BPF_OP(OP) | BPF_X,		\
+		.dst_reg = DST,					\
+		.src_reg = SRC,					\
+		.off   = 0,					\
+		.imm   = 0 })
 
 #define BPF_ALU64_REG(OP, DST, SRC)				\
 	((struct bpf_insn) {					\
@@ -113,6 +123,14 @@ struct bpf_prog_aux;
 
 /* Short form of mov, dst_reg = src_reg */
 
+#define BPF_MOV_REG(CLASS, DST, SRC)				\
+	((struct bpf_insn) {					\
+		.code  = CLASS | BPF_MOV | BPF_X,		\
+		.dst_reg = DST,					\
+		.src_reg = SRC,					\
+		.off   = 0,					\
+		.imm   = 0 })
+
 #define BPF_MOV64_REG(DST, SRC)					\
 	((struct bpf_insn) {					\
 		.code  = BPF_ALU64 | BPF_MOV | BPF_X,		\
@@ -146,6 +164,14 @@ struct bpf_prog_aux;
 		.src_reg = 0,					\
 		.off   = 0,					\
 		.imm   = IMM })
+
+#define BPF_RAW_REG(insn, DST, SRC)				\
+	((struct bpf_insn) {					\
+		.code  = (insn).code,				\
+		.dst_reg = DST,					\
+		.src_reg = SRC,					\
+		.off   = (insn).off,				\
+		.imm   = (insn).imm })
 
 /* BPF_LD_IMM64 macro encodes single 'load 64-bit immediate' insn */
 #define BPF_LD_IMM64(DST, IMM)					\
@@ -257,11 +283,27 @@ struct bpf_prog_aux;
 		.off   = OFF,					\
 		.imm   = 0 })
 
+#define BPF_JMP32_REG(OP, DST, SRC, OFF)			\
+	((struct bpf_insn) {					\
+		.code  = BPF_JMP32 | BPF_OP(OP) | BPF_X,	\
+		.dst_reg = DST,					\
+		.src_reg = SRC,					\
+		.off   = OFF,					\
+		.imm   = 0 })
+
 /* Conditional jumps against immediates, if (dst_reg 'op' imm32) goto pc + off16 */
 
 #define BPF_JMP_IMM(OP, DST, IMM, OFF)				\
 	((struct bpf_insn) {					\
 		.code  = BPF_JMP | BPF_OP(OP) | BPF_K,		\
+		.dst_reg = DST,					\
+		.src_reg = 0,					\
+		.off   = OFF,					\
+		.imm   = IMM })
+
+#define BPF_JMP32_IMM(OP, DST, IMM, OFF)			\
+	((struct bpf_insn) {					\
+		.code  = BPF_JMP32 | BPF_OP(OP) | BPF_K,	\
 		.dst_reg = DST,					\
 		.src_reg = 0,					\
 		.off   = OFF,					\
@@ -461,6 +503,7 @@ struct bpf_prog {
 				cb_access:1,	/* Is control block accessed? */
 				dst_needed:1;	/* Do we need dst entry? */
 	enum bpf_prog_type	type;		/* Type of BPF program */
+	enum bpf_attach_type	expected_attach_type; /* For some prog types */
 	u32			len;		/* Number of filter blocks */
 	u32			jited_len;	/* Size of jited insns in bytes */
 	u8			tag[BPF_TAG_SIZE];
@@ -790,6 +833,7 @@ extern int bpf_jit_enable;
 extern int bpf_jit_harden;
 extern int bpf_jit_kallsyms;
 extern long bpf_jit_limit;
+extern long bpf_jit_limit_max;
 
 typedef void (*bpf_jit_fill_hole_t)(void *area, unsigned int size);
 
@@ -1017,6 +1061,17 @@ static inline int bpf_tell_extensions(void)
 	return SKF_AD_MAX;
 }
 
+struct bpf_sock_addr_kern {
+	struct sock *sk;
+	struct sockaddr *uaddr;
+	/* Temporary "register" to make indirect stores to nested structures
+	 * defined above. We need three registers to make such a store, but
+	 * only two (src and dst) are available at convert_ctx_access time
+	 */
+	u64 tmp_reg;
+	void *t_ctx;	/* Attach type specific context. */
+};
+
 struct bpf_sock_ops_kern {
 	struct	sock *sk;
 	u32	op;
@@ -1024,6 +1079,29 @@ struct bpf_sock_ops_kern {
 		u32 reply;
 		u32 replylong[4];
 	};
+};
+
+struct bpf_sysctl_kern {
+	struct ctl_table_header *head;
+	struct ctl_table *table;
+	void *cur_val;
+	size_t cur_len;
+	void *new_val;
+	size_t new_len;
+	int new_updated;
+	int write;
+	loff_t *ppos;
+	u64 tmp_reg;
+};
+
+struct bpf_sockopt_kern {
+	struct sock *sk;
+	u8 *optval;
+	u8 *optval_end;
+	s32 level;
+	s32 optname;
+	s32 optlen;
+	s32 retval;
 };
 
 #endif /* __LINUX_FILTER_H__ */

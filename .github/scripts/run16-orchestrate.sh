@@ -122,7 +122,8 @@ git checkout "$GITHUB_SHA" -- \
   net/netfilter/xt_TCPMSS.c \
   tools/include/linux/filter.h \
   tools/include/uapi/linux/bpf.h \
-  tools/include/uapi/linux/btf.h
+  tools/include/uapi/linux/btf.h \
+  arch/arm64/net/bpf_jit_comp.c
 
 rm -f kernel/bpf/vfs_mkobj_compat.* kernel/bpf/atomic_cond_read_compat.h
 
@@ -133,7 +134,8 @@ git add -A \
   include/uapi/linux \
   mm/maccess.c \
   net \
-  tools/include
+  tools/include \
+  arch/arm64/net/bpf_jit_comp.c
 git commit -m 'feat(bpf): integrate Android 17-verified BPF suite from nabu' || true
 echo '[PASS] Android 17 verified BPF suite from nabu overlaid onto SM6125 tree'
 

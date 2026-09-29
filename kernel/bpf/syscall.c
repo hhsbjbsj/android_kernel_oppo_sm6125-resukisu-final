@@ -1013,12 +1013,8 @@ static int map_lookup_and_delete_elem(union bpf_attr *attr)
 		goto free_key;
 
 	if (map->map_type == BPF_MAP_TYPE_QUEUE ||
-	    map->map_type == BPF_MAP_TYPE_STACK) {
-		err = map->ops->map_lookup_and_delete_elem(map, value);
-		goto copy_value;
-	}
-
-	if (map->map_type == BPF_MAP_TYPE_LPM_TRIE) {
+	    map->map_type == BPF_MAP_TYPE_STACK ||
+	    map->map_type == BPF_MAP_TYPE_LPM_TRIE) {
 		err = -EINVAL;
 		goto free_value;
 	}

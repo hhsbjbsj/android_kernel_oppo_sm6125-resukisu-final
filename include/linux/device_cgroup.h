@@ -1,6 +1,10 @@
 /* SPDX-License-Identifier: GPL-2.0 */
 #include <linux/fs.h>
 
+#ifndef BPF_CGROUP_RUN_PROG_DEVICE_CGROUP
+#define BPF_CGROUP_RUN_PROG_DEVICE_CGROUP(type, major, minor, access) 0
+#endif
+
 #ifdef CONFIG_CGROUP_DEVICE
 extern int __devcgroup_inode_permission(struct inode *inode, int mask);
 extern int devcgroup_inode_mknod(int mode, dev_t dev);

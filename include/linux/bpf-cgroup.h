@@ -269,4 +269,8 @@ static inline int cgroup_bpf_inherit(struct cgroup *cgrp) { return 0; }
 
 #endif /* CONFIG_CGROUP_BPF */
 
+#ifndef BPF_CGROUP_RUN_PROG_DEVICE_CGROUP
+#define BPF_CGROUP_RUN_PROG_DEVICE_CGROUP(type, major, minor, access) 0
+#endif
+
 #endif /* _BPF_CGROUP_H */

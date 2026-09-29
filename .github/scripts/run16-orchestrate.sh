@@ -123,9 +123,14 @@ git checkout "$GITHUB_SHA" -- \
   tools/include/linux/filter.h \
   tools/include/uapi/linux/bpf.h \
   tools/include/uapi/linux/btf.h \
-  arch/arm64/net/bpf_jit_comp.c
+  arch/arm64/net/bpf_jit_comp.c \
+  include/linux/device_cgroup.h
 
 rm -f kernel/bpf/vfs_mkobj_compat.* kernel/bpf/atomic_cond_read_compat.h
+
+if grep -q "BPF_CGROUP_RUN_PROG_DEVICE_CGROUP" include/linux/device_cgroup.h 2>/dev/null; then
+  sed -i '1i #ifndef BPF_CGROUP_RUN_PROG_DEVICE_CGROUP\n#define BPF_CGROUP_RUN_PROG_DEVICE_CGROUP(type, major, minor, access) 0\n#endif' include/linux/device_cgroup.h
+fi
 
 git add -A \
   kernel/bpf \

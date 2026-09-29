@@ -107,6 +107,8 @@ static __inline__ struct ipv6_pinfo *inet6_sk_generic(struct sock *sk)
 	return (struct ipv6_pinfo *)(((u8 *)sk) + offset);
 }
 
+void inet6_cleanup_sock(struct sock *sk);
+
 void inet6_sock_destruct(struct sock *sk)
 {
 	inet6_cleanup_sock(sk);

@@ -126,7 +126,9 @@ git checkout "$GITHUB_SHA" -- \
   arch/arm64/net/bpf_jit_comp.c \
   include/linux/device_cgroup.h \
   kernel/trace/bpf_trace.c \
-  drivers/net/imq_a16_xfrm_compat.h
+  drivers/net/imq_a16_xfrm_compat.h \
+  drivers/net/tun.c \
+  net/bpf/test_run.c
 
 rm -f kernel/bpf/vfs_mkobj_compat.* kernel/bpf/atomic_cond_read_compat.h
 
@@ -159,7 +161,7 @@ make O="$OUT_DIR" ARCH=arm64 LOCALVERSION=+ \
   CROSS_COMPILE="$CROSS_COMPILE" \
   CROSS_COMPILE_ARM32="$CROSS_COMPILE_ARM32" \
   CLANG_TRIPLE="$CLANG_TRIPLE" \
-  kernel/bpf/verifier.o kernel/bpf/core.o kernel/bpf/helpers.o kernel/bpf/syscall.o fs/proc/proc_sysctl.o kernel/trace/bpf_trace.o drivers/net/imq.o net/core/filter.o -j"$(nproc)"
+  kernel/bpf/verifier.o kernel/bpf/core.o kernel/bpf/helpers.o kernel/bpf/syscall.o fs/proc/proc_sysctl.o kernel/trace/bpf_trace.o drivers/net/imq.o net/core/filter.o drivers/net/tun.o net/bpf/test_run.o -j"$(nproc)"
 test -s "$OUT_DIR/kernel/bpf/verifier.o"
 test -s "$OUT_DIR/kernel/bpf/core.o"
 test -s "$OUT_DIR/kernel/bpf/helpers.o"
@@ -168,7 +170,9 @@ test -s "$OUT_DIR/fs/proc/proc_sysctl.o"
 test -s "$OUT_DIR/kernel/trace/bpf_trace.o"
 test -s "$OUT_DIR/drivers/net/imq.o"
 test -s "$OUT_DIR/net/core/filter.o"
-echo '[PASS] repaired verifier/core/helpers/syscall/proc_sysctl/bpf_trace/imq/filter smoke compile before long build'
+test -s "$OUT_DIR/drivers/net/tun.o"
+test -s "$OUT_DIR/net/bpf/test_run.o"
+echo '[PASS] repaired verifier/core/helpers/syscall/proc_sysctl/bpf_trace/imq/filter/tun/test_run smoke compile before long build'
 
 run_step 'Enable BPF stream parser for sockmap sockhash'
 run_step 'Relax module signature enforcement for WiFi experiment only'
@@ -262,9 +266,9 @@ grep -Fq 'PCHM30 A16 late-DLKM: schedule APR child population from probe' "$RUN1
 grep -Fq 'PCHM30 A16 late-DLKM: AVS not ready, defer q6core probe' "$RUN16_STRINGS_ALL"
 grep -Fq 'A16-BPF compat uname:' "$RUN16_STRINGS_ALL"
 grep -q ' sock_map_ops$' "$RUN16_NM_ALL"
-grep -q ' sock_hash_ops$' "$RUN16_NM_ALL"
-grep -q ' queue_map_ops$' "$RUN16_NM_ALL"
 grep -q ' stack_map_ops$' "$RUN16_NM_ALL"
+grep -q ' ringbuf_map_ops$' "$RUN16_NM_ALL"
+grep -q ' sk_storage_map_ops$' "$RUN16_NM_ALL"
 
 {
   echo '===== built-in archive evidence ====='

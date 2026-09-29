@@ -618,6 +618,11 @@ static inline void bpf_compute_data_end(struct sk_buff *skb)
 	cb->data_end = skb->data + skb_headlen(skb);
 }
 
+static inline void bpf_compute_data_pointers(struct sk_buff *skb)
+{
+	bpf_compute_data_end(skb);
+}
+
 static inline u8 *bpf_skb_cb(struct sk_buff *skb)
 {
 	/* eBPF programs may read/write skb->cb[] area to transfer meta

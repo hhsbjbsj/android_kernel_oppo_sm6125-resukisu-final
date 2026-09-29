@@ -588,11 +588,23 @@ struct bpf_skb_data_end {
 	void *data_end;
 };
 
+#if defined(__has_include)
+#if __has_include(<net/xdp.h>)
+#include <net/xdp.h>
+#else
 struct xdp_buff {
 	void *data;
 	void *data_end;
 	void *data_hard_start;
 };
+#endif
+#else
+struct xdp_buff {
+	void *data;
+	void *data_end;
+	void *data_hard_start;
+};
+#endif
 
 /* compute the linear packet data range [data, data_end) which
  * will be accessed by cls_bpf, act_bpf and lwt programs

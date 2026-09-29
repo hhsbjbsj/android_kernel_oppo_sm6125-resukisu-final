@@ -94,9 +94,11 @@ git checkout "$GITHUB_SHA" -- \
   include/linux/tnum.h \
   include/linux/uaccess.h \
   include/linux/atomic.h \
+  include/linux/netdevice.h \
   include/net/sock.h \
   include/net/udp.h \
   include/net/addrconf.h \
+  include/net/tcp.h \
   include/net/bpf_sk_storage.h \
   include/uapi/linux/bpf.h \
   include/uapi/linux/btf.h \

@@ -132,6 +132,7 @@ git checkout "$GITHUB_SHA" -- \
   net/bpf/test_run.c \
   net/core/flow_dissector.c \
   net/ipv4/tcp.c \
+  net/ipv4/tcp_ulp.c \
   net/ipv4/Makefile
 
 rm -f kernel/bpf/vfs_mkobj_compat.* kernel/bpf/atomic_cond_read_compat.h
@@ -165,7 +166,7 @@ make O="$OUT_DIR" ARCH=arm64 LOCALVERSION=+ \
   CROSS_COMPILE="$CROSS_COMPILE" \
   CROSS_COMPILE_ARM32="$CROSS_COMPILE_ARM32" \
   CLANG_TRIPLE="$CLANG_TRIPLE" \
-  kernel/bpf/verifier.o kernel/bpf/core.o kernel/bpf/helpers.o kernel/bpf/syscall.o fs/proc/proc_sysctl.o kernel/trace/bpf_trace.o drivers/net/imq.o net/core/filter.o drivers/net/tun.o net/bpf/test_run.o net/core/flow_dissector.o net/ipv4/tcp.o net/core/dev.o net/ipv4/tcp_ipv4.o net/ipv6/af_inet6.o net/ipv6/tcp_ipv6.o -j"$(nproc)"
+  kernel/bpf/verifier.o kernel/bpf/core.o kernel/bpf/helpers.o kernel/bpf/syscall.o fs/proc/proc_sysctl.o kernel/trace/bpf_trace.o drivers/net/imq.o net/core/filter.o drivers/net/tun.o net/bpf/test_run.o net/core/flow_dissector.o net/ipv4/tcp.o net/core/dev.o net/ipv4/tcp_ipv4.o net/ipv4/tcp_ulp.o -j"$(nproc)"
 test -s "$OUT_DIR/kernel/bpf/verifier.o"
 test -s "$OUT_DIR/kernel/bpf/core.o"
 test -s "$OUT_DIR/kernel/bpf/helpers.o"
@@ -180,9 +181,8 @@ test -s "$OUT_DIR/net/core/flow_dissector.o"
 test -s "$OUT_DIR/net/ipv4/tcp.o"
 test -s "$OUT_DIR/net/core/dev.o"
 test -s "$OUT_DIR/net/ipv4/tcp_ipv4.o"
-test -s "$OUT_DIR/net/ipv6/af_inet6.o"
-test -s "$OUT_DIR/net/ipv6/tcp_ipv6.o"
-echo '[PASS] repaired verifier/core/helpers/syscall/proc_sysctl/bpf_trace/imq/filter/tun/test_run/flow_dissector/tcp/dev/tcp_ipv4/af_inet6 smoke compile before long build'
+test -s "$OUT_DIR/net/ipv4/tcp_ulp.o"
+echo '[PASS] repaired verifier/core/helpers/syscall/proc_sysctl/bpf_trace/imq/filter/tun/test_run/flow_dissector/tcp/dev/tcp_ipv4/tcp_ulp smoke compile before long build'
 
 run_step 'Enable BPF stream parser for sockmap sockhash'
 run_step 'Relax module signature enforcement for WiFi experiment only'

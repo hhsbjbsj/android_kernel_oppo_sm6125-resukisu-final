@@ -2111,6 +2111,8 @@ struct tcp_ulp_ops {
 
 	char		name[TCP_ULP_NAME_MAX];
 	struct module	*owner;
+	u32			uid;
+	bool			user_visible;
 };
 int tcp_register_ulp(struct tcp_ulp_ops *type);
 void tcp_unregister_ulp(struct tcp_ulp_ops *type);

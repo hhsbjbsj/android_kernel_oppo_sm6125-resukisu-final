@@ -72,14 +72,20 @@ if root.exists():
         ms_path = root / 'manager' / 'manager_sign.h'
     if ms_path.exists():
         ms = ms_path.read_text()
-        if '0x38b' not in ms:
+        if '0x039a' not in ms:
             custom_def = (
                 '\n// Custom Manager (User Customized)\n'
                 '#ifndef EXPECTED_SIZE\n'
-                '#define EXPECTED_SIZE 0x38b\n'
+                '#define EXPECTED_SIZE 0x039a\n'
                 '#endif\n'
                 '#ifndef EXPECTED_HASH\n'
-                '#define EXPECTED_HASH "aaf4f7590df8e55068503e29c58f7e9d5699f0c72bd31a7561cc36c0d044af11"\n'
+                '#define EXPECTED_HASH "366aa724f4ed84d589fb47077cee4dc6aac45c37c4a50a6e1eaed4446bb3bc03"\n'
+                '#endif\n'
+                '#ifndef EXPECTED_SIZE_CUSTOM_V1\n'
+                '#define EXPECTED_SIZE_CUSTOM_V1 0x38b\n'
+                '#endif\n'
+                '#ifndef EXPECTED_HASH_CUSTOM_V1\n'
+                '#define EXPECTED_HASH_CUSTOM_V1 "aaf4f7590df8e55068503e29c58f7e9d5699f0c72bd31a7561cc36c0d044af11"\n'
                 '#endif\n'
             )
             guard = '#endif /* MANAGER_SIGN_H */'
@@ -88,7 +94,7 @@ if root.exists():
             else:
                 ms += custom_def
             ms_path.write_text(ms)
-            print('injected EXPECTED_SIZE 0x38b and HASH into manager_sign.h', flush=True)
+            print('injected EXPECTED_SIZE 0x039a and HASH into manager_sign.h', flush=True)
 
     as_path = root / 'kernel' / 'manager' / 'apk_sign.c'
     if not as_path.exists():
@@ -96,14 +102,14 @@ if root.exists():
     if as_path.exists():
         as_text = as_path.read_text()
         old_block = 'static apk_sign_key_t apk_sign_keys[] = {\n    { EXPECTED_SIZE_BAKASU, EXPECTED_HASH_BAKASU }, /* Baka-SU/BakaSU */\n#ifdef CONFIG_KSU_MULTI_MANAGER_SUPPORT'
-        new_block = 'static apk_sign_key_t apk_sign_keys[] = {\n    { EXPECTED_SIZE_BAKASU, EXPECTED_HASH_BAKASU }, /* Baka-SU/BakaSU */\n#ifdef EXPECTED_SIZE\n    { EXPECTED_SIZE, EXPECTED_HASH }, // Custom\n#endif\n#ifdef CONFIG_KSU_MULTI_MANAGER_SUPPORT'
+        new_block = 'static apk_sign_key_t apk_sign_keys[] = {\n    { EXPECTED_SIZE_BAKASU, EXPECTED_HASH_BAKASU }, /* Baka-SU/BakaSU */\n#ifdef EXPECTED_SIZE\n    { EXPECTED_SIZE, EXPECTED_HASH }, // Custom (0x039a)\n#endif\n#ifdef EXPECTED_SIZE_CUSTOM_V1\n    { EXPECTED_SIZE_CUSTOM_V1, EXPECTED_HASH_CUSTOM_V1 }, // Custom (0x38b)\n#endif\n#ifdef CONFIG_KSU_MULTI_MANAGER_SUPPORT'
         old_resuki_block = 'static apk_sign_key_t apk_sign_keys[] = {\n    { EXPECTED_SIZE_RESUKISU, EXPECTED_HASH_RESUKISU }, /* ReSukiSU/ReSukiSU */\n#ifdef CONFIG_KSU_MULTI_MANAGER_SUPPORT'
-        new_resuki_block = 'static apk_sign_key_t apk_sign_keys[] = {\n    { EXPECTED_SIZE_RESUKISU, EXPECTED_HASH_RESUKISU }, /* ReSukiSU/ReSukiSU */\n#ifdef EXPECTED_SIZE\n    { EXPECTED_SIZE, EXPECTED_HASH }, // Custom\n#endif\n#ifdef CONFIG_KSU_MULTI_MANAGER_SUPPORT'
-        if old_block in as_text and '#ifdef EXPECTED_SIZE' not in as_text[:as_text.find(old_block) + 200]:
+        new_resuki_block = 'static apk_sign_key_t apk_sign_keys[] = {\n    { EXPECTED_SIZE_RESUKISU, EXPECTED_HASH_RESUKISU }, /* ReSukiSU/ReSukiSU */\n#ifdef EXPECTED_SIZE\n    { EXPECTED_SIZE, EXPECTED_HASH }, // Custom (0x039a)\n#endif\n#ifdef EXPECTED_SIZE_CUSTOM_V1\n    { EXPECTED_SIZE_CUSTOM_V1, EXPECTED_HASH_CUSTOM_V1 }, // Custom (0x38b)\n#endif\n#ifdef CONFIG_KSU_MULTI_MANAGER_SUPPORT'
+        if old_block in as_text and '#ifdef EXPECTED_SIZE' not in as_text[:as_text.find(old_block) + 300]:
             as_text = as_text.replace(old_block, new_block, 1)
             as_path.write_text(as_text)
             print('apk_sign.c: unconditional custom manager matching enabled (BakaSU)', flush=True)
-        elif old_resuki_block in as_text and '#ifdef EXPECTED_SIZE' not in as_text[:as_text.find(old_resuki_block) + 200]:
+        elif old_resuki_block in as_text and '#ifdef EXPECTED_SIZE' not in as_text[:as_text.find(old_resuki_block) + 300]:
             as_text = as_text.replace(old_resuki_block, new_resuki_block, 1)
             as_path.write_text(as_text)
             print('apk_sign.c: unconditional custom manager matching enabled (ReSukiSU)', flush=True)
@@ -113,8 +119,8 @@ if root.exists():
         kb_path = root / 'Kbuild'
     if kb_path.exists():
         kb = kb_path.read_text()
-        if '0x38b' not in kb:
-            kb += '\nccflags-y += -DEXPECTED_SIZE=0x38b -DEXPECTED_HASH=\\"aaf4f7590df8e55068503e29c58f7e9d5699f0c72bd31a7561cc36c0d044af11\\"\n'
+        if '0x039a' not in kb:
+            kb += '\nccflags-y += -DEXPECTED_SIZE=0x039a -DEXPECTED_HASH=\\"366aa724f4ed84d589fb47077cee4dc6aac45c37c4a50a6e1eaed4446bb3bc03\\"\n'
             kb_path.write_text(kb)
             print('injected ccflags-y custom manager flags into KernelSU Kbuild', flush=True)
 print(f'cloexec_files={cloexec_hits}', flush=True)
@@ -143,8 +149,8 @@ fi
   echo 'hook_guard=CONFIG_KSU'
   echo 'reason=accept_existing_or_rewrite_manual_hook'
   echo 'prctl_not_required=latest_manager_uses_reboot_fd'
-  echo 'custom_manager_size=0x38b'
-  echo 'custom_manager_hash=aaf4f7590df8e55068503e29c58f7e9d5699f0c72bd31a7561cc36c0d044af11'
+  echo 'custom_manager_size=0x039a'
+  echo 'custom_manager_hash=366aa724f4ed84d589fb47077cee4dc6aac45c37c4a50a6e1eaed4446bb3bc03'
   if [[ -f /tmp/run29-notes.txt ]]; then cat /tmp/run29-notes.txt; fi
   if [[ -n "${OUT_DIR:-}" && -f "$OUT_DIR/.config" ]]; then
     grep -E '^CONFIG_KSU(_MANUAL_HOOK|_SUSFS|_TRACEPOINT_HOOK|_KPROBES_HOOK)?=' "$OUT_DIR/.config" || true

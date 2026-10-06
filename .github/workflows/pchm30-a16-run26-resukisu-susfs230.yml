@@ -82,12 +82,14 @@ jobs:
           fetch-depth: 1
           submodules: false
 
-      - name: Resolve latest ReSukiSU main at build time
+      - name: Resolve latest BakaSU (ReSukiSU) main at build time
         shell: bash
         run: |
           set -Eeuo pipefail
           RSHA=""
           for i in 1 2 3; do
+            RSHA=$(git ls-remote https://github.com/Baka-SU/BakaSU.git refs/heads/main | awk '{print $1}')
+            [ -n "$RSHA" ] && break
             RSHA=$(git ls-remote https://github.com/ReSukiSU/ReSukiSU.git refs/heads/main | awk '{print $1}')
             [ -n "$RSHA" ] && break
             echo "Attempt $i failed, retrying in 3s..."
@@ -95,7 +97,7 @@ jobs:
           done
           test -n "$RSHA"
           echo "RESUKISU_COMMIT=$RSHA" >> "$GITHUB_ENV"
-          echo "Dynamically resolved ReSukiSU main: $RSHA"
+          echo "Dynamically resolved BakaSU (ReSukiSU) main: $RSHA"
 
       - name: Install BTF host tooling
         shell: bash
@@ -268,6 +270,8 @@ jobs:
           grep -q '^CONFIG_KSU_SUSFS=y$' "$CONFIG"
           test -s "$GITHUB_WORKSPACE/run29-manager-handshake-proof.txt"
           grep -Fq 'hook_guard=CONFIG_KSU' "$GITHUB_WORKSPACE/run29-manager-handshake-proof.txt"
+          grep -Fq 'custom_manager_size=0x38b' "$GITHUB_WORKSPACE/run29-manager-handshake-proof.txt"
+          grep -Fq 'custom_manager_hash=aaf4f7590df8e55068503e29c58f7e9d5699f0c72bd31a7561cc36c0d044af11' "$GITHUB_WORKSPACE/run29-manager-handshake-proof.txt"
           test -s "$GITHUB_WORKSPACE/kernel-version-proof.txt"
           grep -Fxq 'kernel_version=4.14.357' "$GITHUB_WORKSPACE/kernel-version-proof.txt"
           grep -Fxq 'sublevel=357' "$GITHUB_WORKSPACE/kernel-version-proof.txt"

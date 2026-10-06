@@ -80,12 +80,14 @@ sync_github_env
 if [ -z "${RESUKISU_COMMIT:-}" ] || [ "${RESUKISU_COMMIT:-}" = "auto" ] || [ "${RESUKISU_COMMIT:-}" = "main" ]; then
   RSHA=""
   for i in 1 2 3; do
+    RSHA="$(git ls-remote https://github.com/Baka-SU/BakaSU.git refs/heads/main | awk '{print $1}')"
+    [ -n "$RSHA" ] && break
     RSHA="$(git ls-remote https://github.com/ReSukiSU/ReSukiSU.git refs/heads/main | awk '{print $1}')"
     [ -n "$RSHA" ] && break
     sleep 2
   done
   if [ -n "$RSHA" ]; then
-    echo "Resolved latest ReSukiSU main commit: $RSHA"
+    echo "Resolved latest BakaSU (ReSukiSU) main commit: $RSHA"
     export RESUKISU_COMMIT="$RSHA"
     if [ -n "${GITHUB_ENV:-}" ] && [ -f "${GITHUB_ENV:-}" ]; then
       echo "RESUKISU_COMMIT=$RSHA" >> "$GITHUB_ENV"

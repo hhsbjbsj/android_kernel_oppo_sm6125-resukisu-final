@@ -14,7 +14,7 @@ env:
   TOOLCHAIN_RELEASE_TAG: pchm30-build-environment-20260810
   TOOLCHAIN_ROOT: /opt/pchm30-toolchains
   KERNEL_419_REPO: https://github.com/MiBengal-Development/android_kernel_xiaomi_bengal.git
-  KERNEL_419_BRANCH: 11.0
+  KERNEL_419_BRANCH: '11.0'
   OUT_DIR: out-4.19
 
 jobs:

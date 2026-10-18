@@ -115,6 +115,27 @@ am = am.replace(
 with open(arm_mpath, "w", encoding="utf-8") as f:
     f.write(am)
 print("[PASS] Wrapped -plugin-opt with $(call ld-option, ...) in arch/arm64/Makefile")
+
+# 7. Fix kernel/sched/tune.c undeclared boost_write_wrapper / prefer_idle_write_wrapper
+tune_path = "kernel-4.19/kernel/sched/tune.c"
+with open(tune_path, "r", encoding="utf-8") as f:
+    tc = f.read()
+
+target_tune = "#endif\n\nstatic struct cftype files[] = {"
+fallback_tune = """#endif
+
+#ifndef CONFIG_STUNE_ASSIST
+#define boost_write_wrapper boost_write
+#define prefer_idle_write_wrapper prefer_idle_write
+#endif
+
+static struct cftype files[] = {"""
+
+if target_tune in tc:
+    tc = tc.replace(target_tune, fallback_tune)
+    with open(tune_path, "w", encoding="utf-8") as f:
+        f.write(tc)
+    print("[PASS] Added stune_assist fallbacks in kernel/sched/tune.c")
 EOF
 
 # 1. Graft Trinket Clock DT-Bindings

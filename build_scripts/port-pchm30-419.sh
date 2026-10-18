@@ -15,13 +15,14 @@ echo " Target kernel dir: $KERNEL_DIR"
 echo " Source workspace : $WORKSPACE"
 echo "=========================================================="
 
-# 0. Patch scripts/kconfig/conf.c to permanently prevent non-interactive "Error in reading or end of file." loop
-echo "[0/8] Immunizing Kconfig conf.c against non-interactive EOF loop..."
+# 0. Patch scripts/kconfig/conf.c and arch/arm64/Kconfig to permanently prevent non-interactive prompts & EOF loops
+echo "[0/8] Immunizing Kconfig conf.c and arch/arm64/Kconfig against non-interactive EOF / syncconfig loops..."
 python3 - << 'EOF'
 path = "kernel-4.19/scripts/kconfig/conf.c"
 with open(path, "r", encoding="utf-8") as f:
     c = f.read()
 
+# 1. Patch xfgets to return newline on EOF
 old_xfgets = """static void xfgets(char *str, int size, FILE *in)
 {
 	if (!fgets(str, size, in))
@@ -45,15 +46,49 @@ new_xfgets = """static void xfgets(char *str, int size, FILE *in)
 
 if old_xfgets in c:
     c = c.replace(old_xfgets, new_xfgets)
-    with open(path, "w", encoding="utf-8") as f:
-        f.write(c)
-    print("[PASS] Successfully patched conf.c xfgets to auto-accept defaults on EOF")
 else:
-    # Fallback replace
     c = c.replace('fprintf(stderr, "\\nError in reading or end of file.\\n");', 'str[0] = \'\\n\'; str[1] = 0; return;')
-    with open(path, "w", encoding="utf-8") as f:
-        f.write(c)
-    print("[PASS] Fallback patched conf.c to prevent EOF error")
+
+# 2. Prevent syncconfig from ever entering interactive conf() prompt loop
+sync_marker = 'if (!conf_cnt++)\n\t\t\t\t\tprintf("*\\n* Restart config...\\n*\\n");'
+if sync_marker in c:
+    c = c.replace(sync_marker, 'if (input_mode == syncconfig)\n\t\t\t\t\treturn;\n\t\t\t\t' + sync_marker)
+    print("[PASS] Successfully patched conf.c check_conf to bypass interactive restart on syncconfig")
+
+# 3. Patch conf_string to prevent infinite loop on empty default with newline input
+conf_str_marker = "switch (line[0]) {\n\t\tcase '\\n':\n\t\t\tbreak;"
+conf_str_fix = """switch (line[0]) {
+		case '\\n':
+			if (!def) {
+				if (sym->type == S_INT || sym->type == S_HEX)
+					def = "0";
+				else
+					def = "";
+			}
+			break;"""
+if conf_str_marker in c:
+    c = c.replace(conf_str_marker, conf_str_fix)
+    print("[PASS] Successfully patched conf.c conf_string to prevent infinite loop on missing default")
+
+with open(path, "w", encoding="utf-8") as f:
+    f.write(c)
+
+# 4. Patch arch/arm64/Kconfig LITTLE_CPU_MASK and BIG_CPU_MASK defaults
+kpath = "kernel-4.19/arch/arm64/Kconfig"
+with open(kpath, "r", encoding="utf-8") as f:
+    k = f.read()
+
+k = k.replace(
+    'config LITTLE_CPU_MASK\n\tint "Bitmask of available LITTLE CPUs"',
+    'config LITTLE_CPU_MASK\n\tint "Bitmask of available LITTLE CPUs"\n\tdefault 0'
+)
+k = k.replace(
+    'config BIG_CPU_MASK\n\tint "Bitmask of available big CPUs"',
+    'config BIG_CPU_MASK\n\tint "Bitmask of available big CPUs"\n\tdefault 0'
+)
+with open(kpath, "w", encoding="utf-8") as f:
+    f.write(k)
+print("[PASS] Injected default 0 for LITTLE_CPU_MASK & BIG_CPU_MASK into arch/arm64/Kconfig")
 EOF
 
 # 1. Graft Trinket Clock DT-Bindings
@@ -305,6 +340,10 @@ CONFIG_SM_DEBUGCC_TRINKET=y
 CONFIG_PINCTRL_TRINKET=y
 CONFIG_REGULATOR_RPM_SMD=y
 CONFIG_QCOM_SMD_RPM=y
+
+# PCHM30 SM6125 (4x Kryo Silver [0-3] + 4x Kryo Gold [4-7]) CPU bitmasks
+CONFIG_LITTLE_CPU_MASK=15
+CONFIG_BIG_CPU_MASK=240
 
 # Android 16 GSI Kernel Prerequisites (BPF & Permissive Guard)
 CONFIG_SECURITY_SELINUX_DEVELOP=y

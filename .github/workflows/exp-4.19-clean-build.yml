@@ -142,13 +142,21 @@ jobs:
             --enable CONFIG_CGROUP_BPF \
             --enable CONFIG_NETFILTER_XT_MATCH_BPF \
             --enable CONFIG_NET_CLS_BPF \
-            --enable CONFIG_BPF_JIT
+            --enable CONFIG_BPF_JIT \
+            --set-val CONFIG_LITTLE_CPU_MASK 15 \
+            --set-val CONFIG_BIG_CPU_MASK 240
 
           make O="$OUT_DIR" ARCH=arm64 \
             CC="$CC" LD="$LD" \
             CROSS_COMPILE="$CROSS_COMPILE" \
             CROSS_COMPILE_ARM32="$CROSS_COMPILE_ARM32" \
             CLANG_TRIPLE="$CLANG_TRIPLE" olddefconfig
+
+          make O="$OUT_DIR" ARCH=arm64 \
+            CC="$CC" LD="$LD" \
+            CROSS_COMPILE="$CROSS_COMPILE" \
+            CROSS_COMPILE_ARM32="$CROSS_COMPILE_ARM32" \
+            CLANG_TRIPLE="$CLANG_TRIPLE" syncconfig
 
       - name: Compile Linux 4.19 Kernel
         working-directory: kernel-4.19

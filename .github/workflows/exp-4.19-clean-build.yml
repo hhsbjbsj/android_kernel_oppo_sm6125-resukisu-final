@@ -87,8 +87,9 @@ jobs:
           echo "GCC64_DIR=$G64" >> "$GITHUB_ENV"
           echo "GCC32_DIR=$G32" >> "$GITHUB_ENV"
 
-      - name: Setup ccache
-        uses: actions/cache@v4
+      - name: Restore ccache
+        uses: actions/cache/restore@v4
+        id: ccache-restore
         with:
           path: ~/.cache/ccache
           key: ccache-419-pchm30-${{ github.sha }}
@@ -106,13 +107,15 @@ jobs:
             echo "KBUILD_BUILD_HOST=ubuntu-419-pchm30"
             echo "KBUILD_BUILD_VERSION=1"
             echo "CLANG_TRIPLE=aarch64-linux-gnu-"
-            echo "CC=$SDCLANG_DIR/bin/clang"
+            echo "CC=ccache $SDCLANG_DIR/bin/clang"
             echo "CROSS_COMPILE=$GCC64_DIR/bin/aarch64-linux-android-"
             echo "CROSS_COMPILE_ARM32=$GCC32_DIR/bin/arm-linux-androideabi-"
             echo "LD=$GCC64_DIR/bin/aarch64-linux-android-ld"
             echo "PATH=$SDCLANG_DIR/bin:$GCC64_DIR/bin:$GCC32_DIR/bin:$PATH"
             echo "CCACHE_DIR=$HOME/.cache/ccache"
             echo "CCACHE_MAXSIZE=5G"
+            echo "CCACHE_COMPRESS=true"
+            echo "CCACHE_COMPRESSLEVEL=1"
             echo "JOBS=$(nproc)"
           } >> "$GITHUB_ENV"
 
@@ -227,3 +230,10 @@ jobs:
             --notes "True Linux 4.19 kernel source-level port for OPPO A11x / PCHM30 (SM6125 Trinket, 19021/19051) with native BPF and SELinux develop mode. Flashable boot-only AnyKernel3 zip with PCHM30 device tree." \
             "$ZIP_FILE" "$ZIP_FILE.sha256" "kernel-4.19/$OUT_DIR/arch/arm64/boot/Image"
           echo "Release published: https://github.com/${GITHUB_REPOSITORY}/releases/tag/${TAG}"
+
+      - name: Save ccache
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: ~/.cache/ccache
+          key: ccache-419-pchm30-${{ github.sha }}

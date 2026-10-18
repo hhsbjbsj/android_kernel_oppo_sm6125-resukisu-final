@@ -1,0 +1,187 @@
+name: PCHM30 Sony 4.19 bring-up
+
+on:
+  workflow_dispatch:
+  push:
+    branches: ['test/pchm30-4.19-sony-20261018']
+    paths:
+      - '.github/workflows/pchm30-419-sony.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sony-419-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  SONY_SHA: d45fe1c54ad409ef524db7b1aa3f1c3cbf62f235
+  TOOLCHAIN_TAG: pchm30-build-environment-20260810
+
+jobs:
+  bringup:
+    name: ${{ matrix.target }}
+    runs-on: ubuntu-22.04
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [sony-reference, pchm30]
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: port
+          persist-credentials: false
+      - name: Checkout pinned native Trinket 4.19 baseline
+        uses: actions/checkout@v4
+        with:
+          repository: sonyxperiadev/kernel
+          ref: ${{ env.SONY_SHA }}
+          path: kernel
+          persist-credentials: false
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y bc bison flex libssl-dev libelf-dev libncurses-dev libtinfo5 libncurses5 device-tree-compiler cpio zstd rsync
+      - name: Restore verified existing toolchains
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -Eeuo pipefail
+          mkdir -p assets toolchains reports
+          gh release download "$TOOLCHAIN_TAG" --repo "$GITHUB_REPOSITORY" --dir assets             --pattern 'PCHM30-Snapdragon-LLVM-10.0.7.tar.zst'             --pattern 'PCHM30-GCC64-4.9-binutils2.27.tar.zst'             --pattern 'PCHM30-GCC32-4.9.tar.zst' --pattern 'SHA256SUMS.txt'
+          cd assets
+          grep -E 'PCHM30-(Snapdragon-LLVM-10\.0\.7|GCC64-4\.9-binutils2\.27|GCC32-4\.9)\.tar\.zst$' SHA256SUMS.txt > required.sums
+          test "$(wc -l < required.sums)" -eq 3
+          sha256sum -c required.sums
+          for archive in *.tar.zst; do tar --zstd -xf "$archive" -C ../toolchains; done
+      - name: Configure reproducible build environment
+        run: |
+          set -Eeuo pipefail
+          SD="$GITHUB_WORKSPACE/toolchains/Snapdragon-LLVM-ARM-Compiler-10.0.7-for-Android-NDK"
+          G64="$GITHUB_WORKSPACE/toolchains/aarch64-linux-android-4.9"
+          G32="$GITHUB_WORKSPACE/toolchains/arm-linux-androideabi-4.9"
+          test -x "$SD/bin/clang"
+          test -x "$G64/bin/aarch64-linux-android-ld"
+          test -x "$G32/bin/arm-linux-androideabi-gcc"
+          ln -sfn aarch64-linux-android-ld "$G64/bin/aarch64-linux-gnu-ld"
+          {
+            echo "ARCH=arm64"
+            echo "CC=$SD/bin/clang"
+            echo "LD=$G64/bin/aarch64-linux-android-ld"
+            echo "CROSS_COMPILE=$G64/bin/aarch64-linux-android-"
+            echo "CROSS_COMPILE_ARM32=$G32/bin/arm-linux-androideabi-"
+            echo "CLANG_TRIPLE=aarch64-linux-gnu-"
+            echo "PATH=$SD/bin:$G64/bin:$G32/bin:$PATH"
+            echo "KBUILD_BUILD_USER=pchm30-port"
+            echo "KBUILD_BUILD_HOST=github-actions"
+            echo "KCONFIG_NOTIMESTAMP=true"
+          } >> "$GITHUB_ENV"
+          {
+            echo "Sony kernel: $(git -C kernel rev-parse HEAD)"
+            echo "OPPO overlay: $(git -C port rev-parse HEAD)"
+            "$SD/bin/clang" --version
+            "$G64/bin/aarch64-linux-android-ld" --version
+          } > reports/provenance.txt
+          test "$(git -C kernel rev-parse HEAD)" = "$SONY_SHA"
+          test "$(make -s -C kernel kernelversion)" = '4.19.248'
+      - name: Stage isolated OPPO 19021 device tree
+        if: matrix.target == 'pchm30'
+        run: |
+          set -Eeuo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import shutil
+          kernel = Path('kernel')
+          source = Path('port/arch/arm64/boot/dts/19021')
+          dest = kernel / 'arch/arm64/boot/dts/pchm30'
+          dest.mkdir()
+          files = sorted(source.glob('*.dts')) + sorted(source.glob('*.dtsi'))
+          if not files:
+              raise SystemExit('Missing OPPO 19021 device tree sources')
+          for src in files:
+              shutil.copy2(src, dest / src.name)
+          # Resolve common include files against the native 4.19 tree.
+          # Never overwrite its qcom/Makefile or native Trinket drivers.
+          for src in (kernel / 'arch/arm64/boot/dts/qcom').glob('*.dtsi'):
+              if not (dest / src.name).exists():
+                  (dest / src.name).symlink_to('../qcom/' + src.name)
+          (dest / 'Makefile').write_text('dtb-$(CONFIG_ARCH_TRINKET) += trinket-idp-19021.dtb\nalways := $(dtb-y)\nclean-files := *.dtb\n')
+          top = kernel / 'arch/arm64/boot/dts/Makefile'
+          with top.open('a') as f:
+              f.write('\nsubdir-$(CONFIG_ARCH_TRINKET) += pchm30\n')
+          for required in ['trinket-idp-19021.dts', 'trinket.dtsi', 'trinket-idp.dtsi']:
+              if not (dest / required).is_file():
+                  raise SystemExit('Missing required file: ' + required)
+          Path('reports/overlay-files.txt').write_text('\n'.join(p.name for p in files) + '\n')
+          PY
+          git -C kernel diff --check
+          git -C kernel diff > reports/tracked-source.patch
+          tar -czf reports/pchm30-device-tree.tar.gz -C kernel arch/arm64/boot/dts/pchm30
+      - name: Resolve configuration and verify required drivers
+        env:
+          TARGET: ${{ matrix.target }}
+        run: |
+          set -Eeuo pipefail
+          cd kernel
+          make O=out aosp_seine_pdx201_defconfig 2>&1 | tee ../reports/configure.log
+          if [ "$TARGET" = pchm30 ]; then
+            # Remove Sony board selection, keeping native 4.19 Trinket support.
+            for symbol in $(sed -n 's/^CONFIG_\([^=]*SONY[^=]*\)=.*/\1/p' out/.config); do
+              scripts/config --file out/.config --disable "$symbol"
+            done
+            scripts/config --file out/.config --disable BUILD_ARM64_DT_OVERLAY               --disable BUILD_ARM64_APPENDED_DTB_IMAGE               --set-str BUILD_ARM64_APPENDED_DTB_IMAGE_NAMES ''               --set-str LOCALVERSION '-pchm30-419-bringup'
+          fi
+          make O=out olddefconfig 2>&1 | tee -a ../reports/configure.log
+          for symbol in ARCH_TRINKET PINCTRL_TRINKET SM_GCC_TRINKET SM_GPUCC_TRINKET SM_DISPCC_TRINKET SM_VIDEOCC_TRINKET QCOM_SMD_RPM REGULATOR_RPM_SMD; do
+            grep -qx "CONFIG_$symbol=y" out/.config || { echo "Missing required driver: $symbol"; exit 1; }
+          done
+          cp out/.config ../reports/resolved.config
+          make O=out savedefconfig
+          cp out/defconfig ../reports/resolved_defconfig
+      - name: Compile OPPO device tree against 4.19 bindings
+        if: matrix.target == 'pchm30'
+        run: |
+          set -Eeuo pipefail
+          cd kernel
+          timeout 15m make O=out -j2 pchm30/trinket-idp-19021.dtb 2>&1 | tee ../reports/dtb-build.log
+          DTB=out/arch/arm64/boot/dts/pchm30/trinket-idp-19021.dtb
+          test -s "$DTB"
+          fdtget -t s "$DTB" / compatible | tee ../reports/dtb-compatible.txt
+          test "$(fdtget -t u "$DTB" / oppo,dtsi_no)" = 19021
+      - name: Compile Linux 4.19 Image
+        run: |
+          set -Eeuo pipefail
+          cd kernel
+          timeout 65m make O=out -j"$(nproc)" Image.gz 2>&1 | tee ../reports/kernel-build.log
+          test -s out/arch/arm64/boot/Image.gz
+          grep -q '4.19.248' out/include/generated/utsrelease.h
+          cp out/include/generated/utsrelease.h ../reports/
+          sha256sum out/arch/arm64/boot/Image.gz > ../reports/Image.gz.sha256
+      - name: Upload diagnostics and experimental outputs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sony-419-${{ matrix.target }}-${{ github.sha }}
+          retention-days: 14
+          if-no-files-found: error
+          path: |
+            reports/
+            kernel/out/.config
+            kernel/out/Module.symvers
+            kernel/out/arch/arm64/boot/Image.gz
+            kernel/out/arch/arm64/boot/dts/pchm30/*.dtb
+      - name: Record bring-up scope
+        if: always()
+        run: |
+          {
+            echo '## Sony native Trinket 4.19 bring-up'
+            echo 'Reference: sonyxperiadev/kernel @ d45fe1c54ad409ef524db7b1aa3f1c3cbf62f235 (4.19.248).'
+            echo 'This is a compile/DT compatibility experiment, not a boot-tested OPPO kernel.'
+            echo 'OPPO touch, charging, display extensions, audio, camera and vendor ABI still require validation and porting.'
+            echo 'ReSukiSU/SUSFS integration is deferred until the clean board baseline is established.'
+            echo 'No flashable package or release is generated by this workflow.'
+          } >> "$GITHUB_STEP_SUMMARY"

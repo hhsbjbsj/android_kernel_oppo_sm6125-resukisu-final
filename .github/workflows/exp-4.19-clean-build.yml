@@ -128,7 +128,7 @@ jobs:
           set -Eeuo pipefail
           rm -rf "$OUT_DIR"
           mkdir -p "$OUT_DIR"
-          yes "" | make O="$OUT_DIR" ARCH=arm64 \
+          make O="$OUT_DIR" ARCH=arm64 \
             CC="$CC" LD="$LD" \
             CROSS_COMPILE="$CROSS_COMPILE" \
             CROSS_COMPILE_ARM32="$CROSS_COMPILE_ARM32" \
@@ -144,7 +144,7 @@ jobs:
             --enable CONFIG_NET_CLS_BPF \
             --enable CONFIG_BPF_JIT
 
-          yes "" | make O="$OUT_DIR" ARCH=arm64 \
+          make O="$OUT_DIR" ARCH=arm64 \
             CC="$CC" LD="$LD" \
             CROSS_COMPILE="$CROSS_COMPILE" \
             CROSS_COMPILE_ARM32="$CROSS_COMPILE_ARM32" \
@@ -155,7 +155,7 @@ jobs:
         run: |
           set -Eeuo pipefail
           ccache -s
-          yes "" | make O="$OUT_DIR" ARCH=arm64 \
+          make O="$OUT_DIR" ARCH=arm64 \
             CC="$CC" LD="$LD" \
             CROSS_COMPILE="$CROSS_COMPILE" \
             CROSS_COMPILE_ARM32="$CROSS_COMPILE_ARM32" \

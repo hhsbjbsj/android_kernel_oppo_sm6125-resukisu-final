@@ -7,6 +7,9 @@ on:
     paths-ignore:
       - '**.md'
 
+permissions:
+  contents: write
+
 env:
   TOOLCHAIN_RELEASE_TAG: pchm30-build-environment-20260810
   TOOLCHAIN_ROOT: /opt/pchm30-toolchains
@@ -21,7 +24,8 @@ jobs:
     name: Compile Clean Experimental Kernel
     runs-on: ubuntu-22.04
     timeout-minutes: 120
-    permissions: write-all
+    permissions:
+      contents: write
 
     steps:
       - name: Checkout Clean Experimental Branch
@@ -189,53 +193,9 @@ jobs:
           rm -f "$AK3_DIR"/dtbo.img "$AK3_DIR"/dtb "$AK3_DIR"/dtb.img "$AK3_DIR"/Image.gz-dtb \
                 "$AK3_DIR"/Image-dtb "$AK3_DIR"/Image.gz "$AK3_DIR"/vendor_boot.img 2>/dev/null || true
 
-          cat > "$AK3_DIR/anykernel.sh" <<'AK'
-### AnyKernel3 Ramdisk Mod Script
-## PCHM30 / OPPO A11x boot-only installer (Clean Experimental)
-
-properties() { '
-kernel.string=PCHM30 Clean Experimental Kernel
-do.devicecheck=0
-do.modules=0
-do.systemless=1
-do.cleanup=1
-do.cleanuponabort=0
-device.name1=PCHM30
-device.name2=OP4A54
-device.name3=trinket
-device.name4=ginkgo
-device.name5=
-supported.versions=
-supported.patchlevels=
-supported.vendorpatchlevels=
-'; }
-
-boot_attributes() {
-set_perm_recursive 0 0 755 644 $RAMDISK/*;
-set_perm_recursive 0 0 750 750 $RAMDISK/init* $RAMDISK/sbin;
-}
-
-# PCHM30 is a legacy non-A/B boot partition device.
-BLOCK=boot;
-IS_SLOT_DEVICE=0;
-RAMDISK_COMPRESSION=auto;
-PATCH_VBMETA_FLAG=auto;
-
-. tools/ak3-core.sh;
-
-dump_boot;
-write_boot;
-AK
-
-          sed -i \
-            -e 's/^flash_generic dtbo;/# flash_generic dtbo;/' \
-            -e 's/^flash_generic dtb;/# flash_generic dtb;/' \
-            -e 's/^flash_dtbo;/# flash_dtbo;/' \
-            -e 's/^flash_dtb;/# flash_dtb;/' \
-            "$AK3_DIR/anykernel.sh"
-
+          cp -f "$GITHUB_WORKSPACE/$KERNEL_REL/build_scripts/anykernel-pchm30.sh" "$AK3_DIR/anykernel.sh"
           cp -f "$OUT_DIR/arch/arm64/boot/Image" "$AK3_DIR/Image"
-          
+
           ZIP_NAME="PCHM30-Clean-Exp-AK3-${GITHUB_RUN_NUMBER}.zip"
           cd "$AK3_DIR"
           zip -r9 "$GITHUB_WORKSPACE/$ZIP_NAME" . -x '*.git*' '*placeholder' >/dev/null

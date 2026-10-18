@@ -154,7 +154,7 @@ cp -vf "$WORKSPACE/include/linux/regulator/rpm-smd-regulator.h" "$KERNEL_DIR/inc
 # 3. Graft Trinket Clock Drivers & Adapt for 4.19 DFS API
 echo "[3/8] Installing Trinket clock drivers..."
 mkdir -p "$KERNEL_DIR/drivers/clk/qcom"
-cp -vf "$WORKSPACE/drivers/clk/qcom/debugcc-trinket.c" "$KERNEL_DIR/drivers/clk/qcom/"
+# cp -vf "$WORKSPACE/drivers/clk/qcom/debugcc-trinket.c" "$KERNEL_DIR/drivers/clk/qcom/"  # Omit 4.14 debugcc
 cp -vf "$WORKSPACE/drivers/clk/qcom/dispcc-trinket.c" "$KERNEL_DIR/drivers/clk/qcom/"
 cp -vf "$WORKSPACE/drivers/clk/qcom/gcc-trinket.c" "$KERNEL_DIR/drivers/clk/qcom/"
 cp -vf "$WORKSPACE/drivers/clk/qcom/gpucc-trinket.c" "$KERNEL_DIR/drivers/clk/qcom/"
@@ -211,7 +211,7 @@ obj-$(CONFIG_SM_GCC_TRINKET) += gcc-trinket.o
 obj-$(CONFIG_SM_DISPCC_TRINKET) += dispcc-trinket.o
 obj-$(CONFIG_SM_GPUCC_TRINKET) += gpucc-trinket.o
 obj-$(CONFIG_SM_VIDEOCC_TRINKET) += videocc-trinket.o
-obj-$(CONFIG_SM_DEBUGCC_TRINKET) += debugcc-trinket.o
+# obj-$(CONFIG_SM_DEBUGCC_TRINKET) += debugcc-trinket.o
 EOF
 fi
 
@@ -250,7 +250,7 @@ config SM_VIDEOCC_TRINKET
 config SM_DEBUGCC_TRINKET
 	tristate "TRINKET Debug Clock Controller"
 	depends on SM_GCC_TRINKET
-	default y
+	default n
 	help
 	  Support for the debug clock controller on Trinket devices.
 EOF
@@ -370,7 +370,7 @@ CONFIG_SM_GCC_TRINKET=y
 CONFIG_SM_DISPCC_TRINKET=y
 CONFIG_SM_GPUCC_TRINKET=y
 CONFIG_SM_VIDEOCC_TRINKET=y
-CONFIG_SM_DEBUGCC_TRINKET=y
+# CONFIG_SM_DEBUGCC_TRINKET is not set
 CONFIG_PINCTRL_TRINKET=y
 CONFIG_REGULATOR_RPM_SMD=y
 CONFIG_QCOM_SMD_RPM=y

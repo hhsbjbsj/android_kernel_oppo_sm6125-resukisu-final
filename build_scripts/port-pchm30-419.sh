@@ -187,31 +187,15 @@ static const struct qcom_cc_dfs_desc gcc_trinket_dfs_desc = {
 	.num_clks = ARRAY_SIZE(gcc_dfs_clocks),
 };"""
 
-new_dfs_struct = """static const struct clk_rcg_dfs_data gcc_dfs_clocks[] = {
-	DEFINE_RCG_DFS(gcc_qupv3_wrap0_s0_clk_src),
-	DEFINE_RCG_DFS(gcc_qupv3_wrap0_s1_clk_src),
-	DEFINE_RCG_DFS(gcc_qupv3_wrap0_s2_clk_src),
-	DEFINE_RCG_DFS(gcc_qupv3_wrap0_s3_clk_src),
-	DEFINE_RCG_DFS(gcc_qupv3_wrap0_s4_clk_src),
-	DEFINE_RCG_DFS(gcc_qupv3_wrap0_s5_clk_src),
-	DEFINE_RCG_DFS(gcc_qupv3_wrap1_s0_clk_src),
-	DEFINE_RCG_DFS(gcc_qupv3_wrap1_s1_clk_src),
-	DEFINE_RCG_DFS(gcc_qupv3_wrap1_s2_clk_src),
-	DEFINE_RCG_DFS(gcc_qupv3_wrap1_s3_clk_src),
-	DEFINE_RCG_DFS(gcc_qupv3_wrap1_s4_clk_src),
-	DEFINE_RCG_DFS(gcc_qupv3_wrap1_s5_clk_src),
-};"""
+# Neutralize DFS in gcc-trinket.c for clean Linux 4.19 compilation
+if old_dfs_struct in code:
+    code = code.replace(old_dfs_struct, "/* DFS clocks omitted on Linux 4.19 port */")
+    print("[PASS] Omitted gcc_dfs_clocks struct for Linux 4.19")
 
 old_dfs_call = "ret = qcom_cc_register_rcg_dfs(pdev, &gcc_trinket_dfs_desc);"
-new_dfs_call = "ret = qcom_cc_register_rcg_dfs(regmap, gcc_dfs_clocks, ARRAY_SIZE(gcc_dfs_clocks));"
-
-if old_dfs_struct in code:
-    code = code.replace(old_dfs_struct, new_dfs_struct)
-    print("[PASS] Replaced gcc_dfs_clocks struct for Linux 4.19")
-
 if old_dfs_call in code:
-    code = code.replace(old_dfs_call, new_dfs_call)
-    print("[PASS] Replaced qcom_cc_register_rcg_dfs call for Linux 4.19")
+    code = code.replace(old_dfs_call, "ret = 0; /* DFS skipped */")
+    print("[PASS] Neutralized qcom_cc_register_rcg_dfs call for Linux 4.19")
 
 with open(path, "w", encoding="utf-8") as f:
     f.write(code)

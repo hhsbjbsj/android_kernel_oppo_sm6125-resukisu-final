@@ -1,0 +1,92 @@
+name: PCHM30 Clean Experimental Build
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [exp-4.19-clean]
+    paths-ignore:
+      - '**.md'
+
+jobs:
+  build:
+    name: Compile Clean Experimental Kernel
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout Clean Experimental Branch
+        uses: actions/checkout@v4
+        with:
+          ref: exp-4.19-clean
+          fetch-depth: 1
+
+      - name: Install Build Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends             build-essential bc bison flex libssl-dev libelf-dev             ccache git wget curl zip unzip python3
+
+      - name: Setup Toolchain
+        run: |
+          mkdir -p $HOME/toolchain
+          cd $HOME/toolchain
+          echo '=== Downloading AOSP Clang Toolchain ==='
+          wget -q https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/refs/heads/android11-release/clang-r383902.tar.gz -O clang.tar.gz
+          mkdir -p clang && tar -zxf clang.tar.gz -C clang && rm -f clang.tar.gz
+          
+          echo '=== Downloading GCC aarch64 & arm32 cross-compilers ==='
+          git clone --depth=1 https://github.com/LineageOS/android_prebuilts_gcc_linux-x86_aarch64_aarch64-linux-android-4.9.git gcc64
+          git clone --depth=1 https://github.com/LineageOS/android_prebuilts_gcc_linux-x86_arm_arm-linux-androideabi-4.9.git gcc32
+          
+          echo "$HOME/toolchain/clang/bin:$HOME/toolchain/gcc64/bin:$HOME/toolchain/gcc32/bin" >> $GITHUB_PATH
+
+      - name: Setup ccache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ccache
+          key: ccache-exp-clean-${{ github.sha }}
+          restore-keys: |
+            ccache-exp-clean-
+
+      - name: Compile Clean Kernel (Trinket / PCHM30)
+        run: |
+          export ARCH=arm64
+          export SUBARCH=arm64
+          export CC="ccache clang"
+          export CLANG_TRIPLE=aarch64-linux-gnu-
+          export CROSS_COMPILE=aarch64-linux-android-
+          export CROSS_COMPILE_ARM32=arm-linux-androideabi-
+          export CCACHE_DIR="$HOME/.cache/ccache"
+          export CCACHE_MAXSIZE="5G"
+          
+          ccache -s
+          mkdir -p out
+          
+          echo '=== Generating clean defconfig ==='
+          make -j$(nproc --all) O=out vendor/trinket-perf_defconfig
+          
+          echo '=== Building kernel Image.gz-dtb ==='
+          make -j$(nproc --all) O=out Image.gz-dtb
+          
+          ccache -s
+          test -f out/arch/arm64/boot/Image.gz-dtb
+          echo 'Kernel build succeeded!'
+
+      - name: Package AnyKernel3 Zip
+        run: |
+          git clone --depth=1 https://github.com/osm0sis/AnyKernel3.git ak3
+          cd ak3
+          cp ../out/arch/arm64/boot/Image.gz-dtb ./Image.gz-dtb
+          sed -i 's/device.name1=.*/device.name1=PCHM30/g' anykernel.sh
+          sed -i 's/device.name2=.*/device.name2=OPPO A11x/g' anykernel.sh
+          sed -i 's/device.name3=.*/device.name3=ginkgo/g' anykernel.sh
+          sed -i 's/device.name4=.*/device.name4=trinket/g' anykernel.sh
+          zip -r9 ../PCHM30-Clean-Exp-AK3.zip * -x .git README.md *placeholder
+          cd ..
+          sha256sum PCHM30-Clean-Exp-AK3.zip | tee PCHM30-Clean-Exp-AK3.zip.sha256
+
+      - name: Upload Clean Build Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: PCHM30-Clean-Exp-Kernel-${{ github.sha }}
+          path: |
+            PCHM30-Clean-Exp-AK3.zip
+            PCHM30-Clean-Exp-AK3.zip.sha256
+            out/arch/arm64/boot/Image.gz-dtb

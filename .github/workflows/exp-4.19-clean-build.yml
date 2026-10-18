@@ -19,7 +19,7 @@ env:
 
 jobs:
   build-419:
-    name: Compile True Linux 4.19 Kernel (Bengal/Trinket)
+    name: Compile True Linux 4.19 Kernel (OPPO PCHM30 / Trinket)
     runs-on: ubuntu-22.04
     timeout-minutes: 120
     permissions:
@@ -91,9 +91,9 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.cache/ccache
-          key: ccache-419-port-${{ github.sha }}
+          key: ccache-419-pchm30-${{ github.sha }}
           restore-keys: |
-            ccache-419-port-
+            ccache-419-pchm30-
 
       - name: Export 4.19 build environment
         run: |
@@ -103,7 +103,7 @@ jobs:
             echo "SUBARCH=arm64"
             echo "KCONFIG_NOTIMESTAMP=true"
             echo "KBUILD_BUILD_USER=port-engineer"
-            echo "KBUILD_BUILD_HOST=ubuntu-419-ci"
+            echo "KBUILD_BUILD_HOST=ubuntu-419-pchm30"
             echo "KBUILD_BUILD_VERSION=1"
             echo "CLANG_TRIPLE=aarch64-linux-gnu-"
             echo "CC=$SDCLANG_DIR/bin/clang"
@@ -116,7 +116,13 @@ jobs:
             echo "JOBS=$(nproc)"
           } >> "$GITHUB_ENV"
 
-      - name: Prepare Linux 4.19 defconfig
+      - name: Graft PCHM30 Port Overlay onto Linux 4.19
+        run: |
+          set -Eeuo pipefail
+          chmod +x port-workspace/build_scripts/port-pchm30-419.sh
+          bash port-workspace/build_scripts/port-pchm30-419.sh kernel-4.19 port-workspace
+
+      - name: Prepare Linux 4.19 PCHM30 Defconfig
         working-directory: kernel-4.19
         run: |
           set -Eeuo pipefail
@@ -126,7 +132,7 @@ jobs:
             CC="$CC" LD="$LD" \
             CROSS_COMPILE="$CROSS_COMPILE" \
             CROSS_COMPILE_ARM32="$CROSS_COMPILE_ARM32" \
-            CLANG_TRIPLE="$CLANG_TRIPLE" vendor/bengal-perf_defconfig
+            CLANG_TRIPLE="$CLANG_TRIPLE" vendor/pchm30-perf_defconfig
 
           ./scripts/config --file "$OUT_DIR/.config" \
             --enable CONFIG_SECURITY_SELINUX_DEVELOP \
@@ -155,7 +161,7 @@ jobs:
             CROSS_COMPILE_ARM32="$CROSS_COMPILE_ARM32" \
             CLANG_TRIPLE="$CLANG_TRIPLE" \
             KCFLAGS="-Wno-error" \
-            -j"$JOBS" Image
+            -j"$JOBS" Image dtbs
           ccache -s
           test -f "$OUT_DIR/arch/arm64/boot/Image"
           echo '[PASS] True Linux 4.19 Image compiled successfully!'
@@ -175,6 +181,13 @@ jobs:
 
           cp -f "$GITHUB_WORKSPACE/port-workspace/build_scripts/anykernel-pchm30.sh" "$AK3_DIR/anykernel.sh"
           cp -f "kernel-4.19/$OUT_DIR/arch/arm64/boot/Image" "$AK3_DIR/Image"
+
+          # Include compiled PCHM30 DTB if present
+          PCHM30_DTB="kernel-4.19/$OUT_DIR/arch/arm64/boot/dts/vendor/qcom/trinket-idp-19021.dtb"
+          if [ -f "$PCHM30_DTB" ]; then
+            cp -vf "$PCHM30_DTB" "$AK3_DIR/dtb"
+            echo '[PASS] Included trinket-idp-19021.dtb in AnyKernel3 package'
+          fi
 
           ZIP_NAME="PCHM30-Linux-4.19-AK3-${GITHUB_RUN_NUMBER}.zip"
           cd "$AK3_DIR"
@@ -203,6 +216,6 @@ jobs:
             --repo "$GITHUB_REPOSITORY" \
             --target "$GITHUB_SHA" \
             --title "PCHM30 True Linux 4.19 Kernel (Run ${GITHUB_RUN_NUMBER})" \
-            --notes "True Linux 4.19 kernel port based on Qualcomm Bengal/Trinket 4.19 with native BPF and SELinux develop mode. Flashable boot-only AnyKernel3 zip." \
+            --notes "True Linux 4.19 kernel source-level port for OPPO A11x / PCHM30 (SM6125 Trinket, 19021/19051) with native BPF and SELinux develop mode. Flashable boot-only AnyKernel3 zip with PCHM30 device tree." \
             "$ZIP_FILE" "$ZIP_FILE.sha256" "kernel-4.19/$OUT_DIR/arch/arm64/boot/Image"
           echo "Release published: https://github.com/${GITHUB_REPOSITORY}/releases/tag/${TAG}"

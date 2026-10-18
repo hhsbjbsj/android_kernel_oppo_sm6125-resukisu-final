@@ -89,6 +89,32 @@ k = k.replace(
 with open(kpath, "w", encoding="utf-8") as f:
     f.write(k)
 print("[PASS] Injected default 0 for LITTLE_CPU_MASK & BIG_CPU_MASK into arch/arm64/Kconfig")
+
+# 5. Fix Makefile line 983 -plugin-opt compatibility with GNU ld
+mpath = "kernel-4.19/Makefile"
+with open(mpath, "r", encoding="utf-8") as f:
+    m = f.read()
+
+m = m.replace(
+    "KBUILD_LDFLAGS\t+= -plugin-opt=-warn-stack-size=$(CONFIG_FRAME_WARN)",
+    "KBUILD_LDFLAGS\t+= $(call ld-option, -plugin-opt=-warn-stack-size=$(CONFIG_FRAME_WARN))"
+)
+with open(mpath, "w", encoding="utf-8") as f:
+    f.write(m)
+print("[PASS] Wrapped -plugin-opt with $(call ld-option, ...) in Makefile")
+
+# 6. Fix arch/arm64/Makefile line 103 -plugin-opt compatibility with GNU ld
+arm_mpath = "kernel-4.19/arch/arm64/Makefile"
+with open(arm_mpath, "r", encoding="utf-8") as f:
+    am = f.read()
+
+am = am.replace(
+    "KBUILD_LDFLAGS_MODULE\t+= -plugin-opt=-code-model=large",
+    "KBUILD_LDFLAGS_MODULE\t+= $(call ld-option, -plugin-opt=-code-model=large)"
+)
+with open(arm_mpath, "w", encoding="utf-8") as f:
+    f.write(am)
+print("[PASS] Wrapped -plugin-opt with $(call ld-option, ...) in arch/arm64/Makefile")
 EOF
 
 # 1. Graft Trinket Clock DT-Bindings
@@ -344,6 +370,7 @@ CONFIG_QCOM_SMD_RPM=y
 # PCHM30 SM6125 (4x Kryo Silver [0-3] + 4x Kryo Gold [4-7]) CPU bitmasks
 CONFIG_LITTLE_CPU_MASK=15
 CONFIG_BIG_CPU_MASK=240
+CONFIG_FRAME_WARN=2048
 
 # Android 16 GSI Kernel Prerequisites (BPF & Permissive Guard)
 CONFIG_SECURITY_SELINUX_DEVELOP=y

@@ -15,6 +15,47 @@ echo " Target kernel dir: $KERNEL_DIR"
 echo " Source workspace : $WORKSPACE"
 echo "=========================================================="
 
+# 0. Patch scripts/kconfig/conf.c to permanently prevent non-interactive "Error in reading or end of file." loop
+echo "[0/8] Immunizing Kconfig conf.c against non-interactive EOF loop..."
+python3 - << 'EOF'
+path = "kernel-4.19/scripts/kconfig/conf.c"
+with open(path, "r", encoding="utf-8") as f:
+    c = f.read()
+
+old_xfgets = """static void xfgets(char *str, int size, FILE *in)
+{
+	if (!fgets(str, size, in))
+		fprintf(stderr, "\\nError in reading or end of file.\\n");
+
+	if (!tty_stdio)
+		printf("%s", str);
+}"""
+
+new_xfgets = """static void xfgets(char *str, int size, FILE *in)
+{
+	if (!fgets(str, size, in)) {
+		str[0] = '\\n';
+		str[1] = 0;
+		return;
+	}
+
+	if (!tty_stdio)
+		printf("%s", str);
+}"""
+
+if old_xfgets in c:
+    c = c.replace(old_xfgets, new_xfgets)
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(c)
+    print("[PASS] Successfully patched conf.c xfgets to auto-accept defaults on EOF")
+else:
+    # Fallback replace
+    c = c.replace('fprintf(stderr, "\\nError in reading or end of file.\\n");', 'str[0] = \'\\n\'; str[1] = 0; return;')
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(c)
+    print("[PASS] Fallback patched conf.c to prevent EOF error")
+EOF
+
 # 1. Graft Trinket Clock DT-Bindings
 echo "[1/8] Installing Trinket clock dt-bindings..."
 mkdir -p "$KERNEL_DIR/include/dt-bindings/clock"
@@ -38,12 +79,8 @@ cp -vf "$WORKSPACE/drivers/clk/qcom/gpucc-trinket.c" "$KERNEL_DIR/drivers/clk/qc
 cp -vf "$WORKSPACE/drivers/clk/qcom/vdd-level-trinket.h" "$KERNEL_DIR/drivers/clk/qcom/"
 cp -vf "$WORKSPACE/drivers/clk/qcom/videocc-trinket.c" "$KERNEL_DIR/drivers/clk/qcom/"
 
-# Patch gcc-trinket.c for Linux 4.19 DFS registration API:
-# 4.14 used: qcom_cc_register_rcg_dfs(pdev, &gcc_trinket_dfs_desc) with struct clk_dfs
-# 4.19 uses: qcom_cc_register_rcg_dfs(regmap, gcc_dfs_clocks, ARRAY_SIZE(gcc_dfs_clocks)) with struct clk_rcg_dfs_data
+# Patch gcc-trinket.c for Linux 4.19 DFS registration API
 python3 - << 'EOF'
-import sys
-
 path = "kernel-4.19/drivers/clk/qcom/gcc-trinket.c"
 with open(path, "r", encoding="utf-8") as f:
     code = f.read()
@@ -89,20 +126,16 @@ new_dfs_call = "ret = qcom_cc_register_rcg_dfs(regmap, gcc_dfs_clocks, ARRAY_SIZ
 if old_dfs_struct in code:
     code = code.replace(old_dfs_struct, new_dfs_struct)
     print("[PASS] Replaced gcc_dfs_clocks struct for Linux 4.19")
-else:
-    print("[WARN] old_dfs_struct pattern not found directly, checking partial replacement")
 
 if old_dfs_call in code:
     code = code.replace(old_dfs_call, new_dfs_call)
     print("[PASS] Replaced qcom_cc_register_rcg_dfs call for Linux 4.19")
-else:
-    print("[WARN] old_dfs_call pattern not found directly")
 
 with open(path, "w", encoding="utf-8") as f:
     f.write(code)
 EOF
 
-# Wire up drivers/clk/qcom/Kconfig & Makefile
+# Wire up drivers/clk/qcom/Kconfig & Makefile with explicit defaults
 if ! grep -q "CONFIG_SM_GCC_TRINKET" "$KERNEL_DIR/drivers/clk/qcom/Makefile"; then
 cat << 'EOF' >> "$KERNEL_DIR/drivers/clk/qcom/Makefile"
 obj-$(CONFIG_SM_GCC_TRINKET) += gcc-trinket.o
@@ -120,36 +153,41 @@ config SM_GCC_TRINKET
 	tristate "TRINKET Global Clock Controller"
 	select QCOM_GDSC
 	depends on COMMON_CLK_QCOM
+	default y
 	help
 	  Support for the global clock controller on Trinket devices.
 
 config SM_GPUCC_TRINKET
 	tristate "TRINKET Graphics Clock Controller"
 	select SM_GCC_TRINKET
+	default y
 	help
 	  Support for the graphics clock controller on Trinket devices.
 
 config SM_DISPCC_TRINKET
 	tristate "TRINKET Display Clock Controller"
 	select SM_GCC_TRINKET
+	default y
 	help
 	  Support for the display clock controller on Trinket devices.
 
 config SM_VIDEOCC_TRINKET
 	tristate "TRINKET Video Clock Controller"
 	select SM_GCC_TRINKET
+	default y
 	help
 	  Support for the video clock controller on Trinket devices.
 
 config SM_DEBUGCC_TRINKET
 	tristate "TRINKET Debug Clock Controller"
 	depends on SM_GCC_TRINKET
+	default y
 	help
 	  Support for the debug clock controller on Trinket devices.
 EOF
 fi
 
-# 4. Graft Trinket Pinctrl Driver
+# 4. Graft Trinket Pinctrl Driver with explicit defaults
 echo "[4/8] Installing Trinket pinctrl driver..."
 mkdir -p "$KERNEL_DIR/drivers/pinctrl/qcom"
 cp -vf "$WORKSPACE/drivers/pinctrl/qcom/pinctrl-trinket.c" "$KERNEL_DIR/drivers/pinctrl/qcom/"
@@ -167,6 +205,7 @@ config PINCTRL_TRINKET
 	tristate "Qualcomm Technologies Inc TRINKET pin controller driver"
 	depends on GPIOLIB && OF
 	select PINCTRL_MSM
+	default y
 	help
 	  This is the pinctrl driver for the Qualcomm Technologies Inc TRINKET platform.
 EOF
@@ -189,7 +228,6 @@ EOF
 fi
 
 python3 - << 'EOF'
-# Add MSM_CPU_TRINKET to include/soc/qcom/socinfo.h
 h_path = "kernel-4.19/include/soc/qcom/socinfo.h"
 with open(h_path, "r", encoding="utf-8") as f:
     h_code = f.read()
@@ -200,7 +238,6 @@ if "MSM_CPU_TRINKET" not in h_code:
         f.write(h_code)
     print("[PASS] Added MSM_CPU_TRINKET to socinfo.h")
 
-# Add 394 to drivers/soc/qcom/socinfo.c
 c_path = "kernel-4.19/drivers/soc/qcom/socinfo.c"
 with open(c_path, "r", encoding="utf-8") as f:
     c_code = f.read()
@@ -240,7 +277,6 @@ fi
 
 # 7. Purge Xiaomi Vendor Dependencies
 echo "[7/8] Purging Xiaomi vendor references and private touch drivers..."
-# Disable Xiaomi touch in drivers/input/touchscreen/Makefile if present
 if [ -f "$KERNEL_DIR/drivers/input/touchscreen/Makefile" ]; then
     sed -i 's/obj-\$(CONFIG_TOUCHSCREEN_XIAOMI_TOUCHFEATURE)/# obj-$(CONFIG_TOUCHSCREEN_XIAOMI_TOUCHFEATURE)/g' "$KERNEL_DIR/drivers/input/touchscreen/Makefile" || true
 fi

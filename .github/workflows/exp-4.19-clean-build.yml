@@ -7,8 +7,7 @@ on:
     paths-ignore:
       - '**.md'
 
-permissions:
-  contents: read
+permissions: write-all
 
 env:
   TOOLCHAIN_RELEASE_TAG: pchm30-build-environment-20260810
@@ -173,31 +172,95 @@ jobs:
             CC="$CC" REAL_CC="$REAL_CC" LD="$LD" \
             CROSS_COMPILE="$CROSS_COMPILE" \
             CROSS_COMPILE_ARM32="$CROSS_COMPILE_ARM32" \
-            CLANG_TRIPLE="$CLANG_TRIPLE" -j"$JOBS" Image.gz-dtb
+            CLANG_TRIPLE="$CLANG_TRIPLE" -j"$JOBS" Image
           ccache -s
-          test -f "$OUT_DIR/arch/arm64/boot/Image.gz-dtb"
-          echo '[PASS] Clean kernel Image.gz-dtb built successfully'
+          test -f "$OUT_DIR/arch/arm64/boot/Image"
+          echo '[PASS] Clean kernel Image built successfully'
 
       - name: Package AnyKernel3 Zip
         working-directory: source/android/kernel/msm-4.14
         run: |
           set -Eeuo pipefail
-          git clone --depth=1 https://github.com/osm0sis/AnyKernel3.git ak3
-          cd ak3
-          cp "../$OUT_DIR/arch/arm64/boot/Image.gz-dtb" ./Image.gz-dtb
-          sed -i 's/device.name1=.*/device.name1=PCHM30/g' anykernel.sh
-          sed -i 's/device.name2=.*/device.name2=OPPO A11x/g' anykernel.sh
-          sed -i 's/device.name3=.*/device.name3=ginkgo/g' anykernel.sh
-          sed -i 's/device.name4=.*/device.name4=trinket/g' anykernel.sh
-          zip -r9 "$GITHUB_WORKSPACE/PCHM30-Clean-Exp-AK3.zip" * -x .git README.md *placeholder
+          AK3_DIR="$GITHUB_WORKSPACE/ak3-pchm30-clean"
+          rm -rf "$AK3_DIR"
+          git clone --filter=blob:none --no-checkout https://github.com/osm0sis/AnyKernel3.git "$AK3_DIR"
+          git -C "$AK3_DIR" checkout e4b1bb25ca2aabcfd57f694a5998d87130701b71 -- .
+          rm -rf "$AK3_DIR/.git" "$AK3_DIR/.github" "$AK3_DIR/README.md"
+          rm -rf "$AK3_DIR/modules" "$AK3_DIR/patch" "$AK3_DIR/ramdisk"
+          rm -f "$AK3_DIR"/dtbo.img "$AK3_DIR"/dtb "$AK3_DIR"/dtb.img "$AK3_DIR"/Image.gz-dtb \
+                "$AK3_DIR"/Image-dtb "$AK3_DIR"/Image.gz "$AK3_DIR"/vendor_boot.img 2>/dev/null || true
+
+          cat > "$AK3_DIR/anykernel.sh" <<'AK'
+### AnyKernel3 Ramdisk Mod Script
+## PCHM30 / OPPO A11x boot-only installer (Clean Experimental)
+
+properties() { '
+kernel.string=PCHM30 Clean Experimental Kernel
+do.devicecheck=0
+do.modules=0
+do.systemless=1
+do.cleanup=1
+do.cleanuponabort=0
+device.name1=PCHM30
+device.name2=OP4A54
+device.name3=trinket
+device.name4=ginkgo
+device.name5=
+supported.versions=
+supported.patchlevels=
+supported.vendorpatchlevels=
+'; }
+
+boot_attributes() {
+set_perm_recursive 0 0 755 644 $RAMDISK/*;
+set_perm_recursive 0 0 750 750 $RAMDISK/init* $RAMDISK/sbin;
+}
+
+# PCHM30 is a legacy non-A/B boot partition device.
+BLOCK=boot;
+IS_SLOT_DEVICE=0;
+RAMDISK_COMPRESSION=auto;
+PATCH_VBMETA_FLAG=auto;
+
+. tools/ak3-core.sh;
+
+dump_boot;
+write_boot;
+AK
+
+          sed -i \
+            -e 's/^flash_generic dtbo;/# flash_generic dtbo;/' \
+            -e 's/^flash_generic dtb;/# flash_generic dtb;/' \
+            -e 's/^flash_dtbo;/# flash_dtbo;/' \
+            -e 's/^flash_dtb;/# flash_dtb;/' \
+            "$AK3_DIR/anykernel.sh"
+
+          cp -f "$OUT_DIR/arch/arm64/boot/Image" "$AK3_DIR/Image"
+          
+          ZIP_NAME="PCHM30-Clean-Exp-AK3-${GITHUB_RUN_NUMBER}.zip"
+          cd "$AK3_DIR"
+          zip -r9 "$GITHUB_WORKSPACE/$ZIP_NAME" . -x '*.git*' '*placeholder' >/dev/null
           cd "$GITHUB_WORKSPACE"
-          sha256sum PCHM30-Clean-Exp-AK3.zip | tee PCHM30-Clean-Exp-AK3.zip.sha256
+          sha256sum "$ZIP_NAME" | tee "$ZIP_NAME.sha256"
+          echo "ZIP_NAME=$ZIP_NAME" >> "$GITHUB_ENV"
+
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -Eeuo pipefail
+          TAG="pchm30-clean-exp-run${GITHUB_RUN_NUMBER}"
+          gh release create "$TAG" \
+            --title "PCHM30 Clean Experimental Kernel (Run ${GITHUB_RUN_NUMBER})" \
+            --notes "PCHM30 clean baseline build without baseband-guard or private hacks. Properly configured boot-only AnyKernel3 zip." \
+            "$ZIP_NAME" "$ZIP_NAME.sha256" "$KERNEL_REL/$OUT_DIR/arch/arm64/boot/Image"
+          echo "Release published: https://github.com/${GITHUB_REPOSITORY}/releases/tag/${TAG}"
 
       - name: Upload Clean Build Artifacts
         uses: actions/upload-artifact@v4
         with:
           name: PCHM30-Clean-Exp-Kernel-${{ github.sha }}
           path: |
-            PCHM30-Clean-Exp-AK3.zip
-            PCHM30-Clean-Exp-AK3.zip.sha256
-            source/android/kernel/msm-4.14/out-clean-exp/arch/arm64/boot/Image.gz-dtb
+            ${{ env.ZIP_NAME }}
+            ${{ env.ZIP_NAME }}.sha256
+            source/android/kernel/msm-4.14/out-clean-exp/arch/arm64/boot/Image

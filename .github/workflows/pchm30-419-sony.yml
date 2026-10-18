@@ -127,7 +127,7 @@ jobs:
         run: |
           set -Eeuo pipefail
           cd kernel
-          make O=out aosp_seine_pdx201_defconfig 2>&1 | tee ../reports/configure.log
+          make O=out CC="$CC" LD="$LD" CROSS_COMPILE="$CROSS_COMPILE" CROSS_COMPILE_ARM32="$CROSS_COMPILE_ARM32" CLANG_TRIPLE="$CLANG_TRIPLE" aosp_seine_pdx201_defconfig 2>&1 | tee ../reports/configure.log
           if [ "$TARGET" = pchm30 ]; then
             # Remove Sony board selection, keeping native 4.19 Trinket support.
             for symbol in $(sed -n 's/^CONFIG_\([^=]*SONY[^=]*\)=.*/\1/p' out/.config); do
@@ -135,19 +135,19 @@ jobs:
             done
             scripts/config --file out/.config --disable BUILD_ARM64_DT_OVERLAY               --disable BUILD_ARM64_APPENDED_DTB_IMAGE               --set-str BUILD_ARM64_APPENDED_DTB_IMAGE_NAMES ''               --set-str LOCALVERSION '-pchm30-419-bringup'
           fi
-          make O=out olddefconfig 2>&1 | tee -a ../reports/configure.log
+          make O=out CC="$CC" LD="$LD" CROSS_COMPILE="$CROSS_COMPILE" CROSS_COMPILE_ARM32="$CROSS_COMPILE_ARM32" CLANG_TRIPLE="$CLANG_TRIPLE" olddefconfig 2>&1 | tee -a ../reports/configure.log
           for symbol in ARCH_TRINKET PINCTRL_TRINKET SM_GCC_TRINKET SM_GPUCC_TRINKET SM_DISPCC_TRINKET SM_VIDEOCC_TRINKET QCOM_SMD_RPM REGULATOR_RPM_SMD; do
             grep -qx "CONFIG_$symbol=y" out/.config || { echo "Missing required driver: $symbol"; exit 1; }
           done
           cp out/.config ../reports/resolved.config
-          make O=out savedefconfig
+          make O=out CC="$CC" LD="$LD" CROSS_COMPILE="$CROSS_COMPILE" CROSS_COMPILE_ARM32="$CROSS_COMPILE_ARM32" CLANG_TRIPLE="$CLANG_TRIPLE" savedefconfig
           cp out/defconfig ../reports/resolved_defconfig
       - name: Compile OPPO device tree against 4.19 bindings
         if: matrix.target == 'pchm30'
         run: |
           set -Eeuo pipefail
           cd kernel
-          timeout 15m make O=out -j2 pchm30/trinket-idp-19021.dtb 2>&1 | tee ../reports/dtb-build.log
+          timeout 15m make O=out CC="$CC" LD="$LD" CROSS_COMPILE="$CROSS_COMPILE" CROSS_COMPILE_ARM32="$CROSS_COMPILE_ARM32" CLANG_TRIPLE="$CLANG_TRIPLE" -j2 pchm30/trinket-idp-19021.dtb 2>&1 | tee ../reports/dtb-build.log
           DTB=out/arch/arm64/boot/dts/pchm30/trinket-idp-19021.dtb
           test -s "$DTB"
           fdtget -t s "$DTB" / compatible | tee ../reports/dtb-compatible.txt
@@ -156,7 +156,7 @@ jobs:
         run: |
           set -Eeuo pipefail
           cd kernel
-          timeout 65m make O=out -j"$(nproc)" Image.gz 2>&1 | tee ../reports/kernel-build.log
+          timeout 65m make O=out CC="$CC" LD="$LD" CROSS_COMPILE="$CROSS_COMPILE" CROSS_COMPILE_ARM32="$CROSS_COMPILE_ARM32" CLANG_TRIPLE="$CLANG_TRIPLE" -j"$(nproc)" Image.gz 2>&1 | tee ../reports/kernel-build.log
           test -s out/arch/arm64/boot/Image.gz
           grep -q '4.19.248' out/include/generated/utsrelease.h
           cp out/include/generated/utsrelease.h ../reports/

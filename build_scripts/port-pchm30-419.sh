@@ -138,13 +138,10 @@ if target_tune in tc:
     print("[PASS] Added stune_assist fallbacks in kernel/sched/tune.c")
 EOF
 
-# 1. Graft Trinket Clock DT-Bindings
-echo "[1/8] Installing Trinket clock dt-bindings..."
-mkdir -p "$KERNEL_DIR/include/dt-bindings/clock"
-cp -vf "$WORKSPACE/include/dt-bindings/clock/qcom,dispcc-trinket.h" "$KERNEL_DIR/include/dt-bindings/clock/"
-cp -vf "$WORKSPACE/include/dt-bindings/clock/qcom,gcc-trinket.h" "$KERNEL_DIR/include/dt-bindings/clock/"
-cp -vf "$WORKSPACE/include/dt-bindings/clock/qcom,gpucc-trinket.h" "$KERNEL_DIR/include/dt-bindings/clock/"
-cp -vf "$WORKSPACE/include/dt-bindings/clock/qcom,videocc-trinket.h" "$KERNEL_DIR/include/dt-bindings/clock/"
+# 1. Graft Device Tree DT-Bindings
+echo "[1/8] Installing dt-bindings headers..."
+mkdir -p "$KERNEL_DIR/include/dt-bindings"
+cp -rf "$WORKSPACE/include/dt-bindings/"* "$KERNEL_DIR/include/dt-bindings/"
 
 # 2. Graft RPM-SMD Regulator Header
 echo "[2/8] Installing RPM-SMD regulator header..."
@@ -327,10 +324,9 @@ if [ -d "$WORKSPACE/arch/arm64/boot/dts/qcom" ]; then
     cp -vf "$WORKSPACE/arch/arm64/boot/dts/qcom/trinket"* "$DTS_DEST/" 2>/dev/null || true
 fi
 
-# Add trinket dtb to vendor/qcom/Makefile
-if ! grep -q "trinket-idp-19021.dtb" "$DTS_DEST/Makefile"; then
-cat << 'EOF' >> "$DTS_DEST/Makefile"
-
+# Generate dedicated vendor/qcom/Makefile specifically for OPPO PCHM30 DTB
+cat << 'EOF' > "$DTS_DEST/Makefile"
+# SPDX-License-Identifier: GPL-2.0
 dtb-$(CONFIG_ARCH_TRINKET) += \
 	trinket-idp-19021.dtb \
 	trinket-19021.dtb
@@ -341,8 +337,11 @@ dtbo-$(CONFIG_ARCH_TRINKET) += \
 
 trinket-idp-overlay-19021.dtbo-base := trinket-19021.dtb
 endif
+
+always		:= $(dtb-y)
+subdir-y	:= $(dts-dirs)
+clean-files	:= *.dtb *.dtbo
 EOF
-fi
 
 # 7. Purge Xiaomi Vendor Dependencies
 echo "[7/8] Purging Xiaomi vendor references and private touch drivers..."

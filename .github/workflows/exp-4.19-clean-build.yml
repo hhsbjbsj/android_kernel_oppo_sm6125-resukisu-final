@@ -119,6 +119,7 @@ jobs:
       - name: Graft PCHM30 Port Overlay onto Linux 4.19
         run: |
           set -Eeuo pipefail
+          sed -i 's/$//' port-workspace/build_scripts/port-pchm30-419.sh
           chmod +x port-workspace/build_scripts/port-pchm30-419.sh
           bash port-workspace/build_scripts/port-pchm30-419.sh kernel-4.19 port-workspace
 

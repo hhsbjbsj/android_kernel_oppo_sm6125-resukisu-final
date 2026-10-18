@@ -161,6 +161,9 @@ cp -vf "$WORKSPACE/drivers/clk/qcom/gpucc-trinket.c" "$KERNEL_DIR/drivers/clk/qc
 cp -vf "$WORKSPACE/drivers/clk/qcom/vdd-level-trinket.h" "$KERNEL_DIR/drivers/clk/qcom/"
 cp -vf "$WORKSPACE/drivers/clk/qcom/videocc-trinket.c" "$KERNEL_DIR/drivers/clk/qcom/"
 
+# Adapt 4.14 alpha_pll_config field name (alpha_u -> alpha_hi) for Linux 4.19
+sed -i 's/\.alpha_u =/\.alpha_hi =/g' "$KERNEL_DIR/drivers/clk/qcom/"*trinket*.c
+
 # Patch gcc-trinket.c for Linux 4.19 DFS registration API
 python3 - << 'EOF'
 path = "kernel-4.19/drivers/clk/qcom/gcc-trinket.c"

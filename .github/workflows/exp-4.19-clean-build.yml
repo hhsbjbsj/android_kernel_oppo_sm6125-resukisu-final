@@ -7,35 +7,112 @@ on:
     paths-ignore:
       - '**.md'
 
+permissions:
+  contents: read
+
+env:
+  TOOLCHAIN_RELEASE_TAG: pchm30-build-environment-20260810
+  TOOLCHAIN_ROOT: /opt/pchm30-toolchains
+  KERNEL_REL: source/android/kernel/msm-4.14
+  OUT_DIR: out-clean-exp
+  CONFIG_FILE: configs/PCHM30-stock-running.config
+  OPPO_VENDOR_REPO: https://github.com/oppo-source/android_kernel_modules_and_devicetree_oppo_sm6125.git
+  OPPO_VENDOR_COMMIT: 5e7bee452c72c948427b9131bec8cd5d92934f83
+
 jobs:
   build:
     name: Compile Clean Experimental Kernel
     runs-on: ubuntu-22.04
+    timeout-minutes: 120
+
     steps:
       - name: Checkout Clean Experimental Branch
         uses: actions/checkout@v4
         with:
           ref: exp-4.19-clean
+          path: source/android/kernel/msm-4.14
           fetch-depth: 1
+          submodules: false
 
-      - name: Install Build Dependencies
+      - name: Install Host Dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends             build-essential bc bison flex libssl-dev libelf-dev             ccache git wget curl zip unzip python3
+          sudo apt-get install -y --no-install-recommends \
+            build-essential make git curl ca-certificates \
+            bc bison flex libssl-dev libelf-dev libncurses-dev libtinfo5 libncurses5 \
+            device-tree-compiler cpio gzip xz-utils zstd rsync unzip zip tar \
+            openssl coreutils binutils file perl ccache python3
 
-      - name: Setup Toolchain
+      - name: Download and verify archived PCHM30 toolchains
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          mkdir -p $HOME/toolchain
-          cd $HOME/toolchain
-          echo '=== Downloading AOSP Clang Toolchain ==='
-          wget -q https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/refs/heads/android11-release/clang-r383902.tar.gz -O clang.tar.gz
-          mkdir -p clang && tar -zxf clang.tar.gz -C clang && rm -f clang.tar.gz
-          
-          echo '=== Downloading GCC aarch64 & arm32 cross-compilers ==='
-          git clone --depth=1 https://github.com/LineageOS/android_prebuilts_gcc_linux-x86_aarch64_aarch64-linux-android-4.9.git gcc64
-          git clone --depth=1 https://github.com/LineageOS/android_prebuilts_gcc_linux-x86_arm_arm-linux-androideabi-4.9.git gcc32
-          
-          echo "$HOME/toolchain/clang/bin:$HOME/toolchain/gcc64/bin:$HOME/toolchain/gcc32/bin" >> $GITHUB_PATH
+          set -Eeuo pipefail
+          mkdir -p toolchain-assets "$TOOLCHAIN_ROOT"
+          gh release download "$TOOLCHAIN_RELEASE_TAG" \
+            --repo "$GITHUB_REPOSITORY" --dir toolchain-assets \
+            --pattern 'PCHM30-Snapdragon-LLVM-10.0.7.tar.zst' \
+            --pattern 'PCHM30-GCC64-4.9-binutils2.27.tar.zst' \
+            --pattern 'PCHM30-GCC32-4.9.tar.zst' \
+            --pattern 'PCHM30-Qualcomm-MPGen-2.1.1-Python3-PATCHED.tar.zst' \
+            --pattern 'SHA256SUMS.txt'
+          pushd toolchain-assets >/dev/null
+          grep -E 'PCHM30-(Snapdragon-LLVM-10\.0\.7|GCC64-4\.9-binutils2\.27|GCC32-4\.9|Qualcomm-MPGen-2\.1\.1-Python3-PATCHED)\.tar\.zst$' SHA256SUMS.txt > required.sums
+          sha256sum -c required.sums
+          popd >/dev/null
+          for a in toolchain-assets/*.tar.zst; do
+            sudo tar --zstd -xf "$a" -C "$TOOLCHAIN_ROOT"
+          done
+          sudo chown -R "$USER:$USER" "$TOOLCHAIN_ROOT"
+
+      - name: Resolve and validate toolchains
+        run: |
+          set -Eeuo pipefail
+          SD="$TOOLCHAIN_ROOT/Snapdragon-LLVM-ARM-Compiler-10.0.7-for-Android-NDK"
+          G64="$TOOLCHAIN_ROOT/aarch64-linux-android-4.9"
+          G32="$TOOLCHAIN_ROOT/arm-linux-androideabi-4.9"
+          MP="$TOOLCHAIN_ROOT/mpgen-2.1.1-py3"
+          test -x "$SD/bin/clang"
+          test -x "$G64/bin/aarch64-linux-android-gcc"
+          test -x "$G64/bin/aarch64-linux-android-ld"
+          test -x "$G32/bin/arm-linux-androideabi-gcc"
+          test -f "$MP/mpgen.py"
+          test -f "$MP/mpgen_kernel.py"
+          ln -sfn aarch64-linux-android-ld "$G64/bin/aarch64-linux-gnu-ld"
+
+          python3 - "$MP/mpgen_kernel.py" <<'PY'
+          import pathlib
+          import sys
+          path = pathlib.Path(sys.argv[1])
+          text = path.read_text(encoding='utf-8')
+          target = "        with open(sym_file, 'r') as f:\n"
+          replacement = "        with open(sym_file, 'rb') as f:\n"
+          if target in text:
+              text = text.replace(target, replacement, 1)
+              target2 = "            return f.read()\n"
+              replacement2 = "            return f.read().decode('latin1')\n"
+              text = text.replace(target2, replacement2, 1)
+              path.write_text(text, encoding='utf-8')
+          PY
+          python3 -m py_compile "$MP/mpgen_kernel.py"
+
+          echo "SDCLANG_DIR=$SD" >> "$GITHUB_ENV"
+          echo "GCC64_DIR=$G64" >> "$GITHUB_ENV"
+          echo "GCC32_DIR=$G32" >> "$GITHUB_ENV"
+          echo "MPGEN_DIR=$MP" >> "$GITHUB_ENV"
+
+      - name: Reconstruct pinned OPPO vendor tree
+        run: |
+          set -Eeuo pipefail
+          rm -rf oppo-vendor-source source/android/vendor
+          git clone --filter=blob:none --no-checkout "$OPPO_VENDOR_REPO" oppo-vendor-source
+          git -C oppo-vendor-source sparse-checkout init --cone
+          git -C oppo-vendor-source sparse-checkout set source/android/vendor
+          git -C oppo-vendor-source checkout --detach "$OPPO_VENDOR_COMMIT"
+          test "$(git -C oppo-vendor-source rev-parse HEAD)" = "$OPPO_VENDOR_COMMIT"
+          cp -a oppo-vendor-source/source/android/vendor source/android/vendor
+          test -f source/android/vendor/oplus/kernel/oplus_performance/oppo_foreground_io_opt/Makefile
+          echo '[PASS] vendor tree successfully reconstructed'
 
       - name: Setup ccache
         uses: actions/cache@v4
@@ -45,41 +122,75 @@ jobs:
           restore-keys: |
             ccache-exp-clean-
 
-      - name: Compile Clean Kernel (Trinket / PCHM30)
+      - name: Export proven build environment
         run: |
-          export ARCH=arm64
-          export SUBARCH=arm64
-          export CC="ccache clang"
-          export CLANG_TRIPLE=aarch64-linux-gnu-
-          export CROSS_COMPILE=aarch64-linux-android-
-          export CROSS_COMPILE_ARM32=arm-linux-androideabi-
-          export CCACHE_DIR="$HOME/.cache/ccache"
-          export CCACHE_MAXSIZE="5G"
-          
+          set -Eeuo pipefail
+          KERNEL="$GITHUB_WORKSPACE/$KERNEL_REL"
+          {
+            echo "KERNEL_DIR=$KERNEL"
+            echo "ARCH=arm64"
+            echo "TARGET_PRODUCT=trinket"
+            echo "KCONFIG_NOTIMESTAMP=true"
+            echo "KBUILD_BUILD_USER=root"
+            echo "KBUILD_BUILD_HOST=ubuntu-clean-ci"
+            echo "KBUILD_BUILD_VERSION=1"
+            echo "SHIPPING_API_LEVEL=28"
+            echo "CLANG_TRIPLE=aarch64-linux-gnu-"
+            echo "LOCALVERSION=+"
+            echo "CC=$SDCLANG_DIR/bin/clang"
+            echo "REAL_CC=$SDCLANG_DIR/bin/clang"
+            echo "CROSS_COMPILE=$GCC64_DIR/bin/aarch64-linux-android-"
+            echo "CROSS_COMPILE_ARM32=$GCC32_DIR/bin/arm-linux-androideabi-"
+            echo "LD=$GCC64_DIR/bin/aarch64-linux-android-ld"
+            echo "RTIC_MPGEN=python3 $MPGEN_DIR/mpgen.py"
+            echo "OPPO_STOCK_SIGNING_X509=$KERNEL/certs/pchm30-stock-signing-key.x509"
+            echo "PATH=$SDCLANG_DIR/bin:$GCC64_DIR/bin:$GCC32_DIR/bin:$PATH"
+            echo "PYTHONPATH=$MPGEN_DIR${PYTHONPATH:+:$PYTHONPATH}"
+            echo "CCACHE_DIR=$HOME/.cache/ccache"
+            echo "CCACHE_MAXSIZE=5G"
+            echo "JOBS=$(nproc)"
+          } >> "$GITHUB_ENV"
+
+      - name: Prepare clean stock running config
+        working-directory: source/android/kernel/msm-4.14
+        run: |
+          set -Eeuo pipefail
+          rm -rf "$OUT_DIR"
+          mkdir -p "$OUT_DIR"
+          cp "$CONFIG_FILE" "$OUT_DIR/.config"
+          make O="$OUT_DIR" ARCH=arm64 LOCALVERSION=+ \
+            CC="$CC" REAL_CC="$REAL_CC" LD="$LD" \
+            CROSS_COMPILE="$CROSS_COMPILE" \
+            CROSS_COMPILE_ARM32="$CROSS_COMPILE_ARM32" \
+            CLANG_TRIPLE="$CLANG_TRIPLE" olddefconfig
+
+      - name: Compile Clean Kernel (Trinket / PCHM30)
+        working-directory: source/android/kernel/msm-4.14
+        run: |
+          set -Eeuo pipefail
           ccache -s
-          mkdir -p out
-          
-          echo '=== Generating clean defconfig ==='
-          make -j$(nproc --all) O=out vendor/trinket-perf_defconfig
-          
-          echo '=== Building kernel Image.gz-dtb ==='
-          make -j$(nproc --all) O=out Image.gz-dtb
-          
+          make O="$OUT_DIR" ARCH=arm64 LOCALVERSION=+ \
+            CC="$CC" REAL_CC="$REAL_CC" LD="$LD" \
+            CROSS_COMPILE="$CROSS_COMPILE" \
+            CROSS_COMPILE_ARM32="$CROSS_COMPILE_ARM32" \
+            CLANG_TRIPLE="$CLANG_TRIPLE" -j"$JOBS" Image.gz-dtb
           ccache -s
-          test -f out/arch/arm64/boot/Image.gz-dtb
-          echo 'Kernel build succeeded!'
+          test -f "$OUT_DIR/arch/arm64/boot/Image.gz-dtb"
+          echo '[PASS] Clean kernel Image.gz-dtb built successfully'
 
       - name: Package AnyKernel3 Zip
+        working-directory: source/android/kernel/msm-4.14
         run: |
+          set -Eeuo pipefail
           git clone --depth=1 https://github.com/osm0sis/AnyKernel3.git ak3
           cd ak3
-          cp ../out/arch/arm64/boot/Image.gz-dtb ./Image.gz-dtb
+          cp "../$OUT_DIR/arch/arm64/boot/Image.gz-dtb" ./Image.gz-dtb
           sed -i 's/device.name1=.*/device.name1=PCHM30/g' anykernel.sh
           sed -i 's/device.name2=.*/device.name2=OPPO A11x/g' anykernel.sh
           sed -i 's/device.name3=.*/device.name3=ginkgo/g' anykernel.sh
           sed -i 's/device.name4=.*/device.name4=trinket/g' anykernel.sh
-          zip -r9 ../PCHM30-Clean-Exp-AK3.zip * -x .git README.md *placeholder
-          cd ..
+          zip -r9 "$GITHUB_WORKSPACE/PCHM30-Clean-Exp-AK3.zip" * -x .git README.md *placeholder
+          cd "$GITHUB_WORKSPACE"
           sha256sum PCHM30-Clean-Exp-AK3.zip | tee PCHM30-Clean-Exp-AK3.zip.sha256
 
       - name: Upload Clean Build Artifacts
@@ -89,4 +200,4 @@ jobs:
           path: |
             PCHM30-Clean-Exp-AK3.zip
             PCHM30-Clean-Exp-AK3.zip.sha256
-            out/arch/arm64/boot/Image.gz-dtb
+            source/android/kernel/msm-4.14/out-clean-exp/arch/arm64/boot/Image.gz-dtb

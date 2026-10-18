@@ -138,10 +138,35 @@ if target_tune in tc:
     print("[PASS] Added stune_assist fallbacks in kernel/sched/tune.c")
 EOF
 
-# 1. Graft Device Tree DT-Bindings
-echo "[1/8] Installing dt-bindings headers..."
-mkdir -p "$KERNEL_DIR/include/dt-bindings"
-cp -rf "$WORKSPACE/include/dt-bindings/"* "$KERNEL_DIR/include/dt-bindings/"
+# 1. Graft Device Tree DT-Bindings Non-Destructively
+echo "[1/8] Grafting missing dt-bindings headers non-destructively..."
+python3 - << 'EOF'
+import os, shutil
+
+src = "port-workspace/include/dt-bindings"
+dst = "kernel-4.19/include/dt-bindings"
+
+count = 0
+for root, dirs, files in os.walk(src):
+    rel = os.path.relpath(root, src)
+    target_dir = os.path.join(dst, rel)
+    os.makedirs(target_dir, exist_ok=True)
+    for f in files:
+        target_file = os.path.join(target_dir, f)
+        if not os.path.exists(target_file):
+            shutil.copy2(os.path.join(root, f), target_file)
+            count += 1
+
+print(f"[PASS] Grafted {count} missing dt-bindings headers without overwriting native 4.19 headers")
+
+# Always guarantee Trinket clock dt-bindings are present
+for trinket_h in ["qcom,dispcc-trinket.h", "qcom,gcc-trinket.h", "qcom,gpucc-trinket.h", "qcom,videocc-trinket.h"]:
+    src_h = os.path.join("port-workspace/include/dt-bindings/clock", trinket_h)
+    dst_h = os.path.join("kernel-4.19/include/dt-bindings/clock", trinket_h)
+    if os.path.exists(src_h):
+        shutil.copy2(src_h, dst_h)
+        print(f"[PASS] Guaranteed Trinket header: {trinket_h}")
+EOF
 
 # 2. Graft RPM-SMD Regulator Header
 echo "[2/8] Installing RPM-SMD regulator header..."

@@ -7,8 +7,6 @@ on:
     paths-ignore:
       - '**.md'
 
-permissions: write-all
-
 env:
   TOOLCHAIN_RELEASE_TAG: pchm30-build-environment-20260810
   TOOLCHAIN_ROOT: /opt/pchm30-toolchains
@@ -23,6 +21,7 @@ jobs:
     name: Compile Clean Experimental Kernel
     runs-on: ubuntu-22.04
     timeout-minutes: 120
+    permissions: write-all
 
     steps:
       - name: Checkout Clean Experimental Branch
@@ -242,7 +241,6 @@ AK
           zip -r9 "$GITHUB_WORKSPACE/$ZIP_NAME" . -x '*.git*' '*placeholder' >/dev/null
           cd "$GITHUB_WORKSPACE"
           sha256sum "$ZIP_NAME" | tee "$ZIP_NAME.sha256"
-          echo "ZIP_NAME=$ZIP_NAME" >> "$GITHUB_ENV"
 
       - name: Publish GitHub Release
         env:
@@ -250,10 +248,11 @@ AK
         run: |
           set -Eeuo pipefail
           TAG="pchm30-clean-exp-run${GITHUB_RUN_NUMBER}"
+          ZIP_FILE="PCHM30-Clean-Exp-AK3-${GITHUB_RUN_NUMBER}.zip"
           gh release create "$TAG" \
             --title "PCHM30 Clean Experimental Kernel (Run ${GITHUB_RUN_NUMBER})" \
             --notes "PCHM30 clean baseline build without baseband-guard or private hacks. Properly configured boot-only AnyKernel3 zip." \
-            "$ZIP_NAME" "$ZIP_NAME.sha256" "$KERNEL_REL/$OUT_DIR/arch/arm64/boot/Image"
+            "$ZIP_FILE" "$ZIP_FILE.sha256" "$KERNEL_REL/$OUT_DIR/arch/arm64/boot/Image"
           echo "Release published: https://github.com/${GITHUB_REPOSITORY}/releases/tag/${TAG}"
 
       - name: Upload Clean Build Artifacts
@@ -261,6 +260,6 @@ AK
         with:
           name: PCHM30-Clean-Exp-Kernel-${{ github.sha }}
           path: |
-            ${{ env.ZIP_NAME }}
-            ${{ env.ZIP_NAME }}.sha256
+            PCHM30-Clean-Exp-AK3-*.zip
+            PCHM30-Clean-Exp-AK3-*.zip.sha256
             source/android/kernel/msm-4.14/out-clean-exp/arch/arm64/boot/Image

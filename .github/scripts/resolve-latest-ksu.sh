@@ -20,14 +20,14 @@ resolve() {
 }
 case "$mode" in
   resukisu)
-    resolve ReSukiSU https://github.com/ReSukiSU/ReSukiSU.git refs/heads/main RESUKISU_COMMIT
+    resolve BakaSU https://github.com/Baka-SU/BakaSU.git refs/heads/main RESUKISU_COMMIT
     ;;
   sukisu)
     resolve SukiSU-Ultra https://github.com/SukiSU-Ultra/SukiSU-Ultra.git refs/heads/builtin SUKISU_COMMIT
     echo "SUKISU_BRANCH=builtin" >> "${env_file:-/dev/null}"
     ;;
   both)
-    resolve ReSukiSU https://github.com/ReSukiSU/ReSukiSU.git refs/heads/main RESUKISU_COMMIT
+    resolve BakaSU https://github.com/Baka-SU/BakaSU.git refs/heads/main RESUKISU_COMMIT
     resolve SukiSU-Ultra https://github.com/SukiSU-Ultra/SukiSU-Ultra.git refs/heads/builtin SUKISU_COMMIT
     if [ -n "$env_file" ]; then
       echo "SUKISU_BRANCH=builtin" >> "$env_file"

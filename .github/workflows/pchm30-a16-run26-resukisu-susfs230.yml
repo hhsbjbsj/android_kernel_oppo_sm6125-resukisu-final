@@ -258,8 +258,18 @@ jobs:
           grep -Fq 'adios=mq-deadline-4.14-port' "$GITHUB_WORKSPACE/run28-extra-features-proof.txt"
           grep -Fq 'network_enhance=y' "$GITHUB_WORKSPACE/run28-extra-features-proof.txt"
           grep -Fxq 'susfs_to=v2.3.0' "$GITHUB_WORKSPACE/run25-susfs230-proof.txt"
+          grep -Fxq 'priority_uid_filter=enabled' "$GITHUB_WORKSPACE/run25-susfs230-proof.txt"
+          grep -Fxq 'is_statically=bool' "$GITHUB_WORKSPACE/run25-susfs230-proof.txt"
+          grep -Fxq 'bakasu_susfs_compat_unblocked=yes' "$GITHUB_WORKSPACE/run25-susfs230-proof.txt"
           grep -Fxq 'flag_storage=inode_i_state' "$GITHUB_WORKSPACE/run25-susfs230-proof.txt"
           grep -Fxq 'susfs_overlay=skipped' "$GITHUB_WORKSPACE/run25-susfs230-proof.txt"
+          grep -Fq 'CMD_SUSFS_SET_PRIORITY_UID_FILTER' include/linux/susfs_def.h
+          grep -Fq 'susfs_set_priority_uid_filter' include/linux/susfs.h
+          grep -Fq 'susfs_is_priority_uid_filtered' fs/susfs.c
+          grep -Fq 'susfs_is_priority_uid_filtered' kernel/sys.c
+          grep -Fq 'susfs_is_priority_uid_filtered' block/ioprio.c
+          grep -E '[[:space:]]susfs_set_priority_uid_filter$' "$GITHUB_WORKSPACE/run16-vmlinux-nm-all.txt" || nm "$VMLINUX" | grep -E '[[:space:]]susfs_set_priority_uid_filter$'
+          grep -E '[[:space:]]susfs_is_priority_uid_filtered$' "$GITHUB_WORKSPACE/run16-vmlinux-nm-all.txt" || nm "$VMLINUX" | grep -E '[[:space:]]susfs_is_priority_uid_filtered$'
           grep -Fxq 'kpm=disabled' "$GITHUB_WORKSPACE/run26-disable-kpm-proof.txt"
           grep -Fq '#define SUSFS_VERSION "v2.3.0"' include/linux/susfs.h
           grep -Fq 'user_path_at(dfd, filename, lookup_flags, &path)' fs/open.c

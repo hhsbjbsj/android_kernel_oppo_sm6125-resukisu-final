@@ -639,7 +639,7 @@ if iop_p.exists():
         iop_p.write_text(iop_s)
         print("hooked ioprio_set/ioprio_get in block/ioprio.c for priority uid filter (c05208ea)", flush=True)
 
-# 6. Sync latest BakaSU KernelSU with SUSFS c05208ea and unblock susfs_compat.mk
+# 6. Sync latest BakaSU KernelSU with SUSFS c51cd8aa and unblock susfs_compat.mk
 sus_mk = Path("KernelSU/kernel/tools/susfs_compat.mk")
 if sus_mk.exists():
     mk_s = sus_mk.read_text()
@@ -777,7 +777,8 @@ grep -Fq 'susfs_is_priority_uid_filtered' block/ioprio.c
   echo 'filename_lookup=untouched'
   echo 'kernel_source_tree=untouched_in_git'
   echo 'first_splash_fix=no_gki_vfs_abi + no_gki_susfs_c + ak3_boot_only'
-  echo 'susfs_upstream_commit=c05208ea'
+  echo 'susfs_upstream_commit=c51cd8aa'
+  echo 'bakasu_upstream_commit=d5e9e025'
   echo 'priority_uid_filter=enabled'
   echo 'is_statically=bool'
   echo 'bakasu_susfs_compat_unblocked=yes'

@@ -424,6 +424,16 @@ void cgroup_freeze(struct cgroup *cgrp, bool freeze);
 void cgroup_freezer_migrate_task(struct task_struct *task, struct cgroup *src,
 \t\t\t\t struct cgroup *dst);
 void cgroup_freezer_frozen_exit(struct task_struct *task);
+static inline bool cgroup_task_frozen(struct task_struct *task)
+{
+\treturn task->frozen;
+}
+"""
+    assert anchor_cgh1 in cg_h, "cannot find CONFIG_CGROUPS in cgroup.h"
+    cg_h = cg_h.replace(anchor_cgh1, repl_cgh1, 1)
+
+    anchor_dfl = "static inline struct cgroup *task_dfl_cgroup(struct task_struct *task)\n{\n\treturn task_css_set(task)->dfl_cgrp;\n}\n"
+    repl_dfl = anchor_dfl + """
 static inline bool cgroup_task_freeze(struct task_struct *task)
 {
 \tbool ret;
@@ -437,14 +447,9 @@ static inline bool cgroup_task_freeze(struct task_struct *task)
 
 \treturn ret;
 }
-
-static inline bool cgroup_task_frozen(struct task_struct *task)
-{
-\treturn task->frozen;
-}
 """
-    assert anchor_cgh1 in cg_h, "cannot find CONFIG_CGROUPS in cgroup.h"
-    cg_h = cg_h.replace(anchor_cgh1, repl_cgh1, 1)
+    assert anchor_dfl in cg_h, "cannot find task_dfl_cgroup in cgroup.h"
+    cg_h = cg_h.replace(anchor_dfl, repl_dfl, 1)
 
     anchor_cgh2 = "#else /* !CONFIG_CGROUPS */\n"
     repl_cgh2 = anchor_cgh2 + """

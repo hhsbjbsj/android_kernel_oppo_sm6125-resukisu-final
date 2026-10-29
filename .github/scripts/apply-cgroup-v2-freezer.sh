@@ -552,8 +552,8 @@ int cgroup_task_count(const struct cgroup *cgrp)
     ev_anchor = "\tseq_printf(seq, \"populated %d\\n\",\n\t\t   cgroup_is_populated(seq_css(seq)->cgroup));\n\treturn 0;"
     ev_repl = """\tstruct cgroup *cgrp = seq_css(seq)->cgroup;
 
-\tseq_printf(seq, "populated %d\n", cgroup_is_populated(cgrp));
-\tseq_printf(seq, "frozen %d\n", test_bit(CGRP_FROZEN, &cgrp->flags));
+\tseq_printf(seq, "populated %d\\n", cgroup_is_populated(cgrp));
+\tseq_printf(seq, "frozen %d\\n", test_bit(CGRP_FROZEN, &cgrp->flags));
 
 \treturn 0;"""
     assert ev_anchor in ct, "cannot find events_show anchor in cgroup.c"
@@ -564,7 +564,7 @@ int cgroup_task_count(const struct cgroup *cgrp)
 {
 \tstruct cgroup *cgrp = seq_css(seq)->cgroup;
 
-\tseq_printf(seq, "%d\n", cgrp->freezer.freeze);
+\tseq_printf(seq, "%d\\n", cgrp->freezer.freeze);
 
 \treturn 0;
 }

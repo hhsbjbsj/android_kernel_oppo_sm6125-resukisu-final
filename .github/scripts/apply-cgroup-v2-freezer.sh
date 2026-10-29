@@ -228,9 +228,6 @@ static void cgroup_do_freeze(struct cgroup *cgrp, bool freeze)
 		clear_bit(CGRP_FREEZE, &cgrp->flags);
 	spin_unlock_irq(&css_set_lock);
 
-	if (freeze)
-	else
-
 	css_task_iter_start(&cgrp->self, 0, &it);
 	while ((task = css_task_iter_next(&it))) {
 		/*
@@ -501,8 +498,10 @@ if "JOBCTL_TRAP_FREEZE" not in jh:
 # 8. kernel/cgroup/cgroup-internal.h
 ih_path = Path("kernel/cgroup/cgroup-internal.h")
 ih = ih_path.read_text(encoding="utf-8")
-if "cgroup_task_count" not in ih:
-    ih += "\nint cgroup_task_count(const struct cgroup *cgrp);\nint __cgroup_task_count(const struct cgroup *cgrp);\n"
+if "__cgroup_task_count" not in ih:
+    if "cgroup_task_count" not in ih:
+        ih += "\nint cgroup_task_count(const struct cgroup *cgrp);\n"
+    ih += "\nint __cgroup_task_count(const struct cgroup *cgrp);\n"
     ih_path.write_text(ih, encoding="utf-8")
     print("[PASS] kernel/cgroup/cgroup-internal.h updated")
 

@@ -6,7 +6,7 @@ set -Eeuo pipefail
 
 KERNEL_DIR="${KERNEL_DIR:-$GITHUB_WORKSPACE/$KERNEL_REL}"
 cd "$KERNEL_DIR"
-export BINDER_FREEZE_PROOF="${GITHUB_WORKSPACE:-.}}/binder-freeze-proof.txt"
+export BINDER_FREEZE_PROOF="${GITHUB_WORKSPACE:-.}/binder-freeze-proof.txt"
 
 python3 - <<'PY'
 import sys, os, re
@@ -550,6 +550,7 @@ proof_lines.append("binder_get_frozen_info=applied")
 proof_lines.append("oneway_spam_detection=applied")
 
 proof_text = "\n".join(proof_lines) + "\n"
+proof_path.parent.mkdir(parents=True, exist_ok=True)
 proof_path.write_text(proof_text, encoding="utf-8")
 Path("binder-freeze-proof.txt").write_text(proof_text, encoding="utf-8")
 workspace = os.environ.get("GITHUB_WORKSPACE")

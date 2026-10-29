@@ -9,7 +9,7 @@ cd "$KERNEL_DIR"
 export BINDER_FREEZE_PROOF="${GITHUB_WORKSPACE:-.}}/binder-freeze-proof.txt"
 
 python3 - <<'PY'
-import sys, os
+import sys, os, re
 from pathlib import Path
 
 proof_path = Path(os.environ.get("BINDER_FREEZE_PROOF", "binder-freeze-proof.txt"))
@@ -185,8 +185,23 @@ static int binder_proc_transaction(struct binder_transaction *t,
 \tbool pending_async = false;
 \tstruct binder_transaction *t_outdated = NULL;
 """
-    assert proc_txn_anchor in bc, "cannot find binder_proc_transaction header anchor"
-    bc = bc.replace(proc_txn_anchor, proc_txn_repl, 1)
+    proc_txn_pattern = re.compile(
+        r'static bool binder_proc_transaction\(struct binder_transaction \*t,\n'
+        r'\t\t\t\t    struct binder_proc \*proc,\n'
+        r'\t\t\t\t    struct binder_thread \*thread\)\n'
+        r'\{\n'
+        r'\tstruct binder_node \*node = t->buffer->target_node;\n'
+        r'\tstruct binder_priority node_prio;\n'
+        r'\tbool oneway = !!\(t->flags & TF_ONE_WAY\);\n'
+        r'\tbool pending_async = false;\n'
+        r'(?:#ifdef CONFIG_REKERNEL[\s\S]*?#endif /\* CONFIG_REKERNEL \*/\n)?'
+    )
+    if proc_txn_anchor in bc:
+        bc = bc.replace(proc_txn_anchor, proc_txn_repl, 1)
+    elif proc_txn_pattern.search(bc):
+        bc = proc_txn_pattern.sub(proc_txn_repl, bc, count=1)
+    else:
+        raise AssertionError("cannot find binder_proc_transaction header anchor")
 
     # binder_proc_transaction: freeze checking & return error
     proc_txn_check_anchor = "\tbinder_inner_proc_lock(proc);\n\n\tif (proc->is_dead || (thread && thread->is_dead)) {\n\t\tbinder_inner_proc_unlock(proc);\n\t\tbinder_node_unlock(node);\n\t\treturn false;\n\t}\n"
@@ -210,6 +225,20 @@ static int binder_proc_transaction(struct binder_transaction *t,
 
     # binder_proc_transaction: async TF_UPDATE_TXN, outstanding_txns, and return 0
     async_enqueue_anchor = "\t} else {\n\t\tbinder_enqueue_work_ilocked(&t->work, &node->async_todo);\n\t}\n\n\tif (!pending_async)\n\t\tbinder_wakeup_thread_ilocked(proc, thread, !oneway /* sync */);\n\n\tbinder_inner_proc_unlock(proc);\n\tbinder_node_unlock(node);\n\n\treturn true;\n}\n"
+    async_enqueue_pattern = re.compile(
+        r'\t\} else \{\n'
+        r'[\s\S]*?'
+        r'\t\tbinder_enqueue_work_ilocked\(&t->work, &node->async_todo\);\n'
+        r'\t\}\n\n'
+        r'\tif \(!pending_async\)\n'
+        r'\t\tbinder_wakeup_thread_ilocked\(proc, thread, !oneway /\* sync \*/\);\n\n'
+        r'(?:\tproc->outstanding_txns\+\+;\n)?'
+        r'\tbinder_inner_proc_unlock\(proc\);\n'
+        r'\tbinder_node_unlock\(node\);\n'
+        r'[\s\S]*?'
+        r'\treturn true;\n'
+        r'\}'
+    )
     async_enqueue_repl = """\t} else {
 \t\tif ((t->flags & TF_UPDATE_TXN) && proc->is_frozen) {
 \t\t\tt_outdated = binder_find_outdated_transaction_ilocked(t,
@@ -251,8 +280,12 @@ static int binder_proc_transaction(struct binder_transaction *t,
 \treturn 0;
 }
 """
-    assert async_enqueue_anchor in bc, "cannot find async_enqueue_anchor"
-    bc = bc.replace(async_enqueue_anchor, async_enqueue_repl, 1)
+    if async_enqueue_anchor in bc:
+        bc = bc.replace(async_enqueue_anchor, async_enqueue_repl, 1)
+    elif async_enqueue_pattern.search(bc):
+        bc = async_enqueue_pattern.sub(async_enqueue_repl, bc, count=1)
+    else:
+        raise AssertionError("cannot find async_enqueue_anchor")
 
     # In binder_transaction: reply outstanding_txns++ & return_error = BR_DEAD_REPLY
     reply_anchor = "\t\tBUG_ON(t->buffer->async_transaction != 0);\n\t\tbinder_pop_transaction_ilocked(target_thread, in_reply_to);\n\t\tbinder_enqueue_thread_work_ilocked(target_thread, &t->work);\n\t\tbinder_inner_proc_unlock(target_proc);\n"

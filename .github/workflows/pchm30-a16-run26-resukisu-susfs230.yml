@@ -185,12 +185,12 @@ jobs:
           new = ('"$GITHUB_WORKSPACE/run16-builtin-wifi-audio.sh"\n'
                  '"$GITHUB_WORKSPACE/run17-builtin-runtime-retry.sh"\n'
                  '"$GITHUB_WORKSPACE/run17-bbg-lz4kd.sh"\n'
-                 '"$GITHUB_WORKSPACE/run28-extra-features.sh"\n'
                  '"$GITHUB_WORKSPACE/apply-kernel-414186.sh"\n'
                  '"$GITHUB_WORKSPACE/apply-kernel-414357.sh"\n'
                  '"$GITHUB_WORKSPACE/apply-cgroup-v2-freezer.sh"\n'
                  '"$GITHUB_WORKSPACE/apply-binder-419-stability.sh"\n'
                  '"$GITHUB_WORKSPACE/apply-binder-los24-freeze.sh"\n'
+                 '"$GITHUB_WORKSPACE/run28-extra-features.sh"\n'
                  '"$GITHUB_WORKSPACE/run17-btf-kprobe-scene-fix.sh"\n\n'
                  'run_step \'Instrument exact BTF rejection path\'')
           if old not in s:

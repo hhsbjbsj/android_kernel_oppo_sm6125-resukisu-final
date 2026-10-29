@@ -282,6 +282,11 @@ if binder.exists():
     bs = binder.read_text()
     bs2 = bs.replace('frozen_task_group(', 'rekernel_frozen_task_group(')
     bs2 = bs2.replace('rekernel_report(BINDER,', 'rekernel_report(REKERNEL_BINDER,')
+    if 'if ((t->flags & TF_UPDATE_TXN) && rekernel_frozen_task_group(proc->tsk)) {' in bs2:
+        bs2 = bs2.replace(
+            'if ((t->flags & TF_UPDATE_TXN) && rekernel_frozen_task_group(proc->tsk)) {',
+            'if ((t->flags & TF_UPDATE_TXN) && (rekernel_frozen_task_group(proc->tsk) || proc->is_frozen)) {'
+        )
     if '#ifndef TF_UPDATE_TXN' not in bs2 and '#define TF_UPDATE_TXN' not in bs2:
         guard = (
             '#ifndef TF_UPDATE_TXN\n'

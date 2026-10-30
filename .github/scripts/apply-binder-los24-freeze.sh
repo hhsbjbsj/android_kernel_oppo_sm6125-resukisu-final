@@ -58,6 +58,11 @@ struct binder_frozen_status_info {
     assert bh_tf_anchor in bh, "cannot find TF_ACCEPT_FDS in binder.h"
     bh = bh.replace(bh_tf_anchor, bh_tf, 1)
 
+    bh_enum_end = "};\n\nstruct binder_transaction_data {"
+    bh_enum_repl = "};\n#define TF_CLEAR_BUF TF_CLEAR_BUF\n#define TF_UPDATE_TXN TF_UPDATE_TXN\n\nstruct binder_transaction_data {"
+    if bh_enum_end in bh:
+        bh = bh.replace(bh_enum_end, bh_enum_repl, 1)
+
     bh_br_anchor = "\tBR_FAILED_REPLY = _IO('r', 17),\n\t/*\n\t * The the last transaction (either a bcTRANSACTION or\n\t * a bcATTEMPT_ACQUIRE) failed (e.g. out of memory).  No parameters.\n\t */\n"
     bh_br = bh_br_anchor + """
 \tBR_FROZEN_REPLY = _IO('r', 18),
@@ -149,10 +154,11 @@ if "BINDER_FREEZE" not in bc:
 \tif ((t1->flags & t2->flags & (TF_ONE_WAY | TF_UPDATE_TXN)) !=
 \t    (TF_ONE_WAY | TF_UPDATE_TXN) || !t1->to_proc || !t2->to_proc)
 \t\treturn false;
-\tif (t1->to_proc->tsk == t2->to_proc->tsk && t1->code == t2->code &&
-\t    t1->flags == t2->flags && t1->buffer->pid == t2->buffer->pid &&
-\t    t1->buffer->target_node->ptr == t2->buffer->target_node->ptr &&
-\t    t1->buffer->target_node->cookie == t2->buffer->target_node->cookie)
+\tif (t1->to_proc->tsk == t2->to_proc->tsk &&
+\t    t1->code == t2->code &&
+\t    t1->flags == t2->flags &&
+\t    t1->buffer && t2->buffer &&
+\t    t1->buffer->target_node == t2->buffer->target_node)
 \t\treturn true;
 \treturn false;
 }
@@ -270,7 +276,6 @@ static int binder_proc_transaction(struct binder_transaction *t,
 
 \t\tt_outdated->buffer = NULL;
 \t\tbuffer->transaction = NULL;
-\t\ttrace_binder_transaction_update_buffer_release(buffer);
 \t\tbinder_transaction_buffer_release(proc, buffer, 0, 0);
 \t\tbinder_alloc_free_buf(&proc->alloc, buffer);
 \t\tkfree(t_outdated);
@@ -479,7 +484,7 @@ static int binder_ioctl_get_freezer_info(
 \t\t\t\tcontinue;
 
 \t\t\tbinder_inner_proc_lock(target_proc);
-\t\t\tatomic_inc(&target_proc->tmp_ref);
+\t\t\ttarget_proc->tmp_ref++;
 \t\t\tbinder_inner_proc_unlock(target_proc);
 
 \t\t\ttarget_procs[i++] = target_proc;

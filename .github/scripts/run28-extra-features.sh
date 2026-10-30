@@ -287,7 +287,9 @@ if binder.exists():
             'if ((t->flags & TF_UPDATE_TXN) && rekernel_frozen_task_group(proc->tsk)) {',
             'if ((t->flags & TF_UPDATE_TXN) && (rekernel_frozen_task_group(proc->tsk) || proc->is_frozen)) {'
         )
-    if '#ifndef TF_UPDATE_TXN' not in bs2 and '#define TF_UPDATE_TXN' not in bs2:
+    bh = Path('include/uapi/linux/android/binder.h')
+    has_uapi_tf = bh.exists() and 'TF_UPDATE_TXN' in bh.read_text()
+    if not has_uapi_tf and '#ifndef TF_UPDATE_TXN' not in bs2 and '#define TF_UPDATE_TXN' not in bs2:
         guard = (
             '#ifndef TF_UPDATE_TXN\n'
             '#define TF_UPDATE_TXN 0x40\n'

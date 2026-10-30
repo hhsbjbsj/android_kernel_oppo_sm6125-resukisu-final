@@ -545,6 +545,13 @@ static int binder_ioctl_get_freezer_info(
     if br_str_anchor in bc:
         bc = bc.replace(br_str_anchor, br_str_repl, 1)
 
+    br_arr_anchor = '\t"BR_CLEAR_DEATH_NOTIFICATION_DONE",\n\t"BR_FAILED_REPLY"\n};'
+    br_arr_repl = '\t"BR_CLEAR_DEATH_NOTIFICATION_DONE",\n\t"BR_FAILED_REPLY",\n\t"BR_FROZEN_REPLY",\n\t"BR_ONEWAY_SPAM_SUSPECT"\n};'
+    if br_arr_anchor in bc:
+        bc = bc.replace(br_arr_anchor, br_arr_repl, 1)
+    elif '\t"BR_FAILED_REPLY"\n};' in bc:
+        bc = bc.replace('\t"BR_FAILED_REPLY"\n};', '\t"BR_FAILED_REPLY",\n\t"BR_FROZEN_REPLY",\n\t"BR_ONEWAY_SPAM_SUSPECT"\n};', 1)
+
     bc_path.write_text(bc, encoding="utf-8")
     print("[PASS] drivers/android/binder.c updated")
 

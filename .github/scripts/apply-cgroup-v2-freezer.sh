@@ -499,8 +499,6 @@ if "JOBCTL_TRAP_FREEZE" not in jh:
 ih_path = Path("kernel/cgroup/cgroup-internal.h")
 ih = ih_path.read_text(encoding="utf-8")
 if "__cgroup_task_count" not in ih:
-    if "cgroup_task_count" not in ih:
-        ih += "\nint cgroup_task_count(const struct cgroup *cgrp);\n"
     ih += "\nint __cgroup_task_count(const struct cgroup *cgrp);\n"
     ih_path.write_text(ih, encoding="utf-8")
     print("[PASS] kernel/cgroup/cgroup-internal.h updated")
@@ -525,17 +523,6 @@ int __cgroup_task_count(const struct cgroup *cgrp)
 
 \tlist_for_each_entry(link, &cgrp->cset_links, cset_link)
 \t\tcount += link->cset->nr_tasks;
-
-\treturn count;
-}
-
-int cgroup_task_count(const struct cgroup *cgrp)
-{
-\tint count = 0;
-
-\tspin_lock_irq(&css_set_lock);
-\tcount = __cgroup_task_count(cgrp);
-\tspin_unlock_irq(&css_set_lock);
 
 \treturn count;
 }

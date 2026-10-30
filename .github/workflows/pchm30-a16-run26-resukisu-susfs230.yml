@@ -337,7 +337,7 @@ jobs:
             "$OUT_DIR/arch/arm64/boot/Image" \
             "$AK3_ZIP"
 
-          STAGE_DIR="$GITHUB_WORKSPACE/out_artifacts"
+          export STAGE_DIR="$GITHUB_WORKSPACE/out_artifacts"
           mkdir -p "$STAGE_DIR"
           cp -f "$AK3_ZIP"* "$STAGE_DIR/"
           cp -f "$OUT_DIR/arch/arm64/boot/Image" "$STAGE_DIR/Image"
@@ -352,7 +352,8 @@ jobs:
           import json, os
           from pathlib import Path
 
-          stage_dir = Path(os.environ.get("STAGE_DIR", "out_artifacts"))
+          stage_dir = Path(os.environ.get("STAGE_DIR") or (os.environ.get("GITHUB_WORKSPACE", "") + "/out_artifacts"))
+          stage_dir.mkdir(parents=True, exist_ok=True)
           manifest = {
               "target_device": "OPPO A11x / PCHM30 (sm6125)",
               "os_target": "LineageOS 24 (Android 17)",

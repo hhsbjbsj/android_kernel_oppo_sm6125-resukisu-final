@@ -722,9 +722,14 @@ if "cgroup_enter_frozen" not in sigt:
     sigt = sigt.replace(do_job_anchor, do_freeze_trap + do_job_anchor, 1)
 
     get_sig_fatal_anchor = "\t\trecalc_sigpending();\n\t\tgoto fatal;\n\t}\n"
-    get_sig_fatal_repl = "\t\trecalc_sigpending();\n\t\tcurrent->jobctl &= ~JOBCTL_TRAP_FREEZE;\n\t\tspin_unlock_irq(&sighand->siglock);\n\t\tif (unlikely(cgroup_task_frozen(current)))\n\t\t\tcgroup_leave_frozen(true);\n\t\tgoto fatal;\n\t}\n"
+    get_sig_fatal_repl = "\t\trecalc_sigpending();\n\t\tcurrent->jobctl &= ~JOBCTL_TRAP_FREEZE;\n\t\tgoto fatal;\n\t}\n"
     assert get_sig_fatal_anchor in sigt, "cannot find fatal anchor in signal.c"
     sigt = sigt.replace(get_sig_fatal_anchor, get_sig_fatal_repl, 1)
+
+    fatal_label_anchor = "\tfatal:\n\t\tspin_unlock_irq(&sighand->siglock);\n"
+    fatal_label_repl = "\tfatal:\n\t\tspin_unlock_irq(&sighand->siglock);\n\t\tif (unlikely(cgroup_task_frozen(current)))\n\t\t\tcgroup_leave_frozen(true);\n"
+    assert fatal_label_anchor in sigt, "cannot find fatal label anchor in signal.c"
+    sigt = sigt.replace(fatal_label_anchor, fatal_label_repl, 1)
 
     get_sig_trap_anchor = "\t\tif (unlikely(current->jobctl & JOBCTL_TRAP_MASK)) {\n\t\t\tdo_jobctl_trap();\n\t\t\tspin_unlock_irq(&sighand->siglock);\n\t\t\tgoto relock;\n\t\t}\n"
     get_sig_trap_repl = """\t\tif (unlikely(current->jobctl &

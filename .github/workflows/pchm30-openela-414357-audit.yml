@@ -137,13 +137,32 @@ jobs:
         with:
           ref: 0789fcca2cbcb74143492a70afc6c3b5a59251b7
           persist-credentials: false
-      - name: Download the prepared-tree conflict evidence from Run 178
+      - name: Download the prepared-tree conflict evidence from Run 180
         uses: actions/download-artifact@v4
         with:
           github-token: ${{ github.token }}
-          run-id: 42911953183
-          name: PCHM30-OpenELA-full-178
+          run-id: 42917435426
+          name: PCHM30-OpenELA-full-180
           path: ${{ runner.temp }}/prepared-openela
+      - name: Inspect the source around the remaining compile errors
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          patch=$(find "$RUNNER_TEMP/prepared-openela" -name candidate.patch -print -quit)
+          test -n "$patch"
+          for path in net/ipv4/inet_connection_sock.c include/linux/signal.h include/linux/mod_devicetable.h; do
+            echo "Patch for $path"
+            awk -v needle="diff --git a/$path b/$path" '
+              /^diff --git / { show = ($0 == needle) }
+              show { print }
+            ' "$patch"
+          done
+          path=net/ipv4/inet_connection_sock.c
+          if git apply --check --include="$path" "$patch"; then
+            git apply --include="$path" "$patch"
+            nl -ba "$path" | sed -n '230,390p'
+            git restore -- "$path"
+          fi
       - name: Check remaining OPPO conflicts against pinned Note 8 revisions
         shell: bash
         run: |

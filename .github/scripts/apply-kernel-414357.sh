@@ -117,6 +117,16 @@ def resolve_reviewed(tree, trial=False):
             "ce8c57d70e5fc74428dd558032868b94b47fe122",
             None,
         ),
+        "kernel/power/wakelock.c": (
+            "105df4dfc783971acdd1d17ee2971cb892c97d02",
+            "b929b39633839a9991cdd9c1b900491db3627be6",
+            None,
+        ),
+        "kernel/sched/cpufreq_schedutil.c": (
+            "e9743a6b3c8296661c435a5a78d43f961e7af741",
+            "90a998638bdd109e788af8cc391529f042b92b3b",
+            None,
+        ),
         "fs/file_table.c": (
             "c038d33c4c5bd5777b4fbb2ab4551814530e9705",
             "4ceb4982ffea1374a6f1adc473f940b54ad7b1c8",
@@ -218,6 +228,53 @@ def resolve_reviewed(tree, trial=False):
                     continue
                 for old, new in edits:
                     content = content.replace(old, new, 1)
+            elif path == "kernel/power/wakelock.c":
+                if actual_oid != vendor_oid:
+                    print(f"Unrecognized wakelock source, leaving unresolved: {path}: {actual_oid}", flush=True)
+                    continue
+                first = b"ssize_t pm_show_wakelocks(char *buf, bool show_active)\n"
+                last = b"#if CONFIG_PM_WAKELOCKS_LIMIT > 0"
+                start = content.index(first)
+                end = content.index(last, start)
+                upstream_start = upstream.index(first)
+                upstream_end = upstream.index(last, upstream_start)
+                show = upstream[upstream_start:upstream_end].replace(b"wl->ws.active", b"wl->ws->active")
+                content = content[:start] + show + content[end:]
+            elif path == "kernel/sched/cpufreq_schedutil.c":
+                if actual_oid != vendor_oid:
+                    print(f"Unrecognized schedutil source, leaving unresolved: {path}: {actual_oid}", flush=True)
+                    continue
+                old_free = b"static void sugov_tunables_free(struct sugov_tunables *tunables)\n"
+                new_free = b"static void sugov_tunables_free(struct kobject *kobj)\n"
+                ktype = b"static struct kobj_type sugov_tunables_ktype = {\n"
+                clear = b"static void sugov_clear_global_tunables(void)\n"
+                start = upstream.index(new_free)
+                end = upstream.index(ktype, start)
+                release = upstream[start:end]
+                old_start = content.index(old_free)
+                old_end = content.index(b"\n}\n", old_start) + len(b"\n}\n")
+                new_start = upstream.index(clear)
+                new_end = upstream.index(b"\n}\n", new_start) + len(b"\n}\n")
+                content = content[:old_start] + upstream[new_start:new_end] + content[old_end:]
+                content = content.replace(ktype, release + ktype, 1)
+                ops = b"\t.sysfs_ops = &governor_sysfs_ops,\n"
+                content = content.replace(ops, ops + b"\t.release = &sugov_tunables_free,\n", 1)
+                old_call = b"sugov_tunables_free(tunables);"
+                if content.count(old_call) != 2:
+                    raise SystemExit("Unexpected schedutil tunable cleanup call sites")
+                content = content.replace(old_call, b"sugov_clear_global_tunables();")
+                # Save OPPO's policy tunables while this reference still owns
+                # the kobject. gov_attr_set_put() can drop the final reference.
+                start = content.index(b"static void sugov_exit(")
+                end = content.index(b"static int sugov_start(", start)
+                exit_fn = content[start:end]
+                before = b"\tcount = gov_attr_set_put("
+                after = b"\tmutex_unlock(&global_tunables_lock);\n"
+                if exit_fn.count(before) != 1 or exit_fn.count(after) != 1:
+                    raise SystemExit("Unexpected schedutil exit structure")
+                exit_fn = exit_fn.replace(before, b"\tkobject_get(&tunables->attr_set.kobj);\n" + before, 1)
+                exit_fn = exit_fn.replace(after, b"\tkobject_put(&tunables->attr_set.kobj);\n" + after, 1)
+                content = content[:start] + exit_fn + content[end:]
             elif path == "fs/file_table.c":
                 if actual_oid != vendor_oid:
                     print(f"Unrecognized file reference handling, leaving unresolved: {path}: {actual_oid}", flush=True)
@@ -347,6 +404,23 @@ def resolve_reviewed(tree, trial=False):
                 if b"fd_htab_map_get_ptr(map, l)" not in content[max(0, at - 180):at]:
                     raise SystemExit("Could not verify the BPF hashtab cleanup callback context")
                 stage_trial(path, content.replace(obsolete, b"map->ops->map_fd_put_ptr(map, ptr, true);", 1))
+
+            path = "mm/page_alloc.c"
+            content = git("show", f"{tree}:{path}")
+            header = b"#include <linux/khugepaged.h>\n"
+            if b"khugepaged_min_free_kbytes_update();" in content and header not in content:
+                anchor = b"#include <linux/mm.h>\n"
+                if content.count(anchor) != 1:
+                    raise SystemExit("Could not locate the khugepaged include anchor")
+                stage_trial(path, content.replace(anchor, anchor + header, 1))
+
+            path = "fs/fs-writeback.c"
+            content = git("show", f"{tree}:{path}")
+            old_call = b"\tif (unlikely(block_dump > 1))\n\t\tblock_dump___mark_inode_dirty(inode);\n"
+            if old_call in content and b"static noinline void block_dump___mark_inode_dirty" not in content:
+                if content.count(old_call) != 1:
+                    raise SystemExit("Unexpected retired writeback logging call sites")
+                stage_trial(path, content.replace(old_call, b"", 1))
         return index("write-tree").decode().strip(), resolved
 
 # A three-way merge may report an overlap even if the complete upstream

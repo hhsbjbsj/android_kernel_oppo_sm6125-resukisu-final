@@ -81,12 +81,70 @@ def read_merge(path):
         conflicts.add(os.fsdecode(match[1]))
     return entries[0].decode("ascii"), conflicts
 
+# Floppy's matching Kconfig changes can be replayed on these exact inputs.
+# Keep the vendor menu boundaries and verify the final blobs against Floppy.
+def resolve_kconfig(tree):
+    from tempfile import TemporaryDirectory
+
+    target = os.environ["OPENELA_TARGET"]
+    fixes = {
+        "drivers/char/Kconfig": (
+            "b92228b9851d68c3d75cf5a8525d86a928978c65",
+            "e329d1cc019ae7e3736d77e83690af17e6db7270",
+            "3f34cdc45309f770fe491ea4b9c01fea7bfa1aff",
+        ),
+        "lib/Kconfig": (
+            "eec1142136dc065ed61a49034e2e54c3e4662446",
+            "1a33e93659517f11ee7c232dc911fa757f20b116",
+            "89b299f7f06ff8aa812db33281d77f578d785129",
+        ),
+    }
+    resolved = set()
+    with TemporaryDirectory() as temporary:
+        env = dict(os.environ, GIT_INDEX_FILE=str(Path(temporary) / "index"))
+
+        def index(*args):
+            return subprocess.check_output(["git", *args], env=env)
+
+        index("read-tree", tree)
+        for path, (vendor_oid, upstream_oid, expected_oid) in fixes.items():
+            if git("rev-parse", f"{vendor}:{path}").decode().strip() != vendor_oid:
+                continue
+            if git("rev-parse", f"{target}:{path}").decode().strip() != upstream_oid:
+                raise SystemExit(f"Unexpected upstream Kconfig blob: {path}")
+
+            content = git("cat-file", "blob", vendor_oid)
+            if path == "drivers/char/Kconfig":
+                upstream = git("cat-file", "blob", upstream_oid)
+                begin = upstream.index(b"config RANDOM_TRUST_CPU\n")
+                end = upstream.index(b"\nendmenu", begin)
+                rng_options = upstream[begin:end] + b"\n"
+                content = content.replace(b"\nendmenu\n", b"\n" + rng_options + b"endmenu\n", 1)
+            else:
+                content = content.replace(
+                    b"config HAVE_ARCH_BITREVERSE\n\tbool\n\tdefault n\n\tdepends on BITREVERSE\n",
+                    b"config HAVE_ARCH_BITREVERSE\n\tbool\n\tdefault n\n",
+                    1,
+                )
+            oid = subprocess.check_output(["git", "hash-object", "-w", "--stdin"], input=content).decode().strip()
+            if oid != expected_oid:
+                raise SystemExit(f"Resolved Kconfig differs from the reviewed Floppy blob: {path}: {oid}")
+            mode = git("ls-tree", vendor, "--", path).split()[0].decode()
+            index("update-index", "--add", "--cacheinfo", f"{mode},{oid},{path}")
+            resolved.add(path)
+        return index("write-tree").decode().strip(), resolved
+
 merged_tree, conflicts = read_merge(report / "merge-tree.bin")
+merged_tree, resolved = resolve_kconfig(merged_tree)
+conflicts -= resolved
 candidate = report / "compile-merge-tree.bin"
-if candidate.exists():
+if conflicts and candidate.exists():
     merged_tree, excluded = read_merge(candidate)
+    merged_tree, trial_resolved = resolve_kconfig(merged_tree)
+    excluded -= trial_resolved
 else:
     excluded = set(conflicts)
+(report / "resolved-paths.txt").write_text("".join(path + "\n" for path in sorted(resolved)))
 changed = git("diff", "--no-renames", "--name-only", "-z", vendor, merged_tree)
 paths = [os.fsdecode(path) for path in changed.split(b"\0") if path]
 if conflicts:
@@ -104,6 +162,7 @@ proof = {
     "prepared_vendor_commit": vendor,
     "source_merge_clean": not conflicts,
     "conflict_count": len(conflicts),
+    "reviewed_kconfig_resolutions": sorted(resolved),
     "candidate_strategy": "vendor-overlap-hunks" if candidate.exists() else "strict",
     "deferred_paths": len(excluded),
     "candidate_paths": len(applied),

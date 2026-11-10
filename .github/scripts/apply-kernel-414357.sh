@@ -90,9 +90,10 @@ else:
 changed = git("diff", "--no-renames", "--name-only", "-z", vendor, merged_tree)
 paths = [os.fsdecode(path) for path in changed.split(b"\0") if path]
 if conflicts:
-    # The trial retains the current release and the vendor's generated
-    # asm/bugs.h wrapper may still reference the generic header.
-    excluded.update({"Makefile", "include/asm-generic/bugs.h"})
+    # Keep the paired vendor Kbuild files for the trial. The hunk merge
+    # can split Makefile conditionals, and the existing asm/bugs.h wrapper
+    # may still reference the generic header.
+    excluded.update({"Makefile", "scripts/Makefile.build", "include/asm-generic/bugs.h"})
     excluded.update(path for path in paths if path.startswith(".elts/"))
 (report / "deferred-paths.txt").write_text("".join(path + "\n" for path in sorted(excluded)))
 

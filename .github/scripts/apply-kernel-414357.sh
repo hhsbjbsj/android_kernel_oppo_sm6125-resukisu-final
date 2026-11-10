@@ -81,9 +81,8 @@ def read_merge(path):
         conflicts.add(os.fsdecode(match[1]))
     return entries[0].decode("ascii"), conflicts
 
-# Floppy's matching Kconfig changes can be replayed on these exact inputs.
-# Keep the vendor menu boundaries and verify the final blobs against Floppy.
-def resolve_kconfig(tree):
+# Replay reviewed OpenELA changes while preserving unrelated OPPO edits.
+def resolve_reviewed(tree):
     from tempfile import TemporaryDirectory
 
     target = os.environ["OPENELA_TARGET"]
@@ -98,6 +97,16 @@ def resolve_kconfig(tree):
             "1a33e93659517f11ee7c232dc911fa757f20b116",
             "89b299f7f06ff8aa812db33281d77f578d785129",
         ),
+        "scripts/Makefile.build": (
+            "74ce588c69513197a354ef0032c2145e91ee0641",
+            "f4b752cb17516a8e0151538f4cdb220a469a4add",
+            None,
+        ),
+        "include/linux/clk.h": (
+            "d53415dc58670876ed153456247cb95a9484d042",
+            "136a64bddcd93d633db6c699eb01aa0ff5b43a3a",
+            None,
+        ),
     }
     resolved = set()
     with TemporaryDirectory() as temporary:
@@ -110,7 +119,7 @@ def resolve_kconfig(tree):
         for path, (vendor_oid, upstream_oid, expected_oid) in fixes.items():
             actual_oid = git("rev-parse", f"{vendor}:{path}").decode().strip()
             if git("rev-parse", f"{target}:{path}").decode().strip() != upstream_oid:
-                raise SystemExit(f"Unexpected upstream Kconfig blob: {path}")
+                raise SystemExit(f"Unexpected upstream blob for reviewed resolution: {path}")
 
             content = git("cat-file", "blob", actual_oid)
             upstream = git("cat-file", "blob", upstream_oid)
@@ -125,7 +134,7 @@ def resolve_kconfig(tree):
                         print(f"Unrecognized prepared Kconfig, leaving unresolved: {path}: {actual_oid}", flush=True)
                         continue
                     content = content.replace(menu_end, b"\n" + rng_options + menu_end[1:], 1)
-            else:
+            elif path == "lib/Kconfig":
                 # The build adds LZ4K/LZ4KD options to this file before the
                 # merge. Apply only OpenELA's HAVE_ARCH_BITREVERSE change.
                 old = b"config HAVE_ARCH_BITREVERSE\n\tbool\n\tdefault n\n\tdepends on BITREVERSE\n\thelp\n"
@@ -135,21 +144,57 @@ def resolve_kconfig(tree):
                 elif content.count(new) != 1:
                     print(f"Unrecognized prepared Kconfig, leaving unresolved: {path}: {actual_oid}", flush=True)
                     continue
+            elif path == "scripts/Makefile.build":
+                # Both ends of this guard must enclose the same vendor recipe.
+                start = b"ifdef CONFIG_FTRACE_MCOUNT_RECORD\nifdef BUILD_C_RECORDMCOUNT\n"
+                end = b"endif # CONFIG_FTRACE_MCOUNT_RECORD\n"
+                guard = b"ifndef CC_USING_RECORD_MCOUNT\n"
+                if content.count(start) != 1 or content.count(end) != 1 or guard in content:
+                    print(f"Unrecognized recordmcount recipe, leaving unresolved: {path}: {actual_oid}", flush=True)
+                    continue
+                left = upstream.index(guard)
+                right = upstream.index(b"ifdef BUILD_C_RECORDMCOUNT\n", left)
+                content = content.replace(
+                    start, b"ifdef CONFIG_FTRACE_MCOUNT_RECORD\n" + upstream[left:right]
+                    + b"ifdef BUILD_C_RECORDMCOUNT\n", 1,
+                )
+                content = content.replace(end, b"endif # CC_USING_RECORD_MCOUNT\n" + end, 1)
+            elif path == "include/linux/clk.h":
+                # Floppy starts from this same header. Import the three OpenELA
+                # API blocks, retaining OPPO's existing CONFIG_OF condition.
+                if actual_oid != vendor_oid:
+                    print(f"Unrecognized clock header, leaving unresolved: {path}: {actual_oid}", flush=True)
+                    continue
+                for first, last, vendor_anchor in (
+                    (b"/**\n * devm_clk_get_prepared -", b"/**\n * devm_get_clk_from_child -", None),
+                    (b"static inline struct clk *devm_clk_get_prepared(",
+                     b"static inline int devm_clk_bulk_get(", None),
+                    (b"/**\n * clk_get_optional -",
+                     b"#if defined(CONFIG_OF) && defined(CONFIG_COMMON_CLK)\nstruct clk *of_clk_get(",
+                     b"#if defined(CONFIG_OF)\nstruct clk *of_clk_get("),
+                ):
+                    anchor = vendor_anchor or last
+                    if content.count(anchor) != 1:
+                        raise SystemExit(f"Unexpected clock API insertion anchor: {anchor!r}")
+                    begin = upstream.index(first)
+                    end = upstream.index(last, begin)
+                    content = content.replace(anchor, upstream[begin:end] + anchor, 1)
+
             oid = subprocess.check_output(["git", "hash-object", "-w", "--stdin"], input=content).decode().strip()
-            if actual_oid == vendor_oid and oid != expected_oid:
-                raise SystemExit(f"Resolved Kconfig differs from the reviewed Floppy blob: {path}: {oid}")
+            if expected_oid and actual_oid == vendor_oid and oid != expected_oid:
+                raise SystemExit(f"Resolution differs from the reviewed Floppy blob: {path}: {oid}")
             mode = git("ls-tree", vendor, "--", path).split()[0].decode()
             index("update-index", "--add", "--cacheinfo", f"{mode},{oid},{path}")
             resolved.add(path)
         return index("write-tree").decode().strip(), resolved
 
 merged_tree, conflicts = read_merge(report / "merge-tree.bin")
-merged_tree, resolved = resolve_kconfig(merged_tree)
+merged_tree, resolved = resolve_reviewed(merged_tree)
 conflicts -= resolved
 candidate = report / "compile-merge-tree.bin"
 if conflicts and candidate.exists():
     merged_tree, excluded = read_merge(candidate)
-    merged_tree, trial_resolved = resolve_kconfig(merged_tree)
+    merged_tree, trial_resolved = resolve_reviewed(merged_tree)
     excluded -= trial_resolved
 else:
     excluded = set(conflicts)
@@ -160,7 +205,9 @@ if conflicts:
     # Keep the paired vendor Kbuild files for the trial. The hunk merge
     # can split Makefile conditionals, and the existing asm/bugs.h wrapper
     # may still reference the generic header.
-    excluded.update({"Makefile", "scripts/Makefile.build", "include/asm-generic/bugs.h"})
+    excluded.update({"Makefile", "include/asm-generic/bugs.h"})
+    if "scripts/Makefile.build" not in resolved:
+        excluded.add("scripts/Makefile.build")
     excluded.update(path for path in paths if path.startswith(".elts/"))
 (report / "deferred-paths.txt").write_text("".join(path + "\n" for path in sorted(excluded)))
 
@@ -171,7 +218,7 @@ proof = {
     "prepared_vendor_commit": vendor,
     "source_merge_clean": not conflicts,
     "conflict_count": len(conflicts),
-    "reviewed_kconfig_resolutions": sorted(resolved),
+    "reviewed_resolutions": sorted(resolved),
     "candidate_strategy": "vendor-overlap-hunks" if candidate.exists() else "strict",
     "deferred_paths": len(excluded),
     "candidate_paths": len(applied),

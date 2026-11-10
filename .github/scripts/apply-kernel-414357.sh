@@ -484,6 +484,78 @@ def resolve_reviewed(tree, trial=False):
                         raise SystemExit("Could not locate the epoll wakeup-source declaration")
                     wakeup = wakeup.replace(anchor, b"\tstruct name_snapshot n;\n" + anchor, 1)
                 stage_trial(path, content[:start] + wakeup + content[end:])
+
+            path = "drivers/char/random.c"
+            content = git("show", f"{tree}:{path}")
+            legacy_chacha = b"#include <crypto/chacha20.h>\n"
+            if legacy_chacha in content:
+                stage_trial(path, content.replace(legacy_chacha, b"#include <crypto/chacha.h>\n", 1))
+
+            path = "include/crypto/chacha.h"
+            content = git("show", f"{tree}:{path}")
+            if b"static inline void chacha_init_consts(" not in content:
+                source = git("show", f"{target}:include/crypto/chacha20.h")
+                start = source.index(b"enum chacha_constants {")
+                end = source.index(b"\n#endif", start)
+                helpers = source[start:end]
+                aliases = (
+                    b"#ifndef CHACHA20_KEY_SIZE\n#define CHACHA20_KEY_SIZE CHACHA_KEY_SIZE\n#endif\n"
+                    b"#ifndef CHACHA20_BLOCK_SIZE\n#define CHACHA20_BLOCK_SIZE CHACHA_BLOCK_SIZE\n#endif\n\n"
+                )
+                final = content.rfind(b"#endif")
+                if final < 0:
+                    raise SystemExit("Could not locate the ChaCha header guard")
+                stage_trial(path, content[:final] + aliases + helpers + b"\n" + content[final:])
+
+            path = "lib/Makefile"
+            content = git("show", f"{tree}:{path}")
+            if b" chacha.o " not in content and b" chacha20.o " in content:
+                if content.count(b" chacha20.o ") != 1:
+                    raise SystemExit("Unexpected ChaCha object selection")
+                stage_trial(path, content.replace(b" chacha20.o ", b" chacha.o ", 1))
+
+            path = "lib/vsprintf.c"
+            content = git("show", f"{tree}:{path}")
+            old_callback = b"static void fill_random_ptr_key(struct random_ready_callback *unused)\n"
+            if old_callback in content:
+                new_callback = (
+                    b"static int fill_random_ptr_key(struct notifier_block *unused,\n"
+                    b"                               unsigned long action, void *data)\n"
+                )
+                content = content.replace(old_callback, new_callback, 1)
+                old_end = b"\tWRITE_ONCE(have_filled_random_ptr_key, true);\n}"
+                if content.count(old_end) != 1:
+                    raise SystemExit("Could not verify the hashed-pointer RNG readiness callback")
+                content = content.replace(old_end, b"\tWRITE_ONCE(have_filled_random_ptr_key, true);\n\treturn NOTIFY_DONE;\n}", 1)
+                content = content.replace(b"static struct random_ready_callback random_ready", b"static struct notifier_block random_ready", 1)
+                content = content.replace(b"\t.func = fill_random_ptr_key", b"\t.notifier_call = fill_random_ptr_key", 1)
+                content = content.replace(b"add_random_ready_callback(&random_ready)", b"register_random_ready_notifier(&random_ready)", 1)
+                content = content.replace(b"fill_random_ptr_key(&random_ready);", b"fill_random_ptr_key(&random_ready, 0, NULL);", 1)
+                if b"#include <linux/notifier.h>\n" not in content:
+                    source = b"#include <linux/random.h>\n"
+                    if content.count(source) != 1:
+                        raise SystemExit("Could not locate the pointer hashing RNG header")
+                    content = content.replace(source, source + b"#include <linux/notifier.h>\n", 1)
+                stage_trial(path, content)
+
+            path = "drivers/soc/qcom/early_random.c"
+            content = git("show", f"{tree}:{path}")
+            old_seed = (
+                b"add_hwgenerator_randomness(random_buffer, bytes_received,\n"
+                b"\t\t\t\t\t   bytes_received << 3);"
+            )
+            if old_seed in content:
+                content = content.replace(b"#include <linux/hw_random.h>", b"#include <linux/random.h>", 1)
+                content = content.replace(old_seed, b"add_bootloader_randomness(random_buffer, bytes_received);", 1)
+                stage_trial(path, content)
+
+            path = "drivers/soc/qcom/event_timer.c"
+            content = git("show", f"{tree}:{path}")
+            old_root = b"\t.head = RB_ROOT,\n\t.next = NULL,\n"
+            if old_root in content:
+                if content.count(old_root) != 1:
+                    raise SystemExit("Unexpected QCOM event timer queue initializers")
+                stage_trial(path, content.replace(old_root, b"\t.rb_root = RB_ROOT_CACHED,\n", 1))
         return index("write-tree").decode().strip(), resolved
 
 # A three-way merge may report an overlap even if the complete upstream

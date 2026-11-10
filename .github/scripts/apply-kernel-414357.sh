@@ -82,7 +82,7 @@ def read_merge(path):
     return entries[0].decode("ascii"), conflicts
 
 # Replay reviewed OpenELA changes while preserving unrelated OPPO edits.
-def resolve_reviewed(tree):
+def resolve_reviewed(tree, trial=False):
     from tempfile import TemporaryDirectory
 
     target = os.environ["OPENELA_TARGET"]
@@ -100,6 +100,16 @@ def resolve_reviewed(tree):
         "scripts/Makefile.build": (
             "74ce588c69513197a354ef0032c2145e91ee0641",
             "f4b752cb17516a8e0151538f4cdb220a469a4add",
+            None,
+        ),
+        "arch/arm64/kernel/setup.c": (
+            "6332b164ffdbd1d480efcf80091dcafb50bbcd99",
+            "01b15d9dd8d62de74b8e6c0701f3d0ba3e675e1e",
+            "a8ec91c6df156516cd0c1571bf3ca05e44395e45",
+        ),
+        "arch/arm64/mm/mmu.c": (
+            "7060791a7c0d7f93f025d533585bb02cada9fab4",
+            "ce8c57d70e5fc74428dd558032868b94b47fe122",
             None,
         ),
         "include/linux/clk.h": (
@@ -159,6 +169,32 @@ def resolve_reviewed(tree):
                     + b"ifdef BUILD_C_RECORDMCOUNT\n", 1,
                 )
                 content = content.replace(end, b"endif # CC_USING_RECORD_MCOUNT\n" + end, 1)
+            elif path in {"arch/arm64/kernel/setup.c", "arch/arm64/mm/mmu.c"}:
+                # Keep the OPPO source outside the OpenELA FDT and trampoline
+                # changes. Floppy applies the same coordinated API transition.
+                edits = {
+                    "arch/arm64/kernel/setup.c": (
+                        (b"extern void *__init __fixmap_remap_fdt(phys_addr_t dt_phys, int *size,\n\t\t\t\t       pgprot_t prot);\n",
+                         b""),
+                        (b"fdt = __fixmap_remap_fdt(dt_phys, &size, PAGE_KERNEL);",
+                         b"fdt = fixmap_remap_fdt(dt_phys, &size, PAGE_KERNEL);"),
+                        (b"static void __init setup_machine_fdt(phys_addr_t dt_phys)\n{\n\tvoid *dt_virt = fixmap_remap_fdt(dt_phys);\n\tconst char *machine_name;\n\n\tif (!dt_virt || !early_init_dt_scan(dt_virt)) {\n\t\tpr_crit(\"\\n\"\n\t\t\t\"Error: invalid device tree blob at physical address %pa (virtual address 0x%p)\\n\"\n\t\t\t\"The dtb must be 8-byte aligned and must not exceed 2 MB in size\\n\"\n\t\t\t\"\\nPlease check your bootloader.\",\n\t\t\t&dt_phys, dt_virt);\n\n\t\twhile (true)\n\t\t\tcpu_relax();\n\t}\n\n\tmachine_name = arch_read_machine_name();\n\tif (!machine_name)\n\t\treturn;\n\n\tpr_info(\"Machine: %s\\n\", machine_name);\n\tdump_stack_set_arch_desc(\"%s (DT)\", machine_name);\n}\n\n",
+                         b"static void __init setup_machine_fdt(phys_addr_t dt_phys)\n{\n\tint size;\n\tvoid *dt_virt = fixmap_remap_fdt(dt_phys, &size, PAGE_KERNEL);\n\tconst char *machine_name;\n\n\tif (dt_virt)\n\t\tmemblock_reserve(dt_phys, size);\n\n\tif (!dt_virt || !early_init_dt_scan(dt_virt)) {\n\t\tpr_crit(\"\\n\"\n\t\t\t\"Error: invalid device tree blob at physical address %pa (virtual address 0x%p)\\n\"\n\t\t\t\"The dtb must be 8-byte aligned and must not exceed 2 MB in size\\n\"\n\t\t\t\"\\nPlease check your bootloader.\",\n\t\t\t&dt_phys, dt_virt);\n\n\t\twhile (true)\n\t\t\tcpu_relax();\n\t}\n\n\t/* Early fixups are done, map the FDT as read-only now */\n\tfixmap_remap_fdt(dt_phys, &size, PAGE_KERNEL_RO);\n\n\tmachine_name = arch_read_machine_name();\n\tif (!machine_name)\n\t\treturn;\n\n\tpr_info(\"Machine: %s\\n\", machine_name);\n\tdump_stack_set_arch_desc(\"%s (DT)\", machine_name);\n}\n\n"),
+                    ),
+                    "arch/arm64/mm/mmu.c": (
+                        (b"static int __init map_entry_trampoline(void)\n{\n\textern char __entry_tramp_text_start[];\n\n\tpgprot_t prot = rodata_enabled ? PAGE_KERNEL_ROX : PAGE_KERNEL_EXEC;\n\tphys_addr_t pa_start = __pa_symbol(__entry_tramp_text_start);\n\n\t/* The trampoline is always mapped and can therefore be global */\n\tpgprot_val(prot) &= ~PTE_NG;\n\n\t/* Map only the text into the trampoline page table */\n\tmemset(tramp_pg_dir, 0, PGD_SIZE);\n\t__create_pgd_mapping(tramp_pg_dir, pa_start, TRAMP_VALIAS, PAGE_SIZE,\n\t\t\t     prot, pgd_pgtable_alloc, 0);\n\n\t/* Map both the text and data into the kernel page table */\n\t__set_fixmap(FIX_ENTRY_TRAMP_TEXT, pa_start, prot);\n\tif (IS_ENABLED(CONFIG_RANDOMIZE_BASE)) {\n\t\textern char __entry_tramp_data_start[];\n\n\t\t__set_fixmap(FIX_ENTRY_TRAMP_DATA,\n\t\t\t     __pa_symbol(__entry_tramp_data_start),\n\t\t\t     PAGE_KERNEL_RO);\n\t}\n\n\treturn 0;\n}\n",
+                         b"static int __init map_entry_trampoline(void)\n{\n\tint i;\n\textern char __entry_tramp_text_start[];\n\n\tpgprot_t prot = rodata_enabled ? PAGE_KERNEL_ROX : PAGE_KERNEL_EXEC;\n\tphys_addr_t pa_start = __pa_symbol(__entry_tramp_text_start);\n\n\t/* The trampoline is always mapped and can therefore be global */\n\tpgprot_val(prot) &= ~PTE_NG;\n\n\t/* Map only the text into the trampoline page table */\n\tmemset(tramp_pg_dir, 0, PGD_SIZE);\n\t__create_pgd_mapping(tramp_pg_dir, pa_start, TRAMP_VALIAS,\n\t\t\t     entry_tramp_text_size(), prot, pgd_pgtable_alloc,\n\t\t\t     0);\n\n\t/* Map both the text and data into the kernel page table */\n\tfor (i = 0; i < DIV_ROUND_UP(entry_tramp_text_size(), PAGE_SIZE); i++)\n\t\t__set_fixmap(FIX_ENTRY_TRAMP_TEXT1 - i,\n\t\t\t     pa_start + i * PAGE_SIZE, prot);\n\n\tif (IS_ENABLED(CONFIG_RANDOMIZE_BASE)) {\n\t\textern char __entry_tramp_data_start[];\n\n\t\t__set_fixmap(FIX_ENTRY_TRAMP_DATA,\n\t\t\t     __pa_symbol(__entry_tramp_data_start),\n\t\t\t     PAGE_KERNEL_RO);\n\t}\n\n\treturn 0;\n}\n"),
+                        (b"void *__init __fixmap_remap_fdt(phys_addr_t dt_phys, int *size, pgprot_t prot)",
+                         b"void *__init fixmap_remap_fdt(phys_addr_t dt_phys, int *size, pgprot_t prot)"),
+                        (b"void *__init fixmap_remap_fdt(phys_addr_t dt_phys)\n{\n\tvoid *dt_virt;\n\tint size;\n\n\tdt_virt = __fixmap_remap_fdt(dt_phys, &size, PAGE_KERNEL_RO);\n\tif (!dt_virt)\n\t\treturn NULL;\n\n\tmemblock_reserve(dt_phys, size);\n\n\t/*\n\t * memblock_dbg is not up because of parse_early_param get called after\n\t * setup_machine_fd. To capture fdt reserved info below pr_info is\n\t * added.\n\t */\n\tpr_info(\"memblock_reserve: 0x%x %pS\\n\", size - 1, (void *) _RET_IP_);\n\n\treturn dt_virt;\n}\n\n",
+                         b""),
+                    ),
+                }[path]
+                if any(content.count(old) != 1 for old, new in edits):
+                    print(f"Unrecognized ARM64 source, leaving unresolved: {path}: {actual_oid}", flush=True)
+                    continue
+                for old, new in edits:
+                    content = content.replace(old, new, 1)
             elif path == "include/linux/clk.h":
                 # Floppy starts from this same header. Import the three OpenELA
                 # API blocks, retaining OPPO's existing CONFIG_OF condition.
@@ -186,6 +222,22 @@ def resolve_reviewed(tree):
             mode = git("ls-tree", vendor, "--", path).split()[0].decode()
             index("update-index", "--add", "--cacheinfo", f"{mode},{oid},{path}")
             resolved.add(path)
+        if trial:
+            path = "init/main.c"
+            content = git("show", f"{tree}:{path}")
+            obsolete = b"\tcheck_bugs();\n"
+            replacement = b"\tarch_cpu_finalize_init();\n"
+            anchor = b"\tcalibrate_delay();\n"
+            if content.count(obsolete) == 1:
+                content = content.replace(obsolete, b"", 1)
+                if replacement not in content:
+                    if content.count(anchor) != 1:
+                        raise SystemExit("Could not locate OpenELA CPU initialization point in init/main.c")
+                    content = content.replace(anchor, anchor + b"\n" + replacement, 1)
+                oid = subprocess.check_output(["git", "hash-object", "-w", "--stdin"], input=content).decode().strip()
+                mode = git("ls-tree", tree, "--", path).split()[0].decode()
+                index("update-index", "--cacheinfo", f"{mode},{oid},{path}")
+                print("Trial only: synchronized the CPU finalization call in init/main.c", flush=True)
         return index("write-tree").decode().strip(), resolved
 
 merged_tree, conflicts = read_merge(report / "merge-tree.bin")
@@ -194,7 +246,7 @@ conflicts -= resolved
 candidate = report / "compile-merge-tree.bin"
 if conflicts and candidate.exists():
     merged_tree, excluded = read_merge(candidate)
-    merged_tree, trial_resolved = resolve_reviewed(merged_tree)
+    merged_tree, trial_resolved = resolve_reviewed(merged_tree, trial=True)
     excluded -= trial_resolved
 else:
     excluded = set(conflicts)

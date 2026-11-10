@@ -102,6 +102,11 @@ def resolve_reviewed(tree, trial=False):
             "f4b752cb17516a8e0151538f4cdb220a469a4add",
             None,
         ),
+        "arch/arm64/include/asm/cputype.h": (
+            "a021546eb4fec31f13c824ce3c0b700c90e0c3b2",
+            "134cc1c8e464d7e0a08989c241efb45256ff2ea3",
+            None,
+        ),
         "arch/arm64/kernel/setup.c": (
             "6332b164ffdbd1d480efcf80091dcafb50bbcd99",
             "01b15d9dd8d62de74b8e6c0701f3d0ba3e675e1e",
@@ -169,6 +174,19 @@ def resolve_reviewed(tree, trial=False):
                     + b"ifdef BUILD_C_RECORDMCOUNT\n", 1,
                 )
                 content = content.replace(end, b"endif # CC_USING_RECORD_MCOUNT\n" + end, 1)
+            elif path == "arch/arm64/include/asm/cputype.h":
+                if actual_oid != vendor_oid:
+                    print(f"Unrecognized CPU part table, leaving unresolved: {path}: {actual_oid}", flush=True)
+                    continue
+                for begin, end in (
+                    (b"#define ARM_CPU_PART_NEOVERSE_N1", b"\n#define APM_CPU_PART_POTENZA"),
+                    (b"#define MIDR_NEOVERSE_N1", b"#define MIDR_THUNDERX\t"),
+                ):
+                    start = upstream.index(begin)
+                    finish = upstream.index(end, start)
+                    if content.count(end) != 1:
+                        raise SystemExit(f"Unexpected ARM64 MIDR insertion anchor: {end!r}")
+                    content = content.replace(end, upstream[start:finish] + end, 1)
             elif path in {"arch/arm64/kernel/setup.c", "arch/arm64/mm/mmu.c"}:
                 # Keep the OPPO source outside the OpenELA FDT and trampoline
                 # changes. Floppy applies the same coordinated API transition.
@@ -238,6 +256,19 @@ def resolve_reviewed(tree, trial=False):
                 mode = git("ls-tree", tree, "--", path).split()[0].decode()
                 index("update-index", "--cacheinfo", f"{mode},{oid},{path}")
                 print("Trial only: synchronized the CPU finalization call in init/main.c", flush=True)
+
+            path = "kernel/cpu.c"
+            content = git("show", f"{tree}:{path}")
+            header = b"#include <linux/random.h>\n"
+            if b"= random_prepare_cpu," in content and header not in content:
+                anchor = b"#include <linux/percpu-rwsem.h>\n"
+                if content.count(anchor) != 1:
+                    raise SystemExit("Could not locate the RNG include anchor in kernel/cpu.c")
+                content = content.replace(anchor, anchor + header, 1)
+                oid = subprocess.check_output(["git", "hash-object", "-w", "--stdin"], input=content).decode().strip()
+                mode = git("ls-tree", tree, "--", path).split()[0].decode()
+                index("update-index", "--cacheinfo", f"{mode},{oid},{path}")
+                print("Trial only: imported the RNG hotplug declarations in kernel/cpu.c", flush=True)
         return index("write-tree").decode().strip(), resolved
 
 # A three-way merge may report an overlap even if the complete upstream

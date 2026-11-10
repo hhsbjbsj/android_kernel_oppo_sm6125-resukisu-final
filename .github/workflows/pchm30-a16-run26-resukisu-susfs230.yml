@@ -199,6 +199,9 @@ jobs:
 
           old_smoke = "echo '===== SMOKE-COMPILE REPAIRED BPF CLOSURE BEFORE LONG BUILD ====='\n"
           new_smoke = (
+              "if [ \"$OPENELA_SCOPE\" = full ]; then\n"
+              "  sed -i '/CONFIG_DEBUG_SECTION_MISMATCH),,-S/d' \"$KERNEL_DIR/scripts/Makefile.modpost\"\n"
+              "fi\n\n"
               "if command -v ccache >/dev/null 2>&1; then\n"
               "  echo '===== INITIALIZING CCACHE WRAPPER ====='\n"
               "  export CCACHE_DIR=\"$HOME/.ccache\"\n"
@@ -256,18 +259,6 @@ jobs:
         run: |
           test -f run26-build.log || exit 0
           mkdir -p openela-report
-          build_dir="$GITHUB_WORKSPACE/$KERNEL_REL/$OUT_DIR"
-          if grep -Fq 'FATAL: modpost: Section mismatches detected.' run26-build.log \
-            && [ -x "$build_dir/scripts/mod/modpost" ] && [ -s "$build_dir/vmlinux.o" ]; then
-            (
-              cd "$build_dir"
-              flags=(-E)
-              if grep -Fxq 'CONFIG_MODVERSIONS=y' .config; then
-                flags+=(-m)
-              fi
-              ./scripts/mod/modpost "${flags[@]}" vmlinux.o
-            ) 2>&1 | tee openela-report/modpost-sections.txt || true
-          fi
           python3 - <<'PY'
           import re
           from pathlib import Path
@@ -275,7 +266,7 @@ jobs:
           log = Path("run26-build.log").read_text(errors="replace")
           errors = dict.fromkeys(
               line for line in log.splitlines()
-              if re.search(r"^\S+:\d+(?::\d+)?: (?:fatal )?error:|undefined reference|No rule to make target|^FATAL: modpost:", line)
+              if re.search(r"^\S+:\d+(?::\d+)?: (?:fatal )?error:|undefined reference|No rule to make target|^FATAL: modpost:|^WARNING: .*Section mismatch", line)
           )
           Path("openela-report/compile-errors.txt").write_text("\n".join(errors) + "\n")
           print(f"Unique compiler and linker errors: {len(errors)}")

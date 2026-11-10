@@ -240,14 +240,96 @@ def resolve_reviewed(tree, trial=False):
                 print("Trial only: synchronized the CPU finalization call in init/main.c", flush=True)
         return index("write-tree").decode().strip(), resolved
 
+# A three-way merge may report an overlap even if the complete upstream
+# patch still applies, or is already present, in the vendor file. Accept only
+# unambiguous regular-file patches that round-trip byte for byte.
+def resolve_exact_patches(conflicts):
+    from tempfile import TemporaryDirectory
+
+    base = os.environ["OPENELA_BASE"]
+    target = os.environ["OPENELA_TARGET"]
+    updates = {}
+    results = {}
+
+    def entry(tree, path):
+        record = git("--literal-pathspecs", "ls-tree", "-z", tree, "--", path)
+        return record.split(b"\t", 1)[0].split() if record else []
+
+    with TemporaryDirectory() as temporary:
+        for path in sorted(conflicts):
+            old, new, current = (entry(tree, path) for tree in (base, target, vendor))
+            if any(len(item) != 3 or item[0] not in {b"100644", b"100755"}
+                   for item in (old, new, current)):
+                continue
+            if old[0] != new[0]:
+                continue
+            original = git("cat-file", "blob", current[2].decode())
+            patch = git("--literal-pathspecs", "diff", "--no-renames", "--no-ext-diff",
+                        "--no-textconv", base, target, "--", path)
+            if not patch or b"\0" in original or b"\nBinary files " in patch:
+                continue
+            file = Path(temporary) / path
+            file.parent.mkdir(parents=True, exist_ok=True)
+            file.write_bytes(original)
+            file.chmod(0o755 if current[0] == b"100755" else 0o644)
+
+            def apply(*flags):
+                return subprocess.run(
+                    ["git", "apply", "--whitespace=nowarn", *flags],
+                    input=patch, cwd=temporary, capture_output=True,
+                ).returncode == 0
+
+            forward = apply("--check")
+            reverse = apply("--reverse", "--check")
+            if forward == reverse:
+                continue
+            if forward:
+                if not apply():
+                    continue
+                content = file.read_bytes()
+                if content == original or not apply("--reverse") or file.read_bytes() != original:
+                    continue
+                results[path] = "applied-exact"
+            else:
+                if not apply("--reverse") or not apply() or file.read_bytes() != original:
+                    continue
+                content = original
+                results[path] = "already-present-exact"
+            oid = subprocess.check_output(["git", "hash-object", "-w", "--stdin"],
+                                          input=content).decode().strip()
+            updates[path] = (current[0].decode(), oid)
+    return updates, results
+
+
+def update_tree(tree, updates):
+    from tempfile import TemporaryDirectory
+
+    if not updates:
+        return tree
+    with TemporaryDirectory() as temporary:
+        env = dict(os.environ, GIT_INDEX_FILE=str(Path(temporary) / "index"))
+        subprocess.run(["git", "read-tree", tree], env=env, check=True)
+        for path, (mode, oid) in updates.items():
+            subprocess.run(["git", "update-index", "--add", "--cacheinfo", f"{mode},{oid},{path}"],
+                           env=env, check=True)
+        return subprocess.check_output(["git", "write-tree"], env=env).decode().strip()
+
+
 merged_tree, conflicts = read_merge(report / "merge-tree.bin")
 merged_tree, resolved = resolve_reviewed(merged_tree)
 conflicts -= resolved
+exact_updates, exact_results = resolve_exact_patches(conflicts)
+conflicts -= exact_updates.keys()
+merged_tree = update_tree(merged_tree, exact_updates)
+(report / "exact-resolutions.tsv").write_text(
+    "".join(f"{path}\t{status}\n" for path, status in sorted(exact_results.items()))
+)
 candidate = report / "compile-merge-tree.bin"
 if conflicts and candidate.exists():
     merged_tree, excluded = read_merge(candidate)
     merged_tree, trial_resolved = resolve_reviewed(merged_tree, trial=True)
-    excluded -= trial_resolved
+    merged_tree = update_tree(merged_tree, exact_updates)
+    excluded -= trial_resolved | exact_updates.keys()
 else:
     excluded = set(conflicts)
 (report / "resolved-paths.txt").write_text("".join(path + "\n" for path in sorted(resolved)))
@@ -258,7 +340,7 @@ if conflicts:
     # can split Makefile conditionals, and the existing asm/bugs.h wrapper
     # may still reference the generic header.
     excluded.update({"Makefile", "include/asm-generic/bugs.h"})
-    if "scripts/Makefile.build" not in resolved:
+    if "scripts/Makefile.build" not in resolved and "scripts/Makefile.build" not in exact_updates:
         excluded.add("scripts/Makefile.build")
     excluded.update(path for path in paths if path.startswith(".elts/"))
 (report / "deferred-paths.txt").write_text("".join(path + "\n" for path in sorted(excluded)))
@@ -271,6 +353,7 @@ proof = {
     "source_merge_clean": not conflicts,
     "conflict_count": len(conflicts),
     "reviewed_resolutions": sorted(resolved),
+    "exact_resolutions": exact_results,
     "candidate_strategy": "vendor-overlap-hunks" if candidate.exists() else "strict",
     "deferred_paths": len(excluded),
     "candidate_paths": len(applied),

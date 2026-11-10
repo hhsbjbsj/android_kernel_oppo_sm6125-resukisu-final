@@ -338,6 +338,28 @@ def resolve_reviewed(tree, trial=False):
             mode = git("ls-tree", vendor, "--", path).split()[0].decode()
             index("update-index", "--add", "--cacheinfo", f"{mode},{oid},{path}")
             resolved.add(path)
+
+        # These vendor entry points are exported, so their text must remain
+        # resident after init memory is freed. Keep the module ABI and initcalls.
+        for path, symbol, qualifier in (
+            ("mm/vmalloc.c", b"create_vmalloc_debug", b"__weak "),
+            ("mm/slub.c", b"create_kmalloc_debug", b"__weak "),
+            ("drivers/regulator/rpm-smd-regulator.c", b"rpm_smd_regulator_driver_init", b""),
+            ("drivers/regulator/stub-regulator.c", b"regulator_stub_init", b""),
+        ):
+            content = git("show", f"{tree}:{path}")
+            export = b"EXPORT_SYMBOL(" + symbol + b");"
+            signature = qualifier + symbol + b"("
+            old = b"\nint __init " + signature
+            if content.count(old) != 1 or export not in content:
+                continue
+            content = content.replace(old, b"\nint " + signature, 1)
+            oid = subprocess.check_output(["git", "hash-object", "-w", "--stdin"],
+                                          input=content).decode().strip()
+            mode = git("ls-tree", tree, "--", path).split()[0].decode()
+            index("update-index", "--cacheinfo", f"{mode},{oid},{path}")
+            print(f"Keep exported vendor entry point resident: {symbol.decode()}", flush=True)
+
         if trial:
             path = "init/main.c"
             content = git("show", f"{tree}:{path}")

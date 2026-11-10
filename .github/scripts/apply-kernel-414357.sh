@@ -499,7 +499,10 @@ def resolve_reviewed(tree, trial=False):
             content = git("show", f"{tree}:{path}")
             legacy_chacha = b"#include <crypto/chacha20.h>\n"
             if legacy_chacha in content:
-                stage_trial(path, content.replace(legacy_chacha, b"#include <crypto/chacha.h>\n", 1))
+                # The RNG redesign must be applied as a unit. Retain the
+                # target's command-line seed and use the vendor ChaCha header.
+                upstream = git("show", f"{target}:{path}")
+                stage_trial(path, upstream.replace(legacy_chacha, b"#include <crypto/chacha.h>\n", 1))
 
             path = "include/crypto/chacha.h"
             content = git("show", f"{tree}:{path}")
@@ -640,6 +643,50 @@ def resolve_reviewed(tree, trial=False):
                     fixed = original.replace(anchor, anchor + declaration, 1)
                     stage_trial(path, content.replace(original, fixed, 1))
 
+
+            path = "include/linux/signal.h"
+            content = git("show", f"{tree}:{path}")
+            if content.count(b"switch (_NSIG_WORDS)") == 8:
+                # Clang diagnoses constant out-of-range subscripts even in
+                # the switch arms for a different signal-set width.
+                fixed = content
+                signal_bodies = {
+                    b"static inline int sigisemptyset(": (
+                        b"\tunsigned long bits = 0;\n\tint i;\n\n"
+                        b"\tfor (i = 0; i < _NSIG_WORDS; i++)\n\t\tbits |= set->sig[i];\n"
+                        b"\treturn bits == 0;\n"
+                    ),
+                    b"static inline int sigequalsets(": (
+                        b"\tint i;\n\n\tfor (i = 0; i < _NSIG_WORDS; i++)\n"
+                        b"\t\tif (set1->sig[i] != set2->sig[i])\n\t\t\treturn 0;\n\treturn 1;\n"
+                    ),
+                    b"static inline void sigemptyset(": b"\tmemset(set, 0, sizeof(*set));\n",
+                    b"static inline void sigfillset(": b"\tmemset(set, -1, sizeof(*set));\n",
+                    b"static inline void siginitset(": (
+                        b"\tint i;\n\n\tset->sig[0] = mask;\n"
+                        b"\tfor (i = 1; i < _NSIG_WORDS; i++)\n\t\tset->sig[i] = 0;\n"
+                    ),
+                    b"static inline void siginitsetinv(": (
+                        b"\tint i;\n\n\tset->sig[0] = ~mask;\n"
+                        b"\tfor (i = 1; i < _NSIG_WORDS; i++)\n\t\tset->sig[i] = ~0UL;\n"
+                    ),
+                }
+                for signature, body in signal_bodies.items():
+                    original = function(fixed, signature)
+                    header = original.split(b"\n{\n", 1)[0]
+                    fixed = fixed.replace(original, header + b"\n{\n" + body + b"}\n", 1)
+                for macro, following, operation in (
+                    (b"#define _SIG_SET_BINOP(name, op)", b"#define _sig_or", b"r->sig[i] = op(a->sig[i], b->sig[i]);"),
+                    (b"#define _SIG_SET_OP(name, op)", b"#define _sig_not", b"set->sig[i] = op(set->sig[i]);"),
+                ):
+                    begin = fixed.index(macro)
+                    end = fixed.index(following, begin)
+                    header = fixed[begin:end].splitlines()[:3]
+                    loop = (b"\tint i;", b"", b"\tfor (i = 0; i < _NSIG_WORDS; i++)", b"\t\t" + operation)
+                    macro_body = b"".join(line + b" \\\n" for line in loop)
+                    fixed = fixed[:begin] + b"\n".join(header) + b"\n" + macro_body + b"}\n\n" + fixed[end:]
+                stage_trial(path, fixed)
+
             path = "net/ipv4/route.c"
             content = git("show", f"{tree}:{path}")
             signature = b"u32 ip_idents_reserve("
@@ -655,8 +702,7 @@ def resolve_reviewed(tree, trial=False):
             if signature in content and exported in content:
                 begin = content.index(signature)
                 end = content.index(exported, begin)
-                original = content[begin:end]
-                if b"int ret = 1, port = snum;" not in original:
+                if b"\tif (!port) {" in function(content, signature):
                     donor = git("show", f"8aaa002bfb7ba1cac2c02dbb42ae0259ef2e47ba:{path}")
                     begin_donor = donor.index(signature)
                     end_donor = donor.index(exported, begin_donor)
@@ -862,8 +908,23 @@ def donor_target_matches(conflicts):
             continue
         common = lineage.get(path)
         if common and common[0] in {b"100644", b"100755"} and common[2] == latest[2]:
-            updates[path] = (current[0].decode(), common[2].decode())
-            results[path] = "same-CAF-input-and-matching-LineageOS-Floppy-357-port"
+            oid = common[2].decode()
+            status = "same-CAF-input-and-matching-LineageOS-Floppy-357-port"
+            if path == "include/linux/mod_devicetable.h":
+                # The OPPO audio jack uses vendor input switch event codes
+                # above the upstream range. Keep the existing module ABI.
+                prepared_header = git("cat-file", "blob", current[2].decode())
+                donor_header = git("cat-file", "blob", oid)
+                limit = rb"(?m)^#define INPUT_DEVICE_ID_SW_MAX[^\n]+"
+                vendor_limit = re.search(limit, prepared_header)
+                if vendor_limit is None or len(re.findall(limit, donor_header)) != 1:
+                    continue
+                donor_header = re.sub(limit, lambda _: vendor_limit.group(), donor_header)
+                oid = subprocess.check_output(["git", "hash-object", "-w", "--stdin"],
+                                              input=donor_header).decode().strip()
+                status = "matching-Note-8-port-with-OPPO-switch-event-range"
+            updates[path] = (current[0].decode(), oid)
+            results[path] = status
             continue
         # These USB donor differences were checked separately. Keep
         # LineageOS's ep0 dequeue and RNDIS response lock, omit Floppy's

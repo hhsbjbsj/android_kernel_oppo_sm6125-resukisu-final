@@ -542,8 +542,13 @@ def resolve_reviewed(tree, trial=False):
                 content = content.replace(b"fill_random_ptr_key(&random_ready);", b"fill_random_ptr_key(&random_ready, 0, NULL);", 1)
                 if b"#include <linux/notifier.h>\n" not in content:
                     source = b"#include <linux/random.h>\n"
+                    if source not in content:
+                        anchor = b"#include <linux/kernel.h>\n"
+                        if content.count(anchor) != 1:
+                            raise SystemExit("Could not locate the pointer hashing header insertion point")
+                        content = content.replace(anchor, anchor + source, 1)
                     if content.count(source) != 1:
-                        raise SystemExit("Could not locate the pointer hashing RNG header")
+                        raise SystemExit("Ambiguous pointer hashing RNG include")
                     content = content.replace(source, source + b"#include <linux/notifier.h>\n", 1)
                 stage_trial(path, content)
 

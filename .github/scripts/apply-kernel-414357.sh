@@ -373,6 +373,7 @@ def resolve_reviewed(tree, trial=False):
                                               input=content).decode().strip()
                 mode = git("ls-tree", tree, "--", path).split()[0].decode()
                 index("update-index", "--cacheinfo", f"{mode},{oid},{path}")
+                resolved.add(path)
                 print(f"Trial only: synchronized the upstream API in {path}", flush=True)
 
             path = "mm/maccess.c"
@@ -570,6 +571,169 @@ def resolve_reviewed(tree, trial=False):
                 if content.count(old_root) != 1:
                     raise SystemExit("Unexpected QCOM event timer queue initializers")
                 stage_trial(path, content.replace(old_root, b"\t.rb_root = RB_ROOT_CACHED,\n", 1))
+
+            def function(source, signature):
+                start = source.index(signature)
+                end = source.index(b"\n}\n", start) + len(b"\n}\n")
+                return source[start:end]
+
+            path = "mm/rmap.c"
+            content = git("show", f"{tree}:{path}")
+            signature = b"int anon_vma_clone_oppo("
+            if signature in content:
+                original = function(content, signature)
+                if b"anon_vma->degree < 2" in original:
+                    upstream = git("show", f"{target}:{path}")
+                    old = (b"if (!dst->anon_vma && anon_vma != src->anon_vma &&\n"
+                           b"\t\t\t\tanon_vma->degree < 2)")
+                    new = re.search(rb"if \(!dst->anon_vma &&\n[ \t]+anon_vma->num_children < 2 &&\n[ \t]+anon_vma->num_active_vmas == 0\)", upstream)
+                    if old in original and new and b"dst->anon_vma->degree++;" in original:
+                        fixed = original.replace(old, new.group(), 1).replace(
+                            b"dst->anon_vma->degree++;", b"dst->anon_vma->num_active_vmas++;", 1
+                        )
+                        stage_trial(path, content.replace(original, fixed, 1))
+
+            path = "drivers/android/binder_alloc.h"
+            content = git("show", f"{tree}:{path}")
+            declaration = b"extern void binder_alloc_shrinker_exit(void);\n"
+            if declaration not in content:
+                anchor = b"extern void binder_alloc_vma_close(struct binder_alloc *alloc);\n"
+                if content.count(anchor) == 1:
+                    stage_trial(path, content.replace(anchor, declaration + anchor, 1))
+
+            path = "drivers/android/binder_alloc.c"
+            content = git("show", f"{tree}:{path}")
+            signature = b"void binder_alloc_shrinker_exit(void)\n"
+            if signature not in content and b"binder_alloc_lru" in content and b"register_shrinker(" in content:
+                upstream = git("show", f"{target}:{path}")
+                stage_trial(path, content.rstrip() + b"\n\n" + function(upstream, signature))
+
+            path = "drivers/clk/clk.c"
+            content = git("show", f"{tree}:{path}")
+            upstream = git("show", f"{target}:{path}")
+            table = re.search(rb"static struct hlist_head \*all_lists\[\] = \{\n.*?\n\};\n", upstream, re.S).group()
+            anchor = b"static HLIST_HEAD(clk_orphan_list);\n"
+            if b"for (lists = all_lists; *lists; lists++)" in content and content.count(anchor) == 1:
+                if table in content:
+                    content = content.replace(table, b"", 1)
+                if b"all_lists[] =" not in content:
+                    stage_trial(path, content.replace(anchor, anchor + b"\n" + table, 1))
+
+            path = "include/net/sock.h"
+            content = git("show", f"{tree}:{path}")
+            upstream = git("show", f"{target}:{path}")
+            define = re.search(rb"(?m)^#define SKB_FRAG_PAGE_ORDER[^\n]+\n", upstream).group()
+            guard = b"#endif\t/* _SOCK_H */"
+            if b"#define SKB_FRAG_PAGE_ORDER" not in content and content.count(guard) == 1:
+                stage_trial(path, content.replace(guard, define + b"\n" + guard, 1))
+
+            for path, signature in (
+                ("net/ipv4/af_inet.c", b"int inet_dgram_connect("),
+                ("net/ipv6/af_inet6.c", b"int inet6_bind("),
+            ):
+                content = git("show", f"{tree}:{path}")
+                original = function(content, signature)
+                anchor = b"\tstruct sock *sk = sock->sk;\n"
+                declaration = b"\tconst struct proto *prot;\n"
+                if (b"prot = READ_ONCE(sk->sk_prot);" in original and declaration not in original
+                        and original.count(anchor) == 1):
+                    fixed = original.replace(anchor, anchor + declaration, 1)
+                    stage_trial(path, content.replace(original, fixed, 1))
+
+            path = "net/ipv4/route.c"
+            content = git("show", f"{tree}:{path}")
+            signature = b"u32 ip_idents_reserve("
+            original = function(content, signature)
+            if b"% IP_IDENTS_SZ" in original and b"&ip_idents_mask," in content:
+                upstream = git("show", f"{target}:{path}")
+                stage_trial(path, content.replace(original, function(upstream, signature), 1))
+
+            path = "net/ipv4/inet_connection_sock.c"
+            content = git("show", f"{tree}:{path}")
+            signature = b"void inet_csk_update_fastreuse("
+            exported = b"EXPORT_SYMBOL_GPL(inet_csk_get_port);"
+            if signature in content and exported in content:
+                begin = content.index(signature)
+                end = content.index(exported, begin)
+                original = content[begin:end]
+                if b"int ret = 1, port = snum;" not in original:
+                    donor = git("show", f"8aaa002bfb7ba1cac2c02dbb42ae0259ef2e47ba:{path}")
+                    begin_donor = donor.index(signature)
+                    end_donor = donor.index(exported, begin_donor)
+                    fixed = donor[begin_donor:end_donor]
+                    # LineageOS keeps the CAF reserved-port check in this section.
+                    if b"!sysctl_reserved_port_bind" in fixed:
+                        stage_trial(path, content[:begin] + fixed + content[end:])
+
+            path = "net/ipv4/tcp_output.c"
+            content = git("show", f"{tree}:{path}")
+            original = function(content, b"int __tcp_retransmit_skb(")
+            anchor = b"\tint diff, len, err;\n"
+            declaration = b"\tint avail_wnd;\n"
+            if (b"avail_wnd = tcp_wnd_end(tp)" in original and declaration not in original
+                    and original.count(anchor) == 1):
+                fixed = original.replace(anchor, anchor + declaration, 1)
+                stage_trial(path, content.replace(original, fixed, 1))
+
+            path = "include/net/netfilter/nf_queue.h"
+            content = git("show", f"{tree}:{path}")
+            old = b"void nf_queue_entry_get_refs(struct nf_queue_entry *entry);"
+            new = b"bool nf_queue_entry_get_refs(struct nf_queue_entry *entry);"
+            if content.count(old) == 1 and new in git("show", f"{target}:{path}"):
+                stage_trial(path, content.replace(old, new, 1))
+
+            path = "include/net/pkt_sched.h"
+            content = git("show", f"{tree}:{path}")
+            upstream = git("show", f"{target}:{path}")
+            declaration = b"extern const struct nla_policy rtm_tca_policy[TCA_MAX + 1];\n"
+            anchor = b"/* Calculate maximal size of packet seen by hard_start_xmit"
+            if declaration in upstream and declaration not in content and content.count(anchor) == 1:
+                stage_trial(path, content.replace(anchor, declaration + b"\n" + anchor, 1))
+
+            path = "net/xfrm/xfrm_policy.c"
+            content = git("show", f"{tree}:{path}")
+            signature = b"bool xfrm_policy_mark_match("
+            original = function(content, signature)
+            if b"const struct xfrm_mark *mark" in original and b"policy->priority" in original:
+                # Retain the OPPO wildcard/priority matching rule with its
+                # original policy argument and update the single caller.
+                prepared = git("show", f"{vendor}:{path}")
+                fixed = function(prepared, signature)
+                call = b"xfrm_policy_mark_match(&policy->mark, pol)"
+                if b"policy->priority" in fixed and content.count(call) == 1:
+                    content = content.replace(original, fixed, 1)
+                    stage_trial(path, content.replace(call, b"xfrm_policy_mark_match(policy, pol)", 1))
+
+            path = "drivers/usb/dwc3/gadget.c"
+            content = git("show", f"{tree}:{path}")
+            upstream = git("show", f"{target}:{path}")
+            signature = b"static u32 dwc3_calc_trbs_left(struct dwc3_ep *dep)\n"
+            trbs = function(content, signature)
+            fixed = content
+            if b"tmp = dwc3_ep_prev_trb" in trbs and not re.search(rb"\*tmp;", trbs):
+                fixed = fixed.replace(trbs, function(upstream, signature), 1)
+            duplicate = (
+                b"\tcase DWC3_LINK_STATE_U1:\n"
+                b"\tcase DWC3_LINK_STATE_RESUME:\n\t\tbreak;\n"
+                b"\tcase DWC3_LINK_STATE_U1:\n"
+            )
+            if fixed.count(duplicate) == 1:
+                fixed = fixed.replace(duplicate, duplicate.split(b"\n", 1)[1], 1)
+            if fixed != content:
+                stage_trial(path, fixed)
+
+            path = "drivers/usb/host/xhci.h"
+            content = git("show", f"{tree}:{path}")
+            implementation = git("show", f"{tree}:drivers/usb/host/xhci.c")
+            old = b"int xhci_handshake(void __iomem *ptr, u32 mask, u32 done, int usec);"
+            new = b"int xhci_handshake(void __iomem *ptr, u32 mask, u32 done, u64 timeout_us)"
+            if content.count(old) == 1 and new + b"\n{" in implementation:
+                stage_trial(path, content.replace(old, new + b";", 1))
+
+            path = "drivers/usb/gadget/function/rndis.c"
+            content = git("show", f"{tree}:{path}")
+            if b"spin_lock_init(&params->lock);" in content:
+                stage_trial(path, content.replace(b"&params->lock", b"&params->resp_lock"))
         return index("write-tree").decode().strip(), resolved
 
 # A three-way merge may report an overlap even if the complete upstream
@@ -665,9 +829,20 @@ def donor_target_matches(conflicts):
     lineage = blobs("8aaa002bfb7ba1cac2c02dbb42ae0259ef2e47ba")
     upstream = blobs(os.environ["OPENELA_TARGET"])
     prepared = blobs(vendor)
+
+    # These matching donor files have interfaces newer than the OPPO tree.
+    # Retain the OpenELA three-way merge so paired OPPO callers stay compatible.
+    incompatible_donor_paths = {
+        "drivers/android/binder_alloc.h",
+        "drivers/char/random.c",
+        "include/uapi/linux/input-event-codes.h",
+        "net/ipv4/route.c",
+        "net/xfrm/xfrm_policy.c",
+        "net/xfrm/xfrm_user.c",
+    }
     updates = {}
     results = {}
-    for path in sorted(conflicts):
+    for path in sorted(conflicts - incompatible_donor_paths):
         current, latest, target_blob = (table.get(path) for table in (prepared, donor, upstream))
         if not current or not latest or not target_blob:
             continue

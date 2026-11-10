@@ -44,7 +44,7 @@ lineage=8aaa002bfb7ba1cac2c02dbb42ae0259ef2e47ba
 timeout 300 git fetch --no-tags --depth=1 \
     https://github.com/LineageOS/android_kernel_xiaomi_sm6125.git "$lineage"
 test "$(git rev-parse 'FETCH_HEAD^{commit}')" = "$lineage"
-git show "$lineage:Makefile" | head -n 6 > "$report/lineage-version.txt"
+git show "$lineage:Makefile" | sed -n '1,6p' > "$report/lineage-version.txt"
 grep -Fxq 'SUBLEVEL = 357' "$report/lineage-version.txt"
 git show "$target:Makefile" > "$report/upstream-makefile.txt"
 grep -Fxq 'SUBLEVEL = 357' "$report/upstream-makefile.txt"

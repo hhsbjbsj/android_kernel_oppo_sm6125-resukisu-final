@@ -117,6 +117,11 @@ def resolve_reviewed(tree, trial=False):
             "ce8c57d70e5fc74428dd558032868b94b47fe122",
             None,
         ),
+        "fs/file_table.c": (
+            "c038d33c4c5bd5777b4fbb2ab4551814530e9705",
+            "4ceb4982ffea1374a6f1adc473f940b54ad7b1c8",
+            None,
+        ),
         "include/linux/clk.h": (
             "d53415dc58670876ed153456247cb95a9484d042",
             "136a64bddcd93d633db6c699eb01aa0ff5b43a3a",
@@ -213,6 +218,26 @@ def resolve_reviewed(tree, trial=False):
                     continue
                 for old, new in edits:
                     content = content.replace(old, new, 1)
+            elif path == "fs/file_table.c":
+                if actual_oid != vendor_oid:
+                    print(f"Unrecognized file reference handling, leaving unresolved: {path}: {actual_oid}", flush=True)
+                    continue
+                first = b"void fput(struct file *file)\n"
+                new_first = b"void fput_many(struct file *file, unsigned int refs)\n"
+                last = b"/*\n * synchronous analog of fput();"
+                old_start = content.index(first)
+                old_end = content.index(last, old_start)
+                new_start = upstream.index(new_first)
+                new_end = upstream.index(last, new_start)
+                old_block = content[old_start:old_end]
+                new_block = upstream[new_start:new_end]
+                expected = old_block.replace(first, new_first, 1).replace(
+                    b"atomic_long_dec_and_test(&file->f_count)",
+                    b"atomic_long_sub_and_test(refs, &file->f_count)", 1,
+                ) + first + b"{\n\tfput_many(file, 1);\n}\n\n"
+                if expected != new_block:
+                    raise SystemExit("Unexpected semantic difference in the OpenELA fput change")
+                content = content[:old_start] + new_block + content[old_end:]
             elif path == "include/linux/clk.h":
                 # Floppy starts from this same header. Import the three OpenELA
                 # API blocks, retaining OPPO's existing CONFIG_OF condition.
@@ -269,6 +294,59 @@ def resolve_reviewed(tree, trial=False):
                 mode = git("ls-tree", tree, "--", path).split()[0].decode()
                 index("update-index", "--cacheinfo", f"{mode},{oid},{path}")
                 print("Trial only: imported the RNG hotplug declarations in kernel/cpu.c", flush=True)
+
+            def stage_trial(path, content):
+                oid = subprocess.check_output(["git", "hash-object", "-w", "--stdin"],
+                                              input=content).decode().strip()
+                mode = git("ls-tree", tree, "--", path).split()[0].decode()
+                index("update-index", "--cacheinfo", f"{mode},{oid},{path}")
+                print(f"Trial only: synchronized the upstream API in {path}", flush=True)
+
+            path = "mm/maccess.c"
+            content = git("show", f"{tree}:{path}")
+            first = b"long __weak probe_user_read("
+            last = b"EXPORT_SYMBOL_GPL(probe_user_read);"
+            blocks = list(re.finditer(re.escape(first) + rb".*?" + re.escape(last), content, re.S))
+            if len(blocks) == 2:
+                upstream = git("show", f"{target}:{path}")
+                begin = upstream.index(first)
+                end = upstream.index(last, begin) + len(last)
+                wanted = upstream[begin:end]
+                # Retain a single OpenELA implementation with its user range
+                # validation. Refuse to edit unrelated blocks of the file.
+                if not any(match.group() == wanted for match in blocks):
+                    raise SystemExit("Neither duplicate probe_user_read matches OpenELA")
+                seen = False
+
+                def deduplicate(match):
+                    nonlocal seen
+                    if not seen and match.group() == wanted:
+                        seen = True
+                        return wanted
+                    return b""
+
+                content = re.sub(re.escape(first) + rb".*?" + re.escape(last), deduplicate, content, flags=re.S)
+                stage_trial(path, content)
+
+            path = "kernel/events/core.c"
+            content = git("show", f"{tree}:{path}")
+            obsolete = b"goto fail_free_name;"
+            cleanup = b"fail:\n\tkfree(filename);\n\tfree_filters_list(filters);"
+            if obsolete in content and b"\nfail_free_name:\n" not in content:
+                if content.count(cleanup) != 1 or content.count(obsolete) > 2:
+                    raise SystemExit("Could not verify the OpenELA perf filter cleanup path")
+                stage_trial(path, content.replace(obsolete, b"goto fail;"))
+
+            path = "kernel/bpf/hashtab.c"
+            content = git("show", f"{tree}:{path}")
+            obsolete = b"map->ops->map_fd_put_ptr(ptr);"
+            if obsolete in content:
+                if content.count(obsolete) != 1:
+                    raise SystemExit("Unexpected number of legacy BPF hashtab callback calls")
+                at = content.index(obsolete)
+                if b"fd_htab_map_get_ptr(map, l)" not in content[max(0, at - 180):at]:
+                    raise SystemExit("Could not verify the BPF hashtab cleanup callback context")
+                stage_trial(path, content.replace(obsolete, b"map->ops->map_fd_put_ptr(map, ptr, true);", 1))
         return index("write-tree").decode().strip(), resolved
 
 # A three-way merge may report an overlap even if the complete upstream

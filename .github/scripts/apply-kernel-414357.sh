@@ -37,6 +37,15 @@ timeout 300 git fetch --no-tags --depth=1 --filter=blob:none \
     1a096135285e10af5823e83460c6755af3ad37b5 \
     0cb4cc5d83b2c1a76a08bac48ee33d88535898bc \
     86c833a1bbf4e8676cbed693326c01c6a707eb84
+# GitHub's pinned ancestry comparison confirms that the LineageOS donor
+# descends from the same OpenELA target. Its pure common-source ports can be
+# reused when both current donors agree and OPPO starts from the same CAF blob.
+lineage=8aaa002bfb7ba1cac2c02dbb42ae0259ef2e47ba
+timeout 300 git fetch --no-tags --depth=1 \
+    https://github.com/LineageOS/android_kernel_xiaomi_sm6125.git "$lineage"
+test "$(git rev-parse 'FETCH_HEAD^{commit}')" = "$lineage"
+git show "$lineage:Makefile" | head -n 6 > "$report/lineage-version.txt"
+grep -Fxq 'SUBLEVEL = 357' "$report/lineage-version.txt"
 git show "$target:Makefile" > "$report/upstream-makefile.txt"
 grep -Fxq 'SUBLEVEL = 357' "$report/upstream-makefile.txt"
 
@@ -648,6 +657,7 @@ def donor_target_matches(conflicts):
         blobs("0cb4cc5d83b2c1a76a08bac48ee33d88535898bc"),
     ]
     donor = blobs("86c833a1bbf4e8676cbed693326c01c6a707eb84")
+    lineage = blobs("8aaa002bfb7ba1cac2c02dbb42ae0259ef2e47ba")
     upstream = blobs(os.environ["OPENELA_TARGET"])
     prepared = blobs(vendor)
     updates = {}
@@ -669,6 +679,11 @@ def donor_target_matches(conflicts):
         if latest[2] == target_blob[2]:
             updates[path] = (current[0].decode(), target_blob[2].decode())
             results[path] = "same-donor-input-and-identical-openela-output"
+            continue
+        common = lineage.get(path)
+        if common and common[0] in {b"100644", b"100755"} and common[2] == latest[2]:
+            updates[path] = (current[0].decode(), common[2].decode())
+            results[path] = "same-CAF-input-and-matching-LineageOS-Floppy-357-port"
             continue
 
         # When Floppy retains local CAF edits, prove that its final file is

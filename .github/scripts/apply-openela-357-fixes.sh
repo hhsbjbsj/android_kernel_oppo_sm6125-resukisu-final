@@ -32,11 +32,27 @@ apply_group() {
         git apply "$patch" >> "$report/$name.log" 2>&1
         git --literal-pathspecs add -A -- "$@"
         status=applied
-    elif git apply --3way --check "$patch" >> "$report/$name.log" 2>&1; then
-        git apply --3way "$patch" >> "$report/$name.log" 2>&1
-        status=applied-three-way
     else
+        # --3way --check can succeed even if the merge itself conflicts.
+        # Try the merge on a scratch index to keep all files in the group
+        # together and avoid leaving conflict stages in the build checkout.
+        local scratch
+        local resolved="$report/$name-resolved.patch"
+        scratch=$(mktemp -d)
+        GIT_INDEX_FILE="$scratch/index" git read-tree HEAD
         status=deferred-conflict
+        if GIT_INDEX_FILE="$scratch/index" git apply --cached --3way "$patch" >> "$report/$name.log" 2>&1; then
+            GIT_INDEX_FILE="$scratch/index" git diff --cached --binary HEAD -- "$@" > "$resolved"
+            if [[ ! -s "$resolved" ]]; then
+                status=already-present
+            elif git apply --check "$resolved" >> "$report/$name.log" 2>&1; then
+                git apply "$resolved" >> "$report/$name.log" 2>&1
+                git --literal-pathspecs add -A -- "$@"
+                status=applied-three-way
+            fi
+        fi
+        rm -f -- "$scratch/index"
+        rmdir -- "$scratch"
     fi
     printf '%s\t%s\n' "$name" "$status" | tee -a "$report/fixes.tsv"
     if [[ "$status" == deferred-conflict ]]; then

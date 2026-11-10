@@ -13,6 +13,7 @@ on:
     paths:
       - '.github/workflows/pchm30-a16-run26-resukisu-susfs230.yml'
       - '.github/scripts/apply-kernel-414357.sh'
+      - '.github/scripts/apply-openela-357-fixes.sh'
 
 env:
   TOOLCHAIN_RELEASE_TAG: pchm30-build-environment-20260810
@@ -46,7 +47,13 @@ env:
 
 jobs:
   build:
-    name: Compile and verify PCHM30 OpenELA candidate
+    name: Compile PCHM30 OpenELA ${{ matrix.scope }}
+    strategy:
+      fail-fast: false
+      matrix:
+        scope: [full, point-release]
+    env:
+      OPENELA_SCOPE: ${{ matrix.scope }}
     runs-on: ubuntu-22.04
     timeout-minutes: 360
     permissions:
@@ -98,7 +105,11 @@ jobs:
           git show "$GITHUB_SHA:.github/scripts/apply-binder-los24-freeze.sh" > "$GITHUB_WORKSPACE/apply-binder-los24-freeze.sh"
           git show "$GITHUB_SHA:.github/scripts/apply-cgroup-v2-freezer.sh" > "$GITHUB_WORKSPACE/apply-cgroup-v2-freezer.sh"
           git show "$GITHUB_SHA:.github/scripts/apply-kernel-414186.sh" > "$GITHUB_WORKSPACE/apply-kernel-414186.sh"
-          git show "$GITHUB_SHA:.github/scripts/apply-kernel-414357.sh" > "$GITHUB_WORKSPACE/apply-kernel-414357.sh"
+          openela_script=apply-kernel-414357.sh
+          if [ "$OPENELA_SCOPE" = point-release ]; then
+            openela_script=apply-openela-357-fixes.sh
+          fi
+          git show "$GITHUB_SHA:.github/scripts/$openela_script" > "$GITHUB_WORKSPACE/apply-kernel-414357.sh"
           git show "$GITHUB_SHA:.github/patches/patch-4.14.180-to-186.patch" > "$GITHUB_WORKSPACE/patch-4.14.180-to-186.patch"
           git show "$RUN17_BTF_FIX_COMMIT:.github/scripts/run17-btf-kprobe-scene-fix.sh" > "$GITHUB_WORKSPACE/run17-btf-kprobe-scene-fix.sh"
           sed -i 's/\r$//' "$GITHUB_WORKSPACE"/*.sh || true
@@ -252,14 +263,21 @@ jobs:
           grep -Fq 'hook_guard=CONFIG_KSU' "$GITHUB_WORKSPACE/run29-manager-handshake-proof.txt"
           grep -Fq 'custom_manager_size=0x039a' "$GITHUB_WORKSPACE/run29-manager-handshake-proof.txt"
           grep -Fq 'custom_manager_hash=366aa724f4ed84d589fb47077cee4dc6aac45c37c4a50a6e1eaed4446bb3bc03' "$GITHUB_WORKSPACE/run29-manager-handshake-proof.txt"
-          test -s "$GITHUB_WORKSPACE/openela-report/merge-summary.json"
-          test -s "$GITHUB_WORKSPACE/openela-report/applied-stat.txt"
-          if [ -s "$GITHUB_WORKSPACE/openela-report/conflicts.txt" ]; then
+          if [ "$OPENELA_SCOPE" = point-release ]; then
+            test -s "$GITHUB_WORKSPACE/openela-report/point-release.txt"
+            test -s "$GITHUB_WORKSPACE/openela-report/fixes.tsv"
             test ! -e "$GITHUB_WORKSPACE/kernel-version-proof.txt"
             ! grep -Fxq 'SUBLEVEL = 357' Makefile
           else
-            grep -Fxq 'conflicts=0' "$GITHUB_WORKSPACE/kernel-version-proof.txt"
-            grep -Fxq 'SUBLEVEL = 357' Makefile
+            test -s "$GITHUB_WORKSPACE/openela-report/merge-summary.json"
+            test -s "$GITHUB_WORKSPACE/openela-report/applied-stat.txt"
+            if [ -s "$GITHUB_WORKSPACE/openela-report/conflicts.txt" ]; then
+              test ! -e "$GITHUB_WORKSPACE/kernel-version-proof.txt"
+              ! grep -Fxq 'SUBLEVEL = 357' Makefile
+            else
+              grep -Fxq 'conflicts=0' "$GITHUB_WORKSPACE/kernel-version-proof.txt"
+              grep -Fxq 'SUBLEVEL = 357' Makefile
+            fi
           fi
           test -s "$GITHUB_WORKSPACE/binder-419-proof.txt"
           grep -Fq 'wake_up_pollfree=applied' "$GITHUB_WORKSPACE/binder-419-proof.txt"
@@ -295,6 +313,10 @@ jobs:
           cp "$OUT_DIR/.config" "$report/kernel.config"
           cp "$OUT_DIR/include/config/kernel.release" "$report/kernel.release"
           sha256sum "$OUT_DIR/arch/arm64/boot/Image" > "$report/image.sha256"
+          if [ "$OPENELA_SCOPE" = point-release ]; then
+            cat "$report/fixes.tsv"
+            exit 0
+          fi
           if [ -s "$report/conflicts.txt" ]; then
             echo "::error::The candidate compiled but OpenELA conflicts remain. See the conflict report."
             exit 1
@@ -308,7 +330,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: PCHM30-OpenELA-integration-${{ github.run_number }}
+          name: PCHM30-OpenELA-${{ matrix.scope }}-${{ github.run_number }}
           path: |
             openela-report/
             run26-build.log

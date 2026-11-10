@@ -281,6 +281,80 @@ jobs:
           for path, *_ in rebased:
               print(path)
           PY
+      - name: Verify complete OpenELA patches in the compiled source candidate
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          base=ab9dfda232481dcfaf549ce774004d116fc80c13
+          target=1e6347375d088ecc896aabb067131d0f9e3c0575
+          timeout 300 git fetch --no-tags --depth=1 https://github.com/gregkh/linux.git refs/tags/v4.14.180
+          test "$(git rev-parse 'FETCH_HEAD^{commit}')" = "$base"
+          timeout 300 git fetch --no-tags --depth=1 https://github.com/openela/kernel-lts.git refs/tags/v4.14.357-openela
+          test "$(git rev-parse 'FETCH_HEAD^{commit}')" = "$target"
+          python3 - "$RUNNER_TEMP" "$base" "$target" <<'PY'
+          import pathlib
+          import re
+          import subprocess
+          import sys
+          from tempfile import TemporaryDirectory
+
+          root = pathlib.Path(sys.argv[1])
+          base, target = sys.argv[2:]
+          evidence, = (root / "prepared-openela").rglob("candidate.patch")
+          conflicts = set((evidence.parent / "conflicts.txt").read_bytes().splitlines())
+          chunks = {}
+          for chunk in re.split(rb"(?m)(?=^diff --git )", evidence.read_bytes()):
+              match = re.match(rb"diff --git a/([^\n]+) b/\1\nindex ([0-9a-f]+)\.\.([0-9a-f]+) (100644|100755)\n", chunk)
+              if match and match[1] in conflicts:
+                  chunks[match[1]] = (chunk, match[2], match[3], match[4])
+          verified = []
+          with TemporaryDirectory() as temporary:
+              for path, (candidate_patch, before, after, mode) in sorted(chunks.items()):
+                  if b"GIT binary patch" in candidate_patch:
+                      continue
+                  path_text = path.decode()
+                  staged = subprocess.run(["git", "rev-parse", "--verify", f"HEAD:{path_text}"], capture_output=True)
+                  if staged.returncode or not staged.stdout.startswith(before):
+                      continue
+                  original = subprocess.check_output(["git", "show", f"HEAD:{path_text}"])
+                  if b"\0" in original:
+                      continue
+                  upstream_patch = subprocess.check_output([
+                      "git", "--literal-pathspecs", "diff", "--no-renames", "--no-ext-diff",
+                      "--no-textconv", base, target, "--", path_text,
+                  ])
+                  if not upstream_patch or b"\nBinary files " in upstream_patch:
+                      continue
+                  file = pathlib.Path(temporary) / path_text
+                  file.parent.mkdir(parents=True, exist_ok=True)
+                  file.write_bytes(original)
+                  file.chmod(0o755 if mode == b"100755" else 0o644)
+
+                  def apply(patch, *options):
+                      return subprocess.run(
+                          ["git", "apply", "--whitespace=nowarn", *options],
+                          input=patch, cwd=temporary, capture_output=True,
+                      ).returncode == 0
+
+                  if not apply(candidate_patch):
+                      continue
+                  content = file.read_bytes()
+                  oid = subprocess.check_output(["git", "hash-object", "--stdin"], input=content).strip()
+                  if not oid.startswith(after):
+                      raise SystemExit(f"Candidate patch did not reproduce the recorded output for {path_text}")
+                  if not apply(upstream_patch, "--reverse") or not apply(upstream_patch):
+                      continue
+                  if file.read_bytes() != content:
+                      continue
+                  verified.append((path_text, staged.stdout.decode().strip(), oid.decode()))
+
+          (root / "openela-verified-candidate-hunks.tsv").write_text(
+              "path\tprepared_oppo\tcandidate\n" + "".join("\t".join(row) + "\n" for row in verified)
+          )
+          print(f"Paths with the full OpenELA patch present in the build candidate: {len(verified)}")
+          for path, *_ in verified:
+              print(path)
+          PY
       - name: Upload exact donor input comparison
         uses: actions/upload-artifact@v4
         with:
@@ -288,3 +362,4 @@ jobs:
           path: |
             ${{ runner.temp }}/openela-donor-census.tsv
             ${{ runner.temp }}/openela-donor-rebases.tsv
+            ${{ runner.temp }}/openela-verified-candidate-hunks.tsv

@@ -15,6 +15,10 @@ on:
       - '.github/scripts/apply-kernel-414357.sh'
       - '.github/scripts/apply-openela-357-fixes.sh'
 
+concurrency:
+  group: pchm30-openela-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
   TOOLCHAIN_RELEASE_TAG: pchm30-build-environment-20260810
   TOOLCHAIN_ROOT: /opt/pchm30-toolchains
@@ -58,7 +62,30 @@ jobs:
     timeout-minutes: 360
     permissions:
       contents: read
+      actions: write
     steps:
+      - name: Stop superseded integration builds
+        if: github.event_name == 'push' && matrix.scope == 'full'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const response = await github.rest.actions.listWorkflowRuns({
+              owner, repo,
+              workflow_id: 'pchm30-a16-run26-resukisu-susfs230.yml',
+              branch: 'pchm30-openela-414357-integration',
+              per_page: 100
+            });
+            for (const run of response.data.workflow_runs) {
+              if (run.id === context.runId || run.run_number >= context.runNumber) continue;
+              if (!['queued', 'in_progress', 'waiting', 'pending'].includes(run.status)) continue;
+              try {
+                await github.rest.actions.cancelWorkflowRun({ owner, repo, run_id: run.id });
+                core.info('Stopped superseded integration run ' + run.run_number);
+              } catch (error) {
+                if (![409, 422].includes(error.status)) throw error;
+              }
+            }
       - name: Checkout exact successful A16 rootless baseline
         uses: actions/checkout@v4
         with:
@@ -77,6 +104,7 @@ jobs:
           ccache --version
 
       - name: Setup ccache
+        id: ccache
         uses: actions/cache@v4
         with:
           path: ~/.ccache
@@ -348,6 +376,13 @@ jobs:
           git fetch --no-tags --depth=1 origin "$GITHUB_SHA"
           git show "$GITHUB_SHA:.github/scripts/package-pchm30-run17-ak3.sh" > "$RUNNER_TEMP/package-ak3.sh"
           bash "$RUNNER_TEMP/package-ak3.sh" "$OUT_DIR/arch/arm64/boot/Image" "$report/PCHM30-OpenELA-414357-AK3.zip"
+
+      - name: Save completed compiler work after failed trial builds
+        if: always() && matrix.scope == 'full' && steps.ccache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ~/.ccache
+          key: kernel-ccache-${{ runner.os }}-${{ github.workflow }}-${{ github.ref }}-${{ github.sha }}
 
       - name: Upload OpenELA source and build evidence
         if: always()

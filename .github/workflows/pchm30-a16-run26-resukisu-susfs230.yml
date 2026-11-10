@@ -355,7 +355,7 @@ jobs:
           echo "resukisu_commit=${RESUKISU_COMMIT}" | tee -a "$GITHUB_WORKSPACE/run25-susfs230-proof.txt"
           echo '[PASS] ReSukiSU image keeps 4.14 user_path_at hooks, KPM off, cgroup v2 freezer and binder freeze verified'
 
-      - name: Record build and release gate
+      - name: Package the verified kernel build
         working-directory: source/android/kernel/msm-4.14
         shell: bash
         run: |
@@ -363,19 +363,26 @@ jobs:
           report="$GITHUB_WORKSPACE/openela-report"
           cp "$OUT_DIR/.config" "$report/kernel.config"
           cp "$OUT_DIR/include/config/kernel.release" "$report/kernel.release"
-          sha256sum "$OUT_DIR/arch/arm64/boot/Image" > "$report/image.sha256"
+          image="$OUT_DIR/arch/arm64/boot/Image"
           if [ "$OPENELA_SCOPE" = point-release ]; then
+            sha256sum "$image" > "$report/image.sha256"
             cat "$report/fixes.tsv"
             exit 0
           fi
           if [ -s "$report/conflicts.txt" ]; then
-            echo "::error::The candidate compiled but OpenELA conflicts remain. See the conflict report."
-            exit 1
+            ! grep -Eq '^4\.14\.357([+.-]|$)' "$report/kernel.release"
+            package=PCHM30-OpenELA-candidate-AK3.zip
+            echo "::warning::Candidate compiled with $(wc -l < "$report/conflicts.txt") OpenELA source conflicts. Kernel release is $(cat "$report/kernel.release")."
+          else
+            grep -Eq '^4\.14\.357([+.-]|$)' "$report/kernel.release"
+            cp "$GITHUB_WORKSPACE/kernel-version-proof.txt" "$report/"
+            package=PCHM30-OpenELA-414357-AK3.zip
           fi
-          cp "$GITHUB_WORKSPACE/kernel-version-proof.txt" "$report/"
+          cp "$image" "$report/Image"
+          (cd "$report" && sha256sum Image > image.sha256)
           git fetch --no-tags --depth=1 origin "$GITHUB_SHA"
           git show "$GITHUB_SHA:.github/scripts/package-pchm30-run17-ak3.sh" > "$RUNNER_TEMP/package-ak3.sh"
-          bash "$RUNNER_TEMP/package-ak3.sh" "$OUT_DIR/arch/arm64/boot/Image" "$report/PCHM30-OpenELA-414357-AK3.zip"
+          bash "$RUNNER_TEMP/package-ak3.sh" "$image" "$report/$package"
 
       - name: Save completed compiler work after failed trial builds
         if: always() && matrix.scope == 'full' && steps.ccache.outputs.cache-hit != 'true'

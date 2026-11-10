@@ -586,8 +586,6 @@ def donor_target_matches(conflicts):
             continue
         if any(item[0] not in {b"100644", b"100755"} for item in (current, latest, target_blob)):
             continue
-        if latest[2] != target_blob[2]:
-            continue
         matches = [
             old for old in old_inputs
             if old.get(path) and old[path][2] == current[2]
@@ -596,8 +594,44 @@ def donor_target_matches(conflicts):
             continue
         if "/boot/dts/" in path or "/configs/" in path or path.startswith(".github/"):
             continue
-        updates[path] = (current[0].decode(), target_blob[2].decode())
-        results[path] = "same-donor-input-and-identical-openela-output"
+        if latest[2] == target_blob[2]:
+            updates[path] = (current[0].decode(), target_blob[2].decode())
+            results[path] = "same-donor-input-and-identical-openela-output"
+            continue
+
+        # When Floppy retains local CAF edits, prove that its final file is
+        # exactly OpenELA plus the complete original OPPO delta. A failed
+        # hunk, binary delta or different output leaves the conflict open.
+        from tempfile import TemporaryDirectory
+
+        original_base = git("--literal-pathspecs", "ls-tree", "-z", os.environ["OPENELA_BASE"], "--", path)
+        if not original_base or original_base.split()[0] not in {b"100644", b"100755"}:
+            continue
+        delta = git("--literal-pathspecs", "diff", "--no-renames", "--no-ext-diff", "--no-textconv",
+                    os.environ["OPENELA_BASE"], vendor, "--", path)
+        original_target = git("cat-file", "blob", target_blob[2].decode())
+        if not delta or b"\0" in original_target or b"\nBinary files " in delta:
+            continue
+        with TemporaryDirectory() as temporary:
+            file = Path(temporary) / path
+            file.parent.mkdir(parents=True, exist_ok=True)
+            file.write_bytes(original_target)
+            file.chmod(0o755 if target_blob[0] == b"100755" else 0o644)
+
+            def apply(*flags):
+                return subprocess.run(
+                    ["git", "apply", "--whitespace=nowarn", *flags],
+                    input=delta, cwd=temporary, capture_output=True,
+                ).returncode == 0
+
+            if not apply("--check") or not apply():
+                continue
+            content = file.read_bytes()
+            oid = subprocess.check_output(["git", "hash-object", "-w", "--stdin"], input=content).strip()
+            if oid != latest[2] or not apply("--reverse") or file.read_bytes() != original_target:
+                continue
+            updates[path] = (current[0].decode(), oid.decode())
+            results[path] = "donor-preserves-complete-original-vendor-delta"
     return updates, results
 
 

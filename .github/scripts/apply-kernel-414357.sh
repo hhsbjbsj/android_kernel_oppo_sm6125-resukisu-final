@@ -30,6 +30,13 @@ timeout 300 git fetch --no-tags --depth=1 https://github.com/gregkh/linux.git re
 test "$(git rev-parse 'FETCH_HEAD^{commit}')" = "$base"
 timeout 300 git fetch --no-tags --depth=1 https://github.com/openela/kernel-lts.git refs/tags/v4.14.357-openela
 test "$(git rev-parse 'FETCH_HEAD^{commit}')" = "$target"
+# Match the original CAF inputs used by the Redmi Note 8 donor. Only
+# target-identical donor outputs are eligible for a source-tree resolution.
+timeout 300 git fetch --no-tags --depth=1 --filter=blob:none \
+    https://github.com/FlopKernel-Series/flop_trinket-mi_kernel.git \
+    1a096135285e10af5823e83460c6755af3ad37b5 \
+    0cb4cc5d83b2c1a76a08bac48ee33d88535898bc \
+    86c833a1bbf4e8676cbed693326c01c6a707eb84
 git show "$target:Makefile" > "$report/upstream-makefile.txt"
 grep -Fxq 'SUBLEVEL = 357' "$report/upstream-makefile.txt"
 
@@ -554,12 +561,57 @@ def update_tree(tree, updates):
         return subprocess.check_output(["git", "write-tree"], env=env).decode().strip()
 
 
+# Resolve only files that start from an identical known Floppy input
+# and end in exactly the pinned OpenELA blob on both source projects.
+def donor_target_matches(conflicts):
+    def blobs(ref):
+        records = git("ls-tree", "-rz", ref).split(b"\0")
+        return {
+            path.decode(): metadata.split()
+            for metadata, path in (record.split(b"\t", 1) for record in records if record)
+        }
+
+    old_inputs = [
+        blobs("1a096135285e10af5823e83460c6755af3ad37b5"),
+        blobs("0cb4cc5d83b2c1a76a08bac48ee33d88535898bc"),
+    ]
+    donor = blobs("86c833a1bbf4e8676cbed693326c01c6a707eb84")
+    upstream = blobs(os.environ["OPENELA_TARGET"])
+    prepared = blobs(vendor)
+    updates = {}
+    results = {}
+    for path in sorted(conflicts):
+        current, latest, target_blob = (table.get(path) for table in (prepared, donor, upstream))
+        if not current or not latest or not target_blob:
+            continue
+        if any(item[0] not in {b"100644", b"100755"} for item in (current, latest, target_blob)):
+            continue
+        if latest[2] != target_blob[2]:
+            continue
+        matches = [
+            old for old in old_inputs
+            if old.get(path) and old[path][2] == current[2]
+        ]
+        if not matches:
+            continue
+        if "/boot/dts/" in path or "/configs/" in path or path.startswith(".github/"):
+            continue
+        updates[path] = (current[0].decode(), target_blob[2].decode())
+        results[path] = "same-donor-input-and-identical-openela-output"
+    return updates, results
+
+
 merged_tree, conflicts = read_merge(report / "merge-tree.bin")
 merged_tree, resolved = resolve_reviewed(merged_tree)
 conflicts -= resolved
 exact_updates, exact_results = resolve_exact_patches(conflicts)
 conflicts -= exact_updates.keys()
-merged_tree = update_tree(merged_tree, exact_updates)
+donor_updates, donor_results = donor_target_matches(conflicts)
+conflicts -= donor_updates.keys()
+merged_tree = update_tree(merged_tree, {**exact_updates, **donor_updates})
+(report / "donor-resolutions.tsv").write_text(
+    "".join(f"{path}\t{status}\n" for path, status in sorted(donor_results.items()))
+)
 (report / "exact-resolutions.tsv").write_text(
     "".join(f"{path}\t{status}\n" for path, status in sorted(exact_results.items()))
 )
@@ -567,8 +619,8 @@ candidate = report / "compile-merge-tree.bin"
 if conflicts and candidate.exists():
     merged_tree, excluded = read_merge(candidate)
     merged_tree, trial_resolved = resolve_reviewed(merged_tree, trial=True)
-    merged_tree = update_tree(merged_tree, exact_updates)
-    excluded -= trial_resolved | exact_updates.keys()
+    merged_tree = update_tree(merged_tree, {**exact_updates, **donor_updates})
+    excluded -= trial_resolved | exact_updates.keys() | donor_updates.keys()
 else:
     excluded = set(conflicts)
 (report / "resolved-paths.txt").write_text("".join(path + "\n" for path in sorted(resolved)))
@@ -593,6 +645,7 @@ proof = {
     "conflict_count": len(conflicts),
     "reviewed_resolutions": sorted(resolved),
     "exact_resolutions": exact_results,
+    "donor_target_identical_resolutions": donor_results,
     "candidate_strategy": "vendor-overlap-hunks" if candidate.exists() else "strict",
     "deferred_paths": len(excluded),
     "candidate_paths": len(applied),

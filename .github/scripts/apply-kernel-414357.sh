@@ -11,11 +11,20 @@ rm -f -- "$GITHUB_WORKSPACE/kernel-version-proof.txt"
 
 base=ab9dfda232481dcfaf549ce774004d116fc80c13
 target=1e6347375d088ecc896aabb067131d0f9e3c0575
+# The legacy preparation flow stages generated files and nested vendor
+# repositories. Snapshot remaining tracked source edits without changing any
+# nested repository's commit or collecting untracked build outputs.
+git diff --name-status --ignore-submodules=all HEAD -- > "$report/prepared-tracked-changes.tsv"
+if [[ -s "$report/prepared-tracked-changes.tsv" ]]; then
+    git diff --name-only --ignore-submodules=all -z HEAD -- | \
+        git --literal-pathspecs add -u --pathspec-from-file=- --pathspec-file-nul
+fi
+if ! git diff --cached --quiet --ignore-submodules=all; then
+    git -c user.name='PCHM30 OpenELA CI' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' \
+        commit -m 'ci: snapshot prepared PCHM30 source'
+fi
+git diff --quiet --ignore-submodules=all HEAD --
 vendor=$(git rev-parse HEAD)
-git diff --quiet HEAD -- || {
-    echo "Commit the prepared OPPO source before applying OpenELA." >&2
-    exit 1
-}
 
 timeout 300 git fetch --no-tags --depth=1 https://github.com/gregkh/linux.git refs/tags/v4.14.180
 test "$(git rev-parse 'FETCH_HEAD^{commit}')" = "$base"

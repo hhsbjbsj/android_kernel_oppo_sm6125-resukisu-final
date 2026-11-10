@@ -47,6 +47,15 @@ merge_status=0
 git -c merge.renames=false merge-tree --write-tree -z "$ours" "$theirs" > "$report/merge-tree.bin" || merge_status=$?
 if (( merge_status > 1 )); then exit "$merge_status"; fi
 
+# Keep the strict conflict list for the release gate. For the compile trial,
+# retain the vendor side of overlapping hunks while merging disjoint hunks.
+if (( merge_status == 1 )) && [[ "${OPENELA_COMPILE_CANDIDATE:-}" == 1 ]]; then
+    candidate_status=0
+    git -c merge.renames=false merge-tree --write-tree -z -X ours "$ours" "$theirs" \
+        > "$report/compile-merge-tree.bin" || candidate_status=$?
+    if (( candidate_status > 1 )); then exit "$candidate_status"; fi
+fi
+
 export OPENELA_VENDOR="$vendor" OPENELA_BASE="$base" OPENELA_TARGET="$target" OPENELA_REPORT="$report"
 python3 - <<'PY'
 import json
@@ -60,24 +69,32 @@ def git(*args):
 
 report = Path(os.environ["OPENELA_REPORT"])
 vendor = os.environ["OPENELA_VENDOR"]
-entries = (report / "merge-tree.bin").read_bytes().split(b"\0")
-merged_tree = entries[0].decode("ascii")
-conflicts = set()
-for entry in entries[1:]:
-    if not entry:
-        break
-    match = re.fullmatch(rb"[0-7]{6} [0-9a-f]{40} [123]\t(.+)", entry, re.S)
-    if not match:
-        raise SystemExit(f"Unexpected merge-tree index record: {entry!r}")
-    conflicts.add(os.fsdecode(match[1]))
+def read_merge(path):
+    entries = path.read_bytes().split(b"\0")
+    conflicts = set()
+    for entry in entries[1:]:
+        if not entry:
+            break
+        match = re.fullmatch(rb"[0-7]{6} [0-9a-f]{40} [123]\t(.+)", entry, re.S)
+        if not match:
+            raise SystemExit(f"Unexpected merge-tree index record: {entry!r}")
+        conflicts.add(os.fsdecode(match[1]))
+    return entries[0].decode("ascii"), conflicts
 
+merged_tree, conflicts = read_merge(report / "merge-tree.bin")
+candidate = report / "compile-merge-tree.bin"
+if candidate.exists():
+    merged_tree, excluded = read_merge(candidate)
+else:
+    excluded = set(conflicts)
 changed = git("diff", "--no-renames", "--name-only", "-z", vendor, merged_tree)
 paths = [os.fsdecode(path) for path in changed.split(b"\0") if path]
-excluded = set(conflicts)
 if conflicts:
-    # Keep the actual base release and omit OpenELA's release bookkeeping.
-    excluded.add("Makefile")
+    # The trial retains the current release and the vendor's generated
+    # asm/bugs.h wrapper may still reference the generic header.
+    excluded.update({"Makefile", "include/asm-generic/bugs.h"})
     excluded.update(path for path in paths if path.startswith(".elts/"))
+(report / "deferred-paths.txt").write_text("".join(path + "\n" for path in sorted(excluded)))
 
 applied = [path for path in paths if path not in excluded]
 proof = {
@@ -86,6 +103,8 @@ proof = {
     "prepared_vendor_commit": vendor,
     "source_merge_clean": not conflicts,
     "conflict_count": len(conflicts),
+    "candidate_strategy": "vendor-overlap-hunks" if candidate.exists() else "strict",
+    "deferred_paths": len(excluded),
     "candidate_paths": len(applied),
 }
 (report / "merge-summary.json").write_text(json.dumps(proof, indent=2) + "\n")

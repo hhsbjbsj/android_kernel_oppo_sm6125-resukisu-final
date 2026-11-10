@@ -8,6 +8,7 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 jobs:
   audit:
@@ -125,3 +126,101 @@ jobs:
         with:
           name: pchm30-openela-audit
           path: ${{ runner.temp }}/openela-audit
+
+  donor-census:
+    name: Find comparable Floppy inputs for remaining OPPO conflicts
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Check out the pinned OPPO baseline
+        uses: actions/checkout@v4
+        with:
+          ref: 0789fcca2cbcb74143492a70afc6c3b5a59251b7
+          persist-credentials: false
+      - name: Download the prepared-tree conflict evidence from Run 167
+        uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          run-id: 42906552336
+          name: PCHM30-OpenELA-full-167
+          path: ${{ runner.temp }}/prepared-openela
+      - name: Match prepared OPPO blobs against pinned Floppy revisions
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          timeout 300 git fetch --no-tags --depth=1 --filter=blob:none https://github.com/FlopKernel-Series/flop_trinket-mi_kernel.git \
+            1a096135285e10af5823e83460c6755af3ad37b5 \
+            8ecbdeb1f0edcf6182139cc57b3df7fa01eb8cae \
+            5222c7470371a3a24cde371d8981750a2643dafc \
+            0cb4cc5d83b2c1a76a08bac48ee33d88535898bc \
+            3d5eaa770b520bd55bb2151197c6c36f7bfc9493 \
+            86c833a1bbf4e8676cbed693326c01c6a707eb84
+          python3 - "$RUNNER_TEMP" <<'PY'
+          import collections
+          import pathlib
+          import subprocess
+          import sys
+
+          root = pathlib.Path(sys.argv[1])
+          prepared = root / "prepared-openela"
+          report, = prepared.rglob("merge-tree.bin")
+          conflicts = set((report.parent / "conflicts.txt").read_text().splitlines())
+          refs = {
+              "nicobar-190": "1a096135285e10af5823e83460c6755af3ad37b5",
+              "nicobar-290": "8ecbdeb1f0edcf6182139cc57b3df7fa01eb8cae",
+              "laum-190": "5222c7470371a3a24cde371d8981750a2643dafc",
+              "trinket-214": "0cb4cc5d83b2c1a76a08bac48ee33d88535898bc",
+              "laum-336": "3d5eaa770b520bd55bb2151197c6c36f7bfc9493",
+              "floppy-357": "86c833a1bbf4e8676cbed693326c01c6a707eb84",
+          }
+
+          def tree(commit):
+              entries = subprocess.check_output(["git", "ls-tree", "-rz", commit]).split(b"\0")
+              return {
+                  path.decode(): metadata.split()[-1]
+                  for metadata, path in (entry.split(b"\t", 1) for entry in entries if entry)
+              }
+
+          stages = collections.defaultdict(dict)
+          for entry in report.read_bytes().split(b"\0")[1:]:
+              if not entry:
+                  break
+              metadata, path = entry.split(b"\t", 1)
+              _, oid, stage = metadata.split()
+              stages[path.decode()][stage] = oid
+
+          trees = {name: tree(commit) for name, commit in refs.items()}
+          latest = trees.pop("floppy-357")
+          counts = collections.Counter()
+          rows = []
+          for path in sorted(conflicts):
+              vendor = stages[path].get(b"2")
+              target = stages[path].get(b"3")
+              donor = latest.get(path)
+              matches = [name for name, blobs in trees.items() if vendor and blobs.get(path) == vendor]
+              if not vendor or not donor:
+                  category = "missing-side"
+              elif donor == vendor:
+                  category = "donor-retains-input"
+              elif matches:
+                  category = "same-input-review"
+              else:
+                  category = "different-input"
+              counts[category] += 1
+              rows.append((path, category, ",".join(matches), (vendor or b"").decode(),
+                           (target or b"").decode(), (donor or b"").decode()))
+          out = root / "openela-donor-census.tsv"
+          out.write_text("path\tcategory\tmatching_refs\tprepared_oppo\topenela\tfloppy\n"
+                         + "".join("\t".join(row) + "\n" for row in rows))
+          print(f"Prepared source conflict paths: {len(conflicts)}")
+          for key, count in counts.most_common():
+              print(f"{key}: {count}")
+          for path, category, matches, *_ in rows:
+              if category == "same-input-review":
+                  print(f"{path}: {matches}")
+          PY
+      - name: Upload exact donor input comparison
+        uses: actions/upload-artifact@v4
+        with:
+          name: pchm30-openela-donor-census
+          path: ${{ runner.temp }}/openela-donor-census.tsv

@@ -1,93 +1,112 @@
 #!/usr/bin/env bash
-# Apply Linux 4.14.357 LTS versioning and specification
-# Guaranteed 100% Subsystem Atomicity & Boot Stability for Qualcomm SM6125 (OPPO A11x):
-# Preserves proven Android 16 First Stage Init dm-verity bio layer, driver core (dd.c),
-# clock provider hierarchy, and device tree parsing completely intact to eliminate first-screen hangs.
-
+# Merge the upstream stable/OpenELA source changes onto the OPPO/Android tree.
+# The default mode refuses unresolved source conflicts. CI may compile a partial
+# tree for diagnosis without advancing its patchlevel or packaging a release.
 set -Eeuo pipefail
 
-KERNEL_DIR="${KERNEL_DIR:-$GITHUB_WORKSPACE/$KERNEL_REL}"
-cd "$KERNEL_DIR"
-export PROOF="${GITHUB_WORKSPACE:-.}/kernel-version-proof.txt"
+cd "${KERNEL_DIR:-$GITHUB_WORKSPACE/$KERNEL_REL}"
+report="$GITHUB_WORKSPACE/openela-report"
+mkdir -p "$report"
+rm -f -- "$GITHUB_WORKSPACE/kernel-version-proof.txt"
 
-echo "[INFO] Current kernel directory: $(pwd)"
-echo "[INFO] Upgrading kernel to Linux 4.14.357 LTS specification..."
+base=ab9dfda232481dcfaf549ce774004d116fc80c13
+target=1e6347375d088ecc896aabb067131d0f9e3c0575
+vendor=$(git rev-parse HEAD)
+git diff --quiet HEAD -- || {
+    echo "Commit the prepared OPPO source before applying OpenELA." >&2
+    exit 1
+}
 
+timeout 300 git fetch --no-tags --depth=1 https://github.com/gregkh/linux.git refs/tags/v4.14.180
+test "$(git rev-parse 'FETCH_HEAD^{commit}')" = "$base"
+timeout 300 git fetch --no-tags --depth=1 https://github.com/openela/kernel-lts.git refs/tags/v4.14.357-openela
+test "$(git rev-parse 'FETCH_HEAD^{commit}')" = "$target"
+git show "$target:Makefile" > "$report/upstream-makefile.txt"
+grep -Fxq 'SUBLEVEL = 357' "$report/upstream-makefile.txt"
+
+# The vendor snapshot has independent Git history. Make the stable 4.14.180
+# tree the explicit comparison base without importing vendor-incompatible
+# source wholesale. The temporary commits only exist on this runner.
+snapshot() {
+    git -c user.name='PCHM30 OpenELA CI' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' \
+        commit-tree "$1^{tree}" -p "$base" -m "$2"
+}
+ours=$(snapshot "$vendor" 'Prepared PCHM30 kernel')
+theirs=$(snapshot "$target" 'Pinned OpenELA upstream')
+git diff --no-renames --name-status "$base" "$target" > "$report/upstream-paths.tsv"
+merge_status=0
+git -c merge.renames=false merge-tree --write-tree -z "$ours" "$theirs" > "$report/merge-tree.bin" || merge_status=$?
+if (( merge_status > 1 )); then exit "$merge_status"; fi
+
+export OPENELA_VENDOR="$vendor" OPENELA_BASE="$base" OPENELA_TARGET="$target" OPENELA_REPORT="$report"
 python3 - <<'PY'
-import sys
+import json
 import os
 import re
+import subprocess
 from pathlib import Path
 
-proof_path = Path(os.environ.get("PROOF", "kernel-version-proof.txt"))
+def git(*args):
+    return subprocess.check_output(["git", *args])
 
-# 1. Update Makefile SUBLEVEL = 357, EXTRAVERSION =, and LINUX_VERSION_CODE cap 255
-makefile = Path("Makefile")
-if makefile.is_file():
-    m_lines = makefile.read_text(encoding="utf-8", errors="replace").splitlines()
-    new_lines = []
-    for line in m_lines:
-        if line.startswith("SUBLEVEL ="):
-            new_lines.append("SUBLEVEL = 357")
-        elif line.startswith("EXTRAVERSION ="):
-            new_lines.append("EXTRAVERSION =")
-        elif "expr $(VERSION) \\* 65536 + 0$(PATCHLEVEL) \\* 256 + 0$(SUBLEVEL)" in line:
-            new_lines.append(line.replace("0$(SUBLEVEL)", "255"))
-        else:
-            new_lines.append(line)
-    makefile.write_text("\n".join(new_lines) + "\n", encoding="utf-8")
-    print("[PASS] Makefile SUBLEVEL set to 357 and sanitized")
-else:
-    raise SystemExit("[FATAL] Makefile not found!")
+report = Path(os.environ["OPENELA_REPORT"])
+vendor = os.environ["OPENELA_VENDOR"]
+entries = (report / "merge-tree.bin").read_bytes().split(b"\0")
+merged_tree = entries[0].decode("ascii")
+conflicts = set()
+for entry in entries[1:]:
+    if not entry:
+        break
+    match = re.fullmatch(rb"[0-7]{6} [0-9a-f]{40} [123]\t(.+)", entry, re.S)
+    if not match:
+        raise SystemExit(f"Unexpected merge-tree index record: {entry!r}")
+    conflicts.add(os.fsdecode(match[1]))
 
-# Verify Makefile
-m_check = Path("Makefile").read_text(encoding="utf-8")
-assert "SUBLEVEL = 357" in m_check, "SUBLEVEL = 357 verification failed!"
+changed = git("diff", "--no-renames", "--name-only", "-z", vendor, merged_tree)
+paths = [os.fsdecode(path) for path in changed.split(b"\0") if path]
+excluded = set(conflicts)
+if conflicts:
+    # Keep the actual base release and omit OpenELA's release bookkeeping.
+    excluded.add("Makefile")
+    excluded.update(path for path in paths if path.startswith(".elts/"))
 
-# 2. Synchronize vermagic in OUT_DIR if it exists
-out_dir = os.environ.get("OUT_DIR")
-if out_dir:
-    p_out = Path(out_dir)
-    if p_out.is_dir():
-        p_kr = p_out / "include" / "config" / "kernel.release"
-        p_uts = p_out / "include" / "generated" / "utsrelease.h"
-        p_kr.parent.mkdir(parents=True, exist_ok=True)
-        p_uts.parent.mkdir(parents=True, exist_ok=True)
-        p_kr.write_text("4.14.357-perf+\n", encoding="utf-8")
-        p_uts.write_text('#define UTS_RELEASE "4.14.357-perf+"\n', encoding="utf-8")
-        print(f"[PASS] Synchronized vermagic in {out_dir} to 4.14.357-perf+")
-
-# 3. Generate kernel-version-proof.txt
-proof_lines = [
-    "kernel_version=4.14.357",
-    "sublevel=357",
-    "total_patch_files=2157",
-    "applied_files=2061",
-    "already_present_files=5",
-    "skipped_missing_files=1",
-    "conflicts=90"
-]
-proof_content = "\n".join(proof_lines) + "\n"
-proof_path.write_text(proof_content, encoding="utf-8")
-Path("kernel-version-proof.txt").write_text(proof_content, encoding="utf-8")
-workspace = os.environ.get("GITHUB_WORKSPACE")
-if workspace:
-    (Path(workspace) / "kernel-version-proof.txt").write_text(proof_content, encoding="utf-8")
-
-print(f"[PASS] Proof file generated at {proof_path}")
+applied = [path for path in paths if path not in excluded]
+proof = {
+    "base_commit": os.environ["OPENELA_BASE"],
+    "target_commit": os.environ["OPENELA_TARGET"],
+    "prepared_vendor_commit": vendor,
+    "source_merge_clean": not conflicts,
+    "conflict_count": len(conflicts),
+    "candidate_paths": len(applied),
+}
+(report / "merge-summary.json").write_text(json.dumps(proof, indent=2) + "\n")
+(report / "conflicts.txt").write_text("".join(path + "\n" for path in sorted(conflicts)))
+(report / "candidate-paths.txt").write_text("".join(path + "\n" for path in applied))
+print(json.dumps(proof), flush=True)
+if conflicts and os.environ.get("OPENELA_COMPILE_CANDIDATE") != "1":
+    raise SystemExit("OpenELA has unresolved source conflicts. See conflicts.txt.")
+if not applied:
+    raise SystemExit("No OpenELA source changes to apply.")
+with (report / "candidate.patch").open("wb") as patch:
+    subprocess.run(
+        ["git", "--literal-pathspecs", "diff", "--binary", "--no-renames",
+         vendor, merged_tree, "--", *applied],
+        check=True, stdout=patch,
+    )
 PY
 
-# Shell-level verification
-grep -q '^SUBLEVEL = 357$' Makefile
-echo "[PASS] Verified: Makefile has SUBLEVEL = 357"
-test -s "$PROOF"
-grep -Fxq 'kernel_version=4.14.357' "$PROOF"
-grep -Fxq 'sublevel=357' "$PROOF"
-echo "[PASS] Verified: $PROOF has kernel_version=4.14.357 and sublevel=357"
+git apply --check --index "$report/candidate.patch"
+git apply --index "$report/candidate.patch"
+git diff --cached --stat > "$report/applied-stat.txt"
+git diff --cached --quiet && { echo 'OpenELA staged no source changes' >&2; exit 1; }
+git -c user.name='PCHM30 OpenELA CI' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' \
+    commit -m 'kernel: integrate OpenELA 4.14.357 source changes for CI'
 
-echo "[SUCCESS] Kernel successfully upgraded to Linux 4.14.357!"
+if [[ -s "$report/conflicts.txt" ]]; then
+    echo 'Compiling a partial OpenELA candidate. See the unresolved paths in the artifact.'
+    exit 0
+fi
 
-git config user.name "github-actions[bot]"
-git config user.email "github-actions[bot]@users.noreply.github.com"
-git add -A
-git commit -m "kernel: upgrade to Linux 4.14.357-openela" || true
+grep -Fxq 'SUBLEVEL = 357' Makefile
+printf 'kernel_version=4.14.357\nsublevel=357\nupstream_base=%s\nupstream_commit=%s\nintegrated_commit=%s\nconflicts=0\n' \
+    "$base" "$target" "$(git rev-parse HEAD)" > "$GITHUB_WORKSPACE/kernel-version-proof.txt"

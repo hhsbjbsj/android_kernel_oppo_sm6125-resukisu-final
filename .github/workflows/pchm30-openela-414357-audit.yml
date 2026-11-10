@@ -1,0 +1,72 @@
+name: PCHM30 OpenELA 4.14.357 integration audit
+
+on:
+  push:
+    branches: [pchm30-openela-414357-integration]
+    paths: [.github/workflows/pchm30-openela-414357-audit.yml]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Check out the exact Run 152 kernel baseline
+        uses: actions/checkout@v4
+        with:
+          ref: 0789fcca2cbcb74143492a70afc6c3b5a59251b7
+          persist-credentials: false
+      - name: Compare the OPPO tree against the stable and OpenELA trees
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          mkdir -p "$RUNNER_TEMP/openela-audit"
+          report="$RUNNER_TEMP/openela-audit"
+          vendor=$(git rev-parse HEAD)
+          git fetch --no-tags --depth=1 https://github.com/openela/kernel-lts.git refs/tags/v4.14.357-openela
+          target=$(git rev-parse 'FETCH_HEAD^{commit}')
+          test "$target" = 1e6347375d088ecc896aabb067131d0f9e3c0575
+          git fetch --no-tags --depth=1 https://github.com/openela/kernel-lts.git refs/tags/v4.14.180 ||             git fetch --no-tags --depth=1 https://git.kernel.org/pub/scm/linux/kernel/git/stable/linux.git refs/tags/v4.14.180
+          base=$(git rev-parse 'FETCH_HEAD^{commit}')
+          git show "$base:Makefile" | sed -n '1,6p' > "$report/base-version.txt"
+          grep -Fxq 'SUBLEVEL = 180' "$report/base-version.txt"
+          git show "$target:Makefile" | sed -n '1,6p' > "$report/target-version.txt"
+          git show "$target:.elts/config.yaml" > "$report/openela-config.yml"
+          printf 'vendor=%s\nbase=%s\ntarget=%s\n' "$vendor" "$base" "$target" > "$report/revisions.txt"
+          git diff --no-renames --name-status "$base" "$target" > "$report/upstream-paths.tsv"
+          git -c user.name='PCHM30 integration audit' -c user.email='41898282+github-actions[bot]@users.noreply.github.com'             commit-tree "$vendor^{tree}" -p "$base" -m 'Audit OPPO snapshot' > "$report/vendor-audit-commit.txt"
+          git -c user.name='PCHM30 integration audit' -c user.email='41898282+github-actions[bot]@users.noreply.github.com'             commit-tree "$target^{tree}" -p "$base" -m 'Audit OpenELA snapshot' > "$report/target-audit-commit.txt"
+          status=0
+          git -c merge.renames=false merge-tree --write-tree "$(cat "$report/vendor-audit-commit.txt")"             "$(cat "$report/target-audit-commit.txt")" > "$report/merge-tree.txt" || status=$?
+          if (( status > 1 )); then exit "$status"; fi
+          git diff --stat "$vendor" "$(head -n 1 "$report/merge-tree.txt")" > "$report/merge-stat.txt"
+          python3 - "$report" <<'PY'
+          import collections
+          import pathlib
+          import re
+          import sys
+
+          report = pathlib.Path(sys.argv[1])
+          upstream = (report / "upstream-paths.tsv").read_text().splitlines()
+          merge = (report / "merge-tree.txt").read_text().splitlines()
+          conflicts = sorted({
+              line.split("\t", 1)[1]
+              for line in merge
+              if re.match(r"^\d{6} [0-9a-f]{40} [123]\t", line)
+          })
+          (report / "conflicts.txt").write_text("\n".join(conflicts) + "\n")
+          groups = collections.Counter(path.split("/", 1)[0] for path in conflicts)
+          print(f"Upstream changed paths: {len(upstream)}")
+          print(f"Three-way conflict paths: {len(conflicts)}")
+          for area, count in groups.most_common():
+              print(f"{area}: {count}")
+          PY
+      - name: Upload source integration audit
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pchm30-openela-audit
+          path: ${{ runner.temp }}/openela-audit

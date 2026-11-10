@@ -421,6 +421,62 @@ def resolve_reviewed(tree, trial=False):
                 if content.count(old_call) != 1:
                     raise SystemExit("Unexpected retired writeback logging call sites")
                 stage_trial(path, content.replace(old_call, b"", 1))
+
+            path = "security/selinux/hooks.c"
+            content = git("show", f"{tree}:{path}")
+            first = content.index(b"static int selinux_binder_set_context_mgr(")
+            end = content.index(b"static int selinux_ptrace_access_check(", first)
+            hooks = content[first:end]
+
+            def use_cred_sid(match):
+                signature, body = match.groups()
+                if b"const struct cred *" not in signature:
+                    return match.group()
+                body = re.sub(rb"\btask_sid\((mgr|from|to)\)", rb"cred_sid(\1)", body)
+                return signature + body
+
+            fixed = re.sub(
+                rb"(static int selinux_binder_[a-z_]+\([^)]*\)\n\{)(.*?\n\})",
+                use_cred_sid, hooks, flags=re.S,
+            )
+            if fixed != hooks:
+                stage_trial(path, content[:first] + fixed + content[end:])
+
+            path = "mm/memory.c"
+            content = git("show", f"{tree}:{path}")
+            old_cow = b"\t\tcow_user_page(new_page, old_page, vmf->address, vma);"
+            if old_cow in content:
+                upstream = git("show", f"{target}:{path}")
+                begin = upstream.index(b"\t\tif (!cow_user_page(new_page, old_page, vmf)) {")
+                finish = upstream.index(b"\n\t\t}", begin) + len(b"\n\t\t}")
+                if content.count(old_cow) != 1:
+                    raise SystemExit("Unexpected legacy COW call sites")
+                stage_trial(path, content.replace(old_cow, upstream[begin:finish], 1))
+
+            path = "fs/eventpoll.c"
+            content = git("show", f"{tree}:{path}")
+            start = content.index(b"static int ep_create_wakeup_source(")
+            end = content.index(b"\n}\n", start) + len(b"\n}\n")
+            wakeup = content[start:end]
+            old_name = (
+                b"\tname = epi->ffd.file->f_path.dentry->d_name.name;\n"
+                b"\tws = wakeup_source_register(NULL, name);"
+            )
+            if old_name in wakeup:
+                upstream = git("show", f"{target}:{path}")
+                begin = upstream.index(b"\ttake_dentry_name_snapshot(&n, epi->ffd.file->f_path.dentry);")
+                finish = upstream.index(b"\trelease_dentry_name_snapshot(&n);", begin)
+                finish += len(b"\trelease_dentry_name_snapshot(&n);")
+                snapshot = upstream[begin:finish].replace(
+                    b"wakeup_source_register(n.name)", b"wakeup_source_register(NULL, n.name)"
+                )
+                wakeup = wakeup.replace(old_name, snapshot, 1).replace(b"\tconst char *name;\n", b"", 1)
+                if b"\tstruct name_snapshot n;\n" not in wakeup:
+                    anchor = b"\tstruct wakeup_source *ws;\n"
+                    if wakeup.count(anchor) != 1:
+                        raise SystemExit("Could not locate the epoll wakeup-source declaration")
+                    wakeup = wakeup.replace(anchor, b"\tstruct name_snapshot n;\n" + anchor, 1)
+                stage_trial(path, content[:start] + wakeup + content[end:])
         return index("write-tree").decode().strip(), resolved
 
 # A three-way merge may report an overlap even if the complete upstream

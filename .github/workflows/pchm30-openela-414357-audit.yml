@@ -96,6 +96,29 @@ jobs:
               print(path.decode())
           PY
           cat "$report/conflicts.txt"
+      - name: Verify the OpenELA integration script on the pinned source
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          git fetch --no-tags --depth=1 origin "$GITHUB_SHA"
+          git show "$GITHUB_SHA:.github/scripts/apply-kernel-414357.sh" > "$RUNNER_TEMP/apply-openela.sh"
+          bash -n "$RUNNER_TEMP/apply-openela.sh"
+          export KERNEL_DIR="$PWD"
+          before=$(git rev-parse HEAD)
+          if bash "$RUNNER_TEMP/apply-openela.sh"; then
+            echo 'Expected the current conflict set to block release mode' >&2
+            exit 1
+          fi
+          test "$(git rev-parse HEAD)" = "$before"
+          test -s "$GITHUB_WORKSPACE/openela-report/conflicts.txt"
+          test ! -e "$GITHUB_WORKSPACE/kernel-version-proof.txt"
+          OPENELA_COMPILE_CANDIDATE=1 bash "$RUNNER_TEMP/apply-openela.sh"
+          test "$(git rev-parse HEAD)" != "$before"
+          test -s "$GITHUB_WORKSPACE/openela-report/applied-stat.txt"
+          grep -Fxq 'SUBLEVEL = 180' Makefile
+          test ! -e "$GITHUB_WORKSPACE/kernel-version-proof.txt"
+          git diff --numstat "$before" HEAD | awk 'END { print "Actually changed source paths:", NR }'
+          cp -a "$GITHUB_WORKSPACE/openela-report" "$RUNNER_TEMP/openela-audit/applied"
       - name: Upload source integration audit
         if: always()
         uses: actions/upload-artifact@v4

@@ -699,6 +699,21 @@ def donor_target_matches(conflicts):
             port = source.get(path)
             if not port or port[2].decode() != expected:
                 raise SystemExit(f"Unexpected reviewed USB donor blob: {path}")
+            if path == "drivers/net/usb/usbnet.c":
+                # The Floppy fetch is tree-filtered. Recreate its sole delta
+                # from the already-fetched LineageOS blob and verify its ID.
+                original = git("cat-file", "blob", lineage[path][2].decode())
+                old = (b"urb->sg = kmalloc((num_sgs + 1) * sizeof(struct scatterlist),\n"
+                       b"\t\t\t  GFP_ATOMIC);")
+                new = (b"urb->sg = kmalloc_array(num_sgs + 1, sizeof(struct scatterlist),\n"
+                       b"\t\t\t\tGFP_ATOMIC);")
+                if original.count(old) != 1:
+                    raise SystemExit("Unexpected USB-network scatterlist allocation")
+                content = original.replace(old, new, 1)
+                actual = subprocess.check_output(["git", "hash-object", "-w", "--stdin"],
+                                                 input=content).decode().strip()
+                if actual != expected:
+                    raise SystemExit("USB-network port differs from the reviewed donor")
             updates[path] = (current[0].decode(), expected)
             results[path] = "same-CAF-input-and-reviewed-USB-donor-port"
             continue

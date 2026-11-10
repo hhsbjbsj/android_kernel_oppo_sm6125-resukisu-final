@@ -108,26 +108,35 @@ def resolve_kconfig(tree):
 
         index("read-tree", tree)
         for path, (vendor_oid, upstream_oid, expected_oid) in fixes.items():
-            if git("rev-parse", f"{vendor}:{path}").decode().strip() != vendor_oid:
-                continue
+            actual_oid = git("rev-parse", f"{vendor}:{path}").decode().strip()
             if git("rev-parse", f"{target}:{path}").decode().strip() != upstream_oid:
                 raise SystemExit(f"Unexpected upstream Kconfig blob: {path}")
 
-            content = git("cat-file", "blob", vendor_oid)
+            content = git("cat-file", "blob", actual_oid)
+            upstream = git("cat-file", "blob", upstream_oid)
             if path == "drivers/char/Kconfig":
-                upstream = git("cat-file", "blob", upstream_oid)
                 begin = upstream.index(b"config RANDOM_TRUST_CPU\n")
                 end = upstream.index(b"\nendmenu", begin)
                 rng_options = upstream[begin:end] + b"\n"
-                content = content.replace(b"\nendmenu\n", b"\n" + rng_options + b"endmenu\n", 1)
+                if rng_options not in content:
+                    menu_end = b"\nendmenu\n\nconfig OKL4_PIPE\n"
+                    if (content.count(menu_end) != 1 or b"config RANDOM_TRUST_CPU\n" in content
+                            or b"config RANDOM_TRUST_BOOTLOADER\n" in content):
+                        print(f"Unrecognized prepared Kconfig, leaving unresolved: {path}: {actual_oid}", flush=True)
+                        continue
+                    content = content.replace(menu_end, b"\n" + rng_options + menu_end[1:], 1)
             else:
-                content = content.replace(
-                    b"config HAVE_ARCH_BITREVERSE\n\tbool\n\tdefault n\n\tdepends on BITREVERSE\n",
-                    b"config HAVE_ARCH_BITREVERSE\n\tbool\n\tdefault n\n",
-                    1,
-                )
+                # The build adds LZ4K/LZ4KD options to this file before the
+                # merge. Apply only OpenELA's HAVE_ARCH_BITREVERSE change.
+                old = b"config HAVE_ARCH_BITREVERSE\n\tbool\n\tdefault n\n\tdepends on BITREVERSE\n\thelp\n"
+                new = b"config HAVE_ARCH_BITREVERSE\n\tbool\n\tdefault n\n\thelp\n"
+                if content.count(old) == 1 and new not in content:
+                    content = content.replace(old, new, 1)
+                elif content.count(new) != 1:
+                    print(f"Unrecognized prepared Kconfig, leaving unresolved: {path}: {actual_oid}", flush=True)
+                    continue
             oid = subprocess.check_output(["git", "hash-object", "-w", "--stdin"], input=content).decode().strip()
-            if oid != expected_oid:
+            if actual_oid == vendor_oid and oid != expected_oid:
                 raise SystemExit(f"Resolved Kconfig differs from the reviewed Floppy blob: {path}: {oid}")
             mode = git("ls-tree", vendor, "--", path).split()[0].decode()
             index("update-index", "--add", "--cacheinfo", f"{mode},{oid},{path}")

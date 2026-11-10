@@ -137,14 +137,14 @@ jobs:
         with:
           ref: 0789fcca2cbcb74143492a70afc6c3b5a59251b7
           persist-credentials: false
-      - name: Download the prepared-tree conflict evidence from Run 167
+      - name: Download the prepared-tree conflict evidence from Run 178
         uses: actions/download-artifact@v4
         with:
           github-token: ${{ github.token }}
-          run-id: 42906552336
-          name: PCHM30-OpenELA-full-167
+          run-id: 42911953183
+          name: PCHM30-OpenELA-full-178
           path: ${{ runner.temp }}/prepared-openela
-      - name: Match prepared OPPO blobs against pinned Floppy revisions
+      - name: Check remaining OPPO conflicts against pinned Note 8 revisions
         shell: bash
         run: |
           set -Eeuo pipefail
@@ -155,11 +155,14 @@ jobs:
             0cb4cc5d83b2c1a76a08bac48ee33d88535898bc \
             3d5eaa770b520bd55bb2151197c6c36f7bfc9493 \
             86c833a1bbf4e8676cbed693326c01c6a707eb84
+          timeout 300 git fetch --no-tags --depth=1 --filter=blob:none https://github.com/LineageOS/android_kernel_xiaomi_sm6125.git \
+            8aaa002bfb7ba1cac2c02dbb42ae0259ef2e47ba
           python3 - "$RUNNER_TEMP" <<'PY'
           import collections
           import pathlib
           import subprocess
           import sys
+          from tempfile import TemporaryDirectory
 
           root = pathlib.Path(sys.argv[1])
           prepared = root / "prepared-openela"
@@ -191,6 +194,8 @@ jobs:
 
           trees = {name: tree(commit) for name, commit in refs.items()}
           latest = trees.pop("floppy-357")
+          lineage = tree("8aaa002bfb7ba1cac2c02dbb42ae0259ef2e47ba")
+          baseline = tree("HEAD")
           counts = collections.Counter()
           rows = []
           for path in sorted(conflicts):
@@ -216,11 +221,51 @@ jobs:
           for key, count in counts.most_common():
               print(f"{key}: {count}")
           for path, category, matches, *_ in rows:
-              if category == "same-input-review":
-                  print(f"{path}: {matches}")
+              print(f"{path}: {category} {matches}".rstrip())
+
+          def blob(oid):
+              return subprocess.check_output(["git", "cat-file", "blob", oid.decode()])
+
+          def merge(*contents):
+              with TemporaryDirectory() as tmp:
+                  files = [pathlib.Path(tmp) / name for name in ("local", "base", "remote")]
+                  for file, content in zip(files, contents):
+                      file.write_bytes(content)
+                  result = subprocess.run(["git", "merge-file", "-p", *files], capture_output=True)
+                  return result.stdout if result.returncode == 0 else None
+
+          rebased = []
+          for path in sorted(conflicts):
+              original = stages[path].get(b"2")
+              output = latest.get(path)
+              previous = trees["nicobar-190"].get(path)
+              if (not original or not output or not previous or previous == output
+                      or original != baseline.get(path) or original == previous
+                      or previous != trees["trinket-214"].get(path)
+                      or output != lineage.get(path)
+                      or "/boot/dts/" in path or "/configs/" in path
+                      or not path.endswith((".c", ".h", ".S", ".rst", ".txt"))):
+                  continue
+              local, base, donor = (blob(oid) for oid in (original, previous, output))
+              if any(b"\0" in data for data in (local, base, donor)):
+                  continue
+              port = merge(local, base, donor)
+              if port is None or port == local or port == donor or merge(port, donor, base) != local:
+                  continue
+              result = subprocess.check_output(["git", "hash-object", "--stdin"], input=port).decode().strip()
+              rebased.append((path, original.decode(), previous.decode(), output.decode(), result))
+          (root / "openela-donor-rebases.tsv").write_text(
+              "path\tprepared_oppo\tshared_CAF_input\tmatching_donor_output\trebased_output\n"
+              + "".join("\t".join(row) + "\n" for row in rebased)
+          )
+          print(f"Clean reversible Note 8 rebases to review: {len(rebased)}")
+          for path, *_ in rebased:
+              print(path)
           PY
       - name: Upload exact donor input comparison
         uses: actions/upload-artifact@v4
         with:
           name: pchm30-openela-donor-census
-          path: ${{ runner.temp }}/openela-donor-census.tsv
+          path: |
+            ${{ runner.temp }}/openela-donor-census.tsv
+            ${{ runner.temp }}/openela-donor-rebases.tsv

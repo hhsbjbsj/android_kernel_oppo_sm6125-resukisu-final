@@ -685,6 +685,23 @@ def donor_target_matches(conflicts):
             updates[path] = (current[0].decode(), common[2].decode())
             results[path] = "same-CAF-input-and-matching-LineageOS-Floppy-357-port"
             continue
+        # These USB donor differences were checked separately. Keep
+        # LineageOS's ep0 dequeue and RNDIS response lock, omit Floppy's
+        # optional USB insertion switch, and retain its checked allocation.
+        reviewed_usb = {
+            "drivers/net/usb/usbnet.c": (donor, "f63efa49b615ee0cff73c16d9ac30dab6098a441"),
+            "drivers/usb/core/hub.c": (lineage, "95a9267f4ffc7447ffd4d02d08df1724dd82024c"),
+            "drivers/usb/gadget/function/f_fs.c": (lineage, "d2f08c1940539c3a7981411b7edf8aadca35690b"),
+            "drivers/usb/gadget/function/rndis.h": (lineage, "16f229028ba0649427aa301a23061be5b6f9b741"),
+        }
+        if path in reviewed_usb:
+            source, expected = reviewed_usb[path]
+            port = source.get(path)
+            if not port or port[2].decode() != expected:
+                raise SystemExit(f"Unexpected reviewed USB donor blob: {path}")
+            updates[path] = (current[0].decode(), expected)
+            results[path] = "same-CAF-input-and-reviewed-USB-donor-port"
+            continue
 
         # When Floppy retains local CAF edits, prove that its final file is
         # exactly OpenELA plus the complete original OPPO delta. A failed

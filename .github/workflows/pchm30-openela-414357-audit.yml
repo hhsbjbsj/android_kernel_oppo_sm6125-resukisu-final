@@ -29,8 +29,9 @@ jobs:
           git fetch --no-tags --depth=1 https://github.com/openela/kernel-lts.git refs/tags/v4.14.357-openela
           target=$(git rev-parse 'FETCH_HEAD^{commit}')
           test "$target" = 1e6347375d088ecc896aabb067131d0f9e3c0575
-          git fetch --no-tags --depth=1 https://github.com/openela/kernel-lts.git refs/tags/v4.14.180 ||             git fetch --no-tags --depth=1 https://git.kernel.org/pub/scm/linux/kernel/git/stable/linux.git refs/tags/v4.14.180
+          timeout 300 git fetch --no-tags --depth=1 https://github.com/gregkh/linux.git refs/tags/v4.14.180
           base=$(git rev-parse 'FETCH_HEAD^{commit}')
+          test "$base" = ab9dfda232481dcfaf549ce774004d116fc80c13
           git show "$base:Makefile" | sed -n '1,6p' > "$report/base-version.txt"
           grep -Fxq 'SUBLEVEL = 180' "$report/base-version.txt"
           git show "$target:Makefile" | sed -n '1,6p' > "$report/target-version.txt"
@@ -64,6 +65,37 @@ jobs:
           for area, count in groups.most_common():
               print(f"{area}: {count}")
           PY
+      - name: Check Floppy's merge against the OPPO conflict list
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          report="$RUNNER_TEMP/openela-audit"
+          floppy_merge=01cc026e04d65e323f74fdffbaf715dd777750e9
+          floppy_before=a87f54d89e63df0929e47a3b2f7c0934c6060c15
+          timeout 300 git fetch --no-tags --depth=1 --filter=blob:none https://github.com/FlopKernel-Series/flop_trinket-mi_kernel.git "$floppy_merge" "$floppy_before"
+          python3 - "$report" "$floppy_before" "$floppy_merge" <<'PY'
+          import pathlib
+          import subprocess
+          import sys
+
+          def tree(ref):
+              lines = subprocess.check_output(["git", "ls-tree", "-r", "-z", ref]).split(b"\0")
+              return dict(line.split(b"\t", 1)[::-1] for line in lines if line)
+
+          report = pathlib.Path(sys.argv[1])
+          vendor = tree("HEAD")
+          flop_before, flop_after = (tree(ref) for ref in sys.argv[2:])
+          reusable = []
+          for path in (report / "conflicts.txt").read_bytes().splitlines():
+              if vendor.get(path) and vendor[path].split()[1:] == flop_before.get(path, b"").split()[1:]:
+                  if flop_before[path] != flop_after.get(path):
+                      reusable.append(path)
+          (report / "same-input-floppy-resolutions.txt").write_bytes(b"".join(path + b"\n" for path in reusable))
+          print(f"Conflicts with an identical input blob changed by Floppy's merge: {len(reusable)}")
+          for path in reusable:
+              print(path.decode())
+          PY
+          cat "$report/conflicts.txt"
       - name: Upload source integration audit
         if: always()
         uses: actions/upload-artifact@v4

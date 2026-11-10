@@ -1,4 +1,4 @@
-name: PCHM30 A16 Xiaomi BPF FULL DEPS
+name: PCHM30 OpenELA source integration build
 # ReSukiSU line from Run17. Keep in-tree 4.14 susfs.c + 4.14 VFS ABI. KPM stays off.
 # ReSukiSU: pinned to the exact revision used by Run 64 for reproducibility.
 # BPF verifier hardening: pinned Linux 4.14.236 stable series, excluding the
@@ -9,36 +9,10 @@ name: PCHM30 A16 Xiaomi BPF FULL DEPS
 on:
   workflow_dispatch:
   push:
-    branches: [pchm30-a16-xiaomi-bpf-full-deps, pchm30-a16-resukisu-main-test, pchm30-a17-nabu-bpf-test, pchm30-a17-los24-bringup]
+    branches: [pchm30-openela-414357-integration]
     paths:
-      - 'kernel/bpf/**'
-      - 'net/**'
-      - 'include/**'
-      - 'mm/**'
-      - 'tools/**'
       - '.github/workflows/pchm30-a16-run26-resukisu-susfs230.yml'
-      - '.github/scripts/run16-orchestrate.sh'
-      - '.github/scripts/check-bpf-v414236-spectre.py'
-      - '.github/patches/bpf-v414236-spectre-clean.patch'
-      - '.github/patches/bpf-v414236-spectre-clean.series'
-      - '.github/scripts/check-xiaomi-bpf-full.py'
-      - '.github/patches/xiaomi-bpf-full/**'
-      - '.github/scripts/exp3-btf-backport.sh'
-      - '.github/scripts/normalize-btf-var-datasec-patch.py'
-      - '.github/scripts/run25-susfs230-adapt.sh'
-      - '.github/scripts/package-pchm30-run17-ak3.sh'
-      - '.github/scripts/run26-disable-kpm.sh'
-      - '.github/scripts/rewrite-susfs230-hooks.py'
-      - '.github/scripts/adapt-ksu-sucompat230.sh'
-      - '.github/scripts/run28-extra-features.sh'
-      - '.github/scripts/resolve-latest-ksu.sh'
-      - '.github/scripts/run29-manager-handshake.sh'
-      - '.github/scripts/apply-binder-419-stability.sh'
-      - '.github/scripts/apply-binder-los24-freeze.sh'
-      - '.github/scripts/apply-cgroup-v2-freezer.sh'
-      - '.github/scripts/apply-kernel-414186.sh'
       - '.github/scripts/apply-kernel-414357.sh'
-      - '.github/patches/patch-4.14.180-to-186.patch'
 
 env:
   TOOLCHAIN_RELEASE_TAG: pchm30-build-environment-20260810
@@ -55,7 +29,8 @@ env:
   A16_FIRST: c2c621b5448adc69e105b1519b93dd637a581da5
   A16_LAST: c74436291044381d4365d91afa0c8f4a574b22b4
   ROOT_SNAPSHOT: b667ba359bf7da11b43c5d6403788d21c19facd7
-  RESUKISU_COMMIT: auto
+  RESUKISU_COMMIT: 516d3e87fbc986ccefdde2c2765f1700612441a9
+  OPENELA_COMPILE_CANDIDATE: '1'
   ROOT_SUCCESS_BRANCH: pchm30-a16-resukisu-susfs220
   ROOT_SUCCESS_WORKFLOW: .github/workflows/pchm30-a16-resukisu-susfs220-build.yml
   EXP1_BRANCH: pchm30-a16-btf-sockmap-exp1
@@ -71,35 +46,19 @@ env:
 
 jobs:
   build:
-    name: Run26 ReSukiSU + SUSFS 2.3.0 + Xiaomi BPF full deps
+    name: Compile and verify PCHM30 OpenELA candidate
     runs-on: ubuntu-22.04
     timeout-minutes: 360
-    permissions: write-all
+    permissions:
+      contents: read
     steps:
       - name: Checkout exact successful A16 rootless baseline
         uses: actions/checkout@v4
         with:
-          ref: pchm30-a16-bpf-only
+          ref: 0789fcca2cbcb74143492a70afc6c3b5a59251b7
           path: source/android/kernel/msm-4.14
           fetch-depth: 1
           submodules: false
-
-      - name: Resolve latest BakaSU (ReSukiSU) main at build time
-        shell: bash
-        run: |
-          set -Eeuo pipefail
-          RSHA=""
-          for i in 1 2 3; do
-            RSHA=$(git ls-remote https://github.com/Baka-SU/BakaSU.git refs/heads/main | awk '{print $1}')
-            [ -n "$RSHA" ] && break
-            RSHA=$(git ls-remote https://github.com/ReSukiSU/ReSukiSU.git refs/heads/main | awk '{print $1}')
-            [ -n "$RSHA" ] && break
-            echo "Attempt $i failed, retrying in 3s..."
-            sleep 3
-          done
-          test -n "$RSHA"
-          echo "RESUKISU_COMMIT=$RSHA" >> "$GITHUB_ENV"
-          echo "Dynamically resolved BakaSU (ReSukiSU) main: $RSHA"
 
       - name: Install BTF host tooling
         shell: bash
@@ -293,10 +252,15 @@ jobs:
           grep -Fq 'hook_guard=CONFIG_KSU' "$GITHUB_WORKSPACE/run29-manager-handshake-proof.txt"
           grep -Fq 'custom_manager_size=0x039a' "$GITHUB_WORKSPACE/run29-manager-handshake-proof.txt"
           grep -Fq 'custom_manager_hash=366aa724f4ed84d589fb47077cee4dc6aac45c37c4a50a6e1eaed4446bb3bc03' "$GITHUB_WORKSPACE/run29-manager-handshake-proof.txt"
-          test -s "$GITHUB_WORKSPACE/kernel-version-proof.txt"
-          grep -Fxq 'kernel_version=4.14.357' "$GITHUB_WORKSPACE/kernel-version-proof.txt"
-          grep -Fxq 'sublevel=357' "$GITHUB_WORKSPACE/kernel-version-proof.txt"
-          grep -q '^SUBLEVEL = 357$' Makefile
+          test -s "$GITHUB_WORKSPACE/openela-report/merge-summary.json"
+          test -s "$GITHUB_WORKSPACE/openela-report/applied-stat.txt"
+          if [ -s "$GITHUB_WORKSPACE/openela-report/conflicts.txt" ]; then
+            test ! -e "$GITHUB_WORKSPACE/kernel-version-proof.txt"
+            ! grep -Fxq 'SUBLEVEL = 357' Makefile
+          else
+            grep -Fxq 'conflicts=0' "$GITHUB_WORKSPACE/kernel-version-proof.txt"
+            grep -Fxq 'SUBLEVEL = 357' Makefile
+          fi
           test -s "$GITHUB_WORKSPACE/binder-419-proof.txt"
           grep -Fq 'wake_up_pollfree=applied' "$GITHUB_WORKSPACE/binder-419-proof.txt"
           grep -Fq '__wake_up_pollfree=exported' "$GITHUB_WORKSPACE/binder-419-proof.txt"
@@ -322,72 +286,31 @@ jobs:
           echo "resukisu_commit=${RESUKISU_COMMIT}" | tee -a "$GITHUB_WORKSPACE/run25-susfs230-proof.txt"
           echo '[PASS] ReSukiSU image keeps 4.14 user_path_at hooks, KPM off, cgroup v2 freezer and binder freeze verified'
 
-      - name: Package reusable PCHM30 AnyKernel3 ZIP and Prepare Artifacts
+      - name: Record build and release gate
         working-directory: source/android/kernel/msm-4.14
         shell: bash
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -Eeuo pipefail
-          git fetch --no-tags --depth=1 origin "$GITHUB_SHA"
-          git show "$GITHUB_SHA:.github/scripts/package-pchm30-run17-ak3.sh" > "$GITHUB_WORKSPACE/package-pchm30-run26-ak3.sh"
-          chmod +x "$GITHUB_WORKSPACE/package-pchm30-run26-ak3.sh"
-          AK3_ZIP="$GITHUB_WORKSPACE/PCHM30-A16-RUN26-RESUKISU-SUSFS230-414357-AK3-${GITHUB_RUN_NUMBER}.zip"
-          "$GITHUB_WORKSPACE/package-pchm30-run26-ak3.sh" \
-            "$OUT_DIR/arch/arm64/boot/Image" \
-            "$AK3_ZIP"
-
-          export STAGE_DIR="$GITHUB_WORKSPACE/out_artifacts"
-          mkdir -p "$STAGE_DIR"
-          cp -f "$AK3_ZIP"* "$STAGE_DIR/"
-          cp -f "$OUT_DIR/arch/arm64/boot/Image" "$STAGE_DIR/Image"
-          cp -f "$OUT_DIR/.config" "$STAGE_DIR/kernel.config"
-          [ -f "$OUT_DIR/System.map" ] && cp -f "$OUT_DIR/System.map" "$STAGE_DIR/System.map"
-          [ -f "$OUT_DIR/vmlinux" ] && cp -f "$OUT_DIR/vmlinux" "$STAGE_DIR/vmlinux"
-          for logfile in "$GITHUB_WORKSPACE"/*proof.txt "$GITHUB_WORKSPACE"/*.log; do
-            [ -f "$logfile" ] && cp -f "$logfile" "$STAGE_DIR/" || true
-          done
-
-          python3 - <<'PY_MANIFEST'
-          import json, os
-          from pathlib import Path
-
-          stage_dir = Path(os.environ.get("STAGE_DIR") or (os.environ.get("GITHUB_WORKSPACE", "") + "/out_artifacts"))
-          stage_dir.mkdir(parents=True, exist_ok=True)
-          manifest = {
-              "target_device": "OPPO A11x / PCHM30 (sm6125)",
-              "os_target": "LineageOS 24 (Android 17)",
-              "kernel_version": "4.14.357",
-              "base_commit": "190a49ea435d04c3d9f1974dfcb6c53334fa3524",
-              "bakasu_commit": os.environ.get("RESUKISU_COMMIT", "auto"),
-              "susfs_version": "v2.3.0",
-              "manager_dual_signatures": ["0x039a", "0x38b"],
-              "kpm_status": "disabled",
-              "capabilities": {
-                  "K00_SOURCE_MANIFEST": True,
-                  "K01_DTB_CONTRACT": "stock-sm6125-preserved",
-                  "K02_PSTORE_CONSOLE": True,
-                  "K03_CGROUP_V2_FREEZER": True,
-                  "K04_BINDER_FREEZE": True,
-                  "K05_BPF_VERIFIER_LOG_FULL": True
-              }
-          }
-          (stage_dir / "source-final-manifest.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
-          print("[PASS] source-final-manifest.json generated in artifacts")
-          PY_MANIFEST
-
-          TAG_NAME="v4.14.357-a17-bpf-resukisu-run${GITHUB_RUN_NUMBER}"
-          if command -v gh >/dev/null 2>&1; then
-            echo "Publishing GitHub Release: $TAG_NAME"
-            gh release create "$TAG_NAME" "$AK3_ZIP"* \
-              --title "PCHM30 AnyKernel3 (Android 17 BPF + ReSukiSU + SUSFS 2.3.0)" \
-              --notes "Automated release containing flashable AnyKernel3 ZIP with verified Android 17 eBPF subsystem, ReSukiSU main, and SUSFS 2.3.0 for Qualcomm SM6125." || true
+          report="$GITHUB_WORKSPACE/openela-report"
+          cp "$OUT_DIR/.config" "$report/kernel.config"
+          cp "$OUT_DIR/include/config/kernel.release" "$report/kernel.release"
+          sha256sum "$OUT_DIR/arch/arm64/boot/Image" > "$report/image.sha256"
+          if [ -s "$report/conflicts.txt" ]; then
+            echo "::error::The candidate compiled but OpenELA conflicts remain. See the conflict report."
+            exit 1
           fi
+          cp "$GITHUB_WORKSPACE/kernel-version-proof.txt" "$report/"
+          git fetch --no-tags --depth=1 origin "$GITHUB_SHA"
+          git show "$GITHUB_SHA:.github/scripts/package-pchm30-run17-ak3.sh" > "$RUNNER_TEMP/package-ak3.sh"
+          bash "$RUNNER_TEMP/package-ak3.sh" "$OUT_DIR/arch/arm64/boot/Image" "$report/PCHM30-OpenELA-414357-AK3.zip"
 
-      - name: Upload Run26 ReSukiSU artifact
+      - name: Upload OpenELA source and build evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: PCHM30-A16-RUN26-RESUKISU-SUSFS230-414357-${{ github.run_number }}
-          path: out_artifacts/
+          name: PCHM30-OpenELA-integration-${{ github.run_number }}
+          path: |
+            openela-report/
+            run26-build.log
+            *proof.txt
           if-no-files-found: warn

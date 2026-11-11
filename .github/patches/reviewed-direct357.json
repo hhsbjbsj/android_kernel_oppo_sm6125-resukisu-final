@@ -173,7 +173,7 @@
   ],
   "drivers/usb/gadget/function/rndis.c": [
     "d1737f27147067ea9044027fbae5cedf8bab6e6c",
-    "496b344742096fe209acc5bcca2c02d06d5aba59"
+    "bf193e9ea5aafab758126be112e709246a15335b"
   ],
   "drivers/usb/gadget/legacy/dbgp.c": [
     "b810f2f92580ab231ce9aedff3630955c03c4d34",
@@ -293,7 +293,7 @@
   ],
   "kernel/events/core.c": [
     "881ca8b02774b96dc2c74f49a05945015d976dc4",
-    "7addadd444ea6391488b7c27461d1a7e82a88643"
+    "d58ecb7fd3b99bb22e4e92a48df5e3e039823d5d"
   ],
   "kernel/panic.c": [
     "d99248d4c439d0873bf535a43d32e38bc06f1b15",

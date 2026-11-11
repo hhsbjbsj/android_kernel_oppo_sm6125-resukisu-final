@@ -123,6 +123,28 @@ jobs:
               print(f"Run {run}: " + json.dumps({k: v for k, v in values.items() if k != "installer_files"}))
           print(f"Configuration differences: {len(changes)}" if all(configs.values()) else
                 "A build configuration was missing from an artifact.")
+          early_paths = {
+              "arch/arm64/kernel/head.S", "arch/arm64/kernel/setup.c",
+              "arch/arm64/kernel/vmlinux.lds.S", "arch/arm64/kernel/cpu_errata.c",
+              "arch/arm64/kernel/smp.c", "arch/arm64/mm/mmu.c",
+              "arch/arm64/mm/init.c", "drivers/of/fdt.c", "init/main.c",
+          }
+          candidate, = (Path("evidence") / "186").rglob("candidate.patch")
+          selected = []
+          for section in re.split(r"(?m)(?=^diff --git )", candidate.read_text(errors="replace")):
+              match = re.match(r"diff --git a/(\S+) b/(\S+)\n", section)
+              if not match or match[1] != match[2] or match[2] not in early_paths:
+                  continue
+              selected.append(section)
+              print(f"Early-boot path {match[2]}:")
+              for line in section.splitlines():
+                  if line.startswith("@@") or (
+                      line.startswith(("+", "-")) and re.search(
+                          r"__primary|__enable_mmu|fixmap_remap_fdt|memblock_reserve|"
+                          r"early_init_dt_scan|tramp_pg_dir|arch_cpu_finalize_init|"
+                          r"cpufeature|calibrate_delay|random_init|parse_early_param", line)):
+                      print(line)
+          (report / "early-boot-source.diff").write_text("".join(selected))
           boot_config = re.compile(r"CONFIG_(ARM64|KASLR|RANDOMIZE|RELOCATABLE|EFI|OF|CMDLINE|"
                                    r"INITRD|RAMOOPS|PSTORE|DM_VERITY|BLK_DEV|SCSI_UFS|MMC)")
           for key, (old, new) in changes.items():

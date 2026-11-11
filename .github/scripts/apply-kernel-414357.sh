@@ -360,6 +360,22 @@ def resolve_reviewed(tree, trial=False):
             index("update-index", "--cacheinfo", f"{mode},{oid},{path}")
             print(f"Keep exported vendor entry point resident: {symbol.decode()}", flush=True)
 
+        # A section attribute on an earlier declaration also applies to its
+        # definition. Keep the regulator declarations consistent with the exports.
+        for path, symbol in (
+            ("include/linux/regulator/rpm-smd-regulator.h", b"rpm_smd_regulator_driver_init"),
+            ("include/linux/regulator/stub-regulator.h", b"regulator_stub_init"),
+        ):
+            content = git("show", f"{tree}:{path}")
+            old = b"int __init " + symbol + b"("
+            if old not in content:
+                continue
+            content = content.replace(old, b"int " + symbol + b"(")
+            oid = subprocess.check_output(["git", "hash-object", "-w", "--stdin"],
+                                          input=content).decode().strip()
+            mode = git("ls-tree", tree, "--", path).split()[0].decode()
+            index("update-index", "--cacheinfo", f"{mode},{oid},{path}")
+
         if trial:
             path = "init/main.c"
             content = git("show", f"{tree}:{path}")
@@ -1088,6 +1104,38 @@ git diff --cached --stat > "$report/applied-stat.txt"
 git diff --cached --quiet && { echo 'OpenELA staged no source changes' >&2; exit 1; }
 git -c user.name='PCHM30 OpenELA CI' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' \
     commit -m 'kernel: integrate OpenELA 4.14.357 source changes for CI'
+
+# The active memory-tracking functions come from the reconstructed OPPO
+# vendor tree via mm/malloc_track, outside the kernel Git index.
+python3 - "$report" <<'PY'
+import difflib
+import sys
+from pathlib import Path
+
+changes = []
+for name, symbol in (
+    ("vmalloc_track.c", "create_vmalloc_debug"),
+    ("slub_track.c", "create_kmalloc_debug"),
+):
+    source = Path("mm/malloc_track") / name
+    if not source.is_file():
+        continue
+    original = source.read_text()
+    old = f"\nint __init {symbol}("
+    export = f"EXPORT_SYMBOL({symbol});"
+    if original.count(old) != 1 or export not in original:
+        raise SystemExit(f"Unexpected OPPO tracking implementation in {source}")
+    fixed = original.replace(old, f"\nint {symbol}(", 1)
+    source.write_text(fixed)
+    changes.extend(difflib.unified_diff(
+        original.splitlines(keepends=True), fixed.splitlines(keepends=True),
+        fromfile=f"a/{source}", tofile=f"b/{source}",
+    ))
+    print(f"Keep the active OPPO tracking implementation resident: {symbol}", flush=True)
+
+if changes:
+    (Path(sys.argv[1]) / "oppo-vendor-runtime.patch").write_text("".join(changes))
+PY
 
 if [[ -s "$report/conflicts.txt" ]]; then
     echo 'Compiling a partial OpenELA candidate. See the unresolved paths in the artifact.'

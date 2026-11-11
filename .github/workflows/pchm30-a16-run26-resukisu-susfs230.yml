@@ -12,13 +12,14 @@ on:
       scope:
         description: Kernel source scope
         type: choice
-        options: [point-release, full]
-        default: point-release
+        options: [stable190, point-release, full]
+        default: stable190
   push:
     branches: [pchm30-openela-414357-integration]
     paths:
       - '.github/workflows/pchm30-a16-run26-resukisu-susfs230.yml'
       - '.github/scripts/apply-kernel-414357.sh'
+      - '.github/scripts/apply-kernel-414190.sh'
       - '.github/scripts/apply-openela-357-fixes.sh'
 
 concurrency:
@@ -43,6 +44,7 @@ env:
   RESUKISU_COMMIT: 516d3e87fbc986ccefdde2c2765f1700612441a9
   OPENELA_COMPILE_CANDIDATE: '1'
   RUN152_SOURCE_REF: f3b4ee6a48a03a67ece3b6699d3e07b4f278dca8
+  RUN191_SOURCE_REF: 4b792a0a141744d05c5937e01da820888e430228
   ROOT_SUCCESS_BRANCH: pchm30-a16-resukisu-susfs220
   ROOT_SUCCESS_WORKFLOW: .github/workflows/pchm30-a16-resukisu-susfs220-build.yml
   EXP1_BRANCH: pchm30-a16-btf-sockmap-exp1
@@ -62,7 +64,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        scope: ${{ fromJSON(inputs.scope == 'full' && '["full"]' || '["point-release"]') }}
+        scope: ['${{ inputs.scope || 'stable190' }}']
     env:
       OPENELA_SCOPE: ${{ matrix.scope }}
     runs-on: ubuntu-22.04
@@ -110,6 +112,15 @@ jobs:
           name: PCHM30-A16-RUN26-RESUKISU-SUSFS230-414357-152
           path: run152-reference
 
+      - name: Fetch the phone-tested Run 191 reference image
+        if: matrix.scope == 'stable190'
+        uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          run-id: 42959134812
+          name: PCHM30-OpenELA-point-release-191
+          path: run191-reference
+
       - name: Install BTF host tooling
         shell: bash
         run: |
@@ -139,7 +150,7 @@ jobs:
           git fetch --no-tags --depth=1 origin "$GITHUB_SHA"
           git fetch --no-tags --depth=1 origin "$RUN17_BTF_FIX_COMMIT"
           source_ref="$GITHUB_SHA"
-          if [ "$OPENELA_SCOPE" = point-release ]; then
+          if [ "$OPENELA_SCOPE" != full ]; then
             source_ref="$RUN152_SOURCE_REF"
             git fetch --no-tags --depth=1 origin "$source_ref"
           fi
@@ -156,10 +167,15 @@ jobs:
           git show "$source_ref:.github/scripts/apply-binder-los24-freeze.sh" > "$GITHUB_WORKSPACE/apply-binder-los24-freeze.sh"
           git show "$source_ref:.github/scripts/apply-cgroup-v2-freezer.sh" > "$GITHUB_WORKSPACE/apply-cgroup-v2-freezer.sh"
           git show "$source_ref:.github/scripts/apply-kernel-414186.sh" > "$GITHUB_WORKSPACE/apply-kernel-414186.sh"
-          if [ "$OPENELA_SCOPE" = point-release ]; then
-            # Leave clock probing in the Run 152 baseline. Only backport the
-            # previously compiled IP fragment, OCFS2 and IMA groups.
-            git show "$GITHUB_SHA:.github/scripts/apply-openela-357-fixes.sh" |
+          if [ "$OPENELA_SCOPE" != full ]; then
+            point_ref="$GITHUB_SHA"
+            if [ "$OPENELA_SCOPE" = stable190 ]; then
+              point_ref="$RUN191_SOURCE_REF"
+              git fetch --no-tags --depth=1 origin "$point_ref"
+              git show "$GITHUB_SHA:.github/scripts/apply-kernel-414190.sh" > "$GITHUB_WORKSPACE/apply-kernel-414190.sh"
+            fi
+            # Leave clock probing at the phone-tested baseline.
+            git show "$point_ref:.github/scripts/apply-openela-357-fixes.sh" |
               sed '/^apply_group clock-devres /d' > "$GITHUB_WORKSPACE/apply-openela-357-fixes.sh"
             cat > "$GITHUB_WORKSPACE/apply-kernel-414357.sh" <<'BOOT_BASELINE'
           #!/usr/bin/env bash
@@ -283,6 +299,11 @@ jobs:
           if old_smoke not in s:
               raise SystemExit('cannot locate smoke compile in orchestrator')
           s = s.replace(old_smoke, new_smoke, 1)
+          if os.environ["OPENELA_SCOPE"] == "stable190":
+              build = "run_step 'Build BTF EXP2 kernel'\n"
+              if s.count(build) != 1:
+                  raise SystemExit("Cannot locate the final kernel build")
+              s = s.replace(build, 'bash "$GITHUB_WORKSPACE/apply-kernel-414190.sh"\n' + build, 1)
           p.write_text(s)
           PY
 
@@ -368,7 +389,11 @@ jobs:
           grep -Fq 'hook_guard=CONFIG_KSU' "$GITHUB_WORKSPACE/run29-manager-handshake-proof.txt"
           grep -Fq 'custom_manager_size=0x039a' "$GITHUB_WORKSPACE/run29-manager-handshake-proof.txt"
           grep -Fq 'custom_manager_hash=366aa724f4ed84d589fb47077cee4dc6aac45c37c4a50a6e1eaed4446bb3bc03' "$GITHUB_WORKSPACE/run29-manager-handshake-proof.txt"
-          if [ "$OPENELA_SCOPE" = point-release ]; then
+          if [ "$OPENELA_SCOPE" = stable190 ]; then
+            test -s "$GITHUB_WORKSPACE/openela-report/stable190/merge-summary.json"
+            test -s "$GITHUB_WORKSPACE/openela-report/stable190/applied-stat.txt"
+            grep -Fxq 'SUBLEVEL = 190' Makefile
+          elif [ "$OPENELA_SCOPE" = point-release ]; then
             test -s "$GITHUB_WORKSPACE/openela-report/point-release.txt"
             test -s "$GITHUB_WORKSPACE/openela-report/fixes.tsv"
             test ! -e "$GITHUB_WORKSPACE/kernel-version-proof.txt"
@@ -418,31 +443,45 @@ jobs:
           cp "$OUT_DIR/.config" "$report/kernel.config"
           cp "$OUT_DIR/include/config/kernel.release" "$report/kernel.release"
           image="$OUT_DIR/arch/arm64/boot/Image"
-          if [ "$OPENELA_SCOPE" = point-release ]; then
-            sha256sum -c "$report/run152-boot-sources.sha256"
-            python3 - "$GITHUB_WORKSPACE/run152-reference/Image" "$image" <<'PY'
+          if [ "$OPENELA_SCOPE" != full ]; then
+            if [ "$OPENELA_SCOPE" = stable190 ]; then
+              reference="$GITHUB_WORKSPACE/run191-reference/openela-report/Image"
+              reference_sha=bc51b7c8115d5219c7b9c39aa82f46aab694fd71a9c711063a58155f7b76c69a
+              grep -Eq '^4\.14\.190([+.-]|$)' "$report/kernel.release"
+              readelf -SW "$OUT_DIR/vmlinux" > "$report/stable190/elf-sections.txt"
+              grep -Eq '\.altinstructions[[:space:]]' "$report/stable190/elf-sections.txt"
+              ! grep -Fq '.altinstr_replacement' "$report/stable190/elf-sections.txt"
+            else
+              reference="$GITHUB_WORKSPACE/run152-reference/Image"
+              reference_sha=a6d04d2520a3c9c282b35109fd5bf5b77a410a1c6d58d37b905cf5d78215c576
+              sha256sum -c "$report/run152-boot-sources.sha256"
+            fi
+            python3 - "$reference" "$image" "$reference_sha" <<'PY'
           import hashlib
           import struct
           import sys
           from pathlib import Path
 
-          baseline, candidate = (Path(path).read_bytes() for path in sys.argv[1:])
-          if hashlib.sha256(baseline).hexdigest() != "a6d04d2520a3c9c282b35109fd5bf5b77a410a1c6d58d37b905cf5d78215c576":
-              raise SystemExit("Run 152 reference Image does not match the phone-tested artifact")
+          baseline, candidate = (Path(path).read_bytes() for path in sys.argv[1:3])
+          if hashlib.sha256(baseline).hexdigest() != sys.argv[3]:
+              raise SystemExit("Reference Image does not match the phone-tested artifact")
           for image in (baseline, candidate):
               if image[56:60] != b"ARM\x64":
                   raise SystemExit("Invalid ARM64 Image header")
           for field, offset in (("text_offset", 8), ("flags", 24)):
               old, new = (struct.unpack_from("<Q", image, offset)[0] for image in (baseline, candidate))
               if old != new:
-                  raise SystemExit(f"ARM64 {field} changed from Run 152: {old:#x} -> {new:#x}")
-              print(f"Run 152 ARM64 {field} retained: {new:#x}")
+                  raise SystemExit(f"ARM64 {field} changed from the phone-tested image: {old:#x} -> {new:#x}")
+              print(f"Phone-tested ARM64 {field} retained: {new:#x}")
           PY
             ! grep -Eq '^4\.14\.357([+.-]|$)' "$report/kernel.release"
             printf 'baseline_run=41267234453\nsource_ref=%s\nkernel_release=%s\n' \
               "$RUN152_SOURCE_REF" "$(cat "$report/kernel.release")" > "$report/run152-boot-baseline.txt"
             cat "$report/fixes.tsv"
             package=PCHM30-Run152-OpenELA-boot-test-AK3.zip
+            if [ "$OPENELA_SCOPE" = stable190 ]; then
+              package=PCHM30-Linux-4.14.190-boot-test-AK3.zip
+            fi
           elif [ -s "$report/conflicts.txt" ]; then
             ! grep -Eq '^4\.14\.357([+.-]|$)' "$report/kernel.release"
             package=PCHM30-OpenELA-candidate-AK3.zip

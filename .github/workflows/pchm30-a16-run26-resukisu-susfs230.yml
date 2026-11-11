@@ -155,7 +155,7 @@ jobs:
       - name: Build Run17 ReSukiSU stack with SUSFS 2.3 overlay and KPM off
         working-directory: source/android/kernel/msm-4.14
         env:
-          MAKEFLAGS: ${{ matrix.scope == 'full' && '-k' || '' }}
+          MAKEFLAGS: ${{ (matrix.scope == 'full' || matrix.scope == 'stable200') && '-k' || '' }}
         shell: bash
         run: |
           set -Eeuo pipefail

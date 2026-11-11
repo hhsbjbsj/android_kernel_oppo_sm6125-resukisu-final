@@ -90,11 +90,21 @@ reviewed_vendor = {
 }
 port = (Path(os.environ["GITHUB_WORKSPACE"]) / "resolve-4.14.200-pchm30.patch").read_bytes()
 
+# The stable merge can insert an already-backported function at a different
+# location without a textual conflict. Check these vendor APIs explicitly.
+checked_overlaps = {
+    "mm/maccess.c": (
+        "8fccaf8a30d4b7a0f9311c65ea7c4b9588440288", "vendor-already-has-upstream-user-probes"),
+    "include/linux/overflow.h": (
+        "980beb1d891d1ea56c30a61cc0717b0cd3913145", "vendor-already-has-upstream-size-checks"),
+}
+uaccess = "include/linux/uaccess.h"
+
 resolved = {}
 with TemporaryDirectory() as tmp:
     env = dict(os.environ, GIT_INDEX_FILE=str(Path(tmp) / "index"))
     git("read-tree", tree, env=env)
-    for path in sorted(conflicts):
+    for path in sorted(conflicts | checked_overlaps.keys() | {uaccess}):
         original = git("--literal-pathspecs", "ls-tree", "-z", vendor, "--", path)
         source = git("--literal-pathspecs", "ls-tree", "-z", base, "--", path)
         dest = git("--literal-pathspecs", "ls-tree", "-z", target, "--", path)
@@ -121,9 +131,19 @@ with TemporaryDirectory() as tmp:
                     raise SystemExit("Unexpected vendor ARM64 KVM entry layout")
                 after = after.replace(old, new, 1)
             result = "adapted-KVM-entry-with-vendor-x18-preservation"
-        elif path in reviewed_vendor:
-            expected, result = reviewed_vendor[path]
+        elif path == uaccess:
+            declaration = b"extern long notrace probe_user_write(void __user *dst, const void *src, size_t size);\n"
+            internal = declaration.replace(b" probe_user_write", b" __probe_user_write")
+            if (not oid.decode().startswith("9d0f06231b") or before.count(declaration) != 1
+                    or internal in before):
+                raise SystemExit("The checked vendor user-access API has changed")
+            after = before.replace(declaration, declaration + internal, 1)
+            result = "add-upstream-internal-prototype-without-redeclaring-vendor-APIs"
+        elif path in reviewed_vendor or path in checked_overlaps:
+            expected, result = (reviewed_vendor | checked_overlaps)[path]
             if oid.decode() != expected:
+                if path in checked_overlaps:
+                    raise SystemExit(f"The checked vendor backport has changed: {path}")
                 continue
             after = before
         else:

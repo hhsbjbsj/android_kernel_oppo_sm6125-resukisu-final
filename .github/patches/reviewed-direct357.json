@@ -15,6 +15,10 @@
     "981b4dd47205ff21a88f474a79ee9b75f8c525f4",
     "5a1bfffc3fec6524fed017e5d517bdb596315961"
   ],
+  "arch/x86/entry/entry_64.S": [
+    "5ec66fafde4e4ea7a352592b0d51ba34e03b89ef",
+    "cad42875103d1e9682784ef252569f0911a63df7"
+  ],
   "arch/x86/include/asm/cpufeatures.h": [
     "157cfaf1064c9e874185a0ee154f2e975c5835b3",
     "3a52d1d79acc63de4a3e5b70d49dd73cae823c91"
@@ -23,9 +27,33 @@
     "5761a86b88e028c1d0f5b5b87c9cef519b9a6dfe",
     "e9c27496270e3aeb0b26ea4a10ed59ba24965cee"
   ],
+  "arch/x86/kernel/cpu/bugs.c": [
+    "9def3d72bcf373f4deece02870285886ae080c19",
+    "af5dbce9add6ad7cf818eb1b8fb2f14605de13c3"
+  ],
+  "arch/x86/kernel/cpu/common.c": [
+    "d939e0701aad83b81c91fca3dbc6922156f6f08e",
+    "dfc53fedec50e3d75328aef6fb093195377b0f40"
+  ],
   "arch/x86/kernel/cpu/cpu.h": [
     "db10a63687d346e993c6b6c26efca656f97f72a9",
     "accfc16104c9a238d8725f804ec4d9b76e4efc0a"
+  ],
+  "crypto/chacha20_generic.c": [
+    null,
+    null
+  ],
+  "drivers/android/binder.c": [
+    "fd115e7b9fd6b508867b73533c9cd9deedac18aa",
+    "44af6900a5c7d50c0b148baf95e4cb3d52167b06"
+  ],
+  "drivers/android/binder_alloc.c": [
+    "d0b3210ad1bb8300a5bccd52e155b0f54ef84fa9",
+    "d8b636984135fc2f2fa00f091658dc2dcfcfda2e"
+  ],
+  "drivers/android/binder_alloc.h": [
+    "b60d161b7a7ae98c412ca9c075af530da4d67ee9",
+    "4ca46709c18d37c9799e924c6835649cf1e1c6be"
   ],
   "drivers/block/zram/zram_drv.c": [
     "bce0d613d04d2004364004079427c6817f0857b3",
@@ -39,6 +67,10 @@
     "11f1972ff70f53c676c184ce0f611fd5d1313160",
     "9bf0eb3cd21836f3a215deb41b8751a65adc648f"
   ],
+  "drivers/clk/qcom/clk-rcg2.c": [
+    "3e4cbe8cd1d7e82964fdeff74a8f3598de6c372f",
+    "6757ac0bf401b8b5dbf8a5ffa561bc2b21df56a1"
+  ],
   "drivers/devfreq/devfreq.c": [
     "e66ea89537923a3b8232a568e150d173b33f4cc6",
     "9ac8f98516ec147535610fe4b939e8c29c4460f5"
@@ -50,6 +82,10 @@
   "drivers/hid/hid-chicony.c": [
     "06065f8093bf0ff2715f3e22881dd3d770675ea6",
     "218f0e090f638e48b587f70e5bf7e946d9ba0ce4"
+  ],
+  "drivers/hid/hid-core.c": [
+    "a1ac67b7875bc3f68b84b6c4100e79788801eabb",
+    "6a5a8d986e48f8b66d6bb89f3fbdcbf93c9e9a9e"
   ],
   "drivers/hid/hid-holtek-kbd.c": [
     "544743ea255453a4ce1e7df063c32aee5d7e32bb",
@@ -71,25 +107,133 @@
     "f77665642eb9f1dd6557c06bcec072d5ddab863f",
     "38ed41f1c222a3289f0fc7f9b823cc295b4c4064"
   ],
+  "drivers/mmc/core/block.c": [
+    "eb4c3913db621af4ddda0caaa9003b3180bff7ee",
+    "1f5cb374d7719b1461e08790ef31c78c78c7bbee"
+  ],
+  "drivers/mmc/core/core.c": [
+    "4ef30120be4df7176466f4a23cf5763ea77cd542",
+    "dfcd2a4b77ca4b336f476e08004141634ba66465"
+  ],
+  "drivers/mmc/core/host.c": [
+    "9eed28afe3b887aee9c7855e62f0a92a134a2c25",
+    "584ea8e3d4d2e12d5f8d5fb1623e7469adf19e7f"
+  ],
+  "drivers/mmc/core/mmc.c": [
+    "48d2660ec45b040b43d86189a9c20cc2aa195075",
+    "7df75f87c9b97edea7970eefc2822b67c4cd482a"
+  ],
+  "drivers/mmc/host/sdhci.c": [
+    "d5a81bbc37ecd1dac6eb02877613175664d0e87b",
+    "354d57a661166b4e087c59f71d6a9d46fa9fb9eb"
+  ],
   "drivers/rpmsg/qcom_glink_native.c": [
     "eb7af8245f8518a8afb2289f8b677de2a8338fcc",
     "03a31677e030d372d182b9535e45c581507b336d"
+  ],
+  "drivers/scsi/ufs/ufs-qcom.c": [
+    "4b76913104f7ba3c1e41f075d816c584ffaa5410",
+    "3211d3339c7fdec602d8fc03f06f794659fc0745"
+  ],
+  "drivers/scsi/ufs/ufshcd.c": [
+    "f9ae76259b48dbd85297973e37a493b5ac096f2e",
+    "51db4237bed1d7ad185e265254a0c120a0adebb6"
+  ],
+  "drivers/thermal/thermal_core.c": [
+    "62ab59f7831dba7f412462eb27430126e04e6cc9",
+    "6df9a1c24217ae7463be653b7525c82b1e7464ae"
+  ],
+  "drivers/tty/tty_io.c": [
+    "7a306b088f11138146fae8115cbac2834c1838be",
+    "bf834387fb0d8663d2c9a40959d359982c1d616f"
+  ],
+  "drivers/tty/tty_jobctrl.c": [
+    "a7e6238f7ee9a2fa083cca3fed468e0f62b0bcd1",
+    "29b3957f329c63e6a5502f174904c76806495708"
+  ],
+  "drivers/usb/core/quirks.c": [
+    "cbc089615c4ea12991e8aca61efd644bad1d4427",
+    "5f7089a06c8cf836794637600dc69a898625c931"
+  ],
+  "drivers/usb/dwc3/core.c": [
+    "77cedc538bdd9ae8fbd6130ee6023267ca439dfe",
+    "925d18486aa573c409ea1b1aa951084580fcb2a4"
+  ],
+  "drivers/usb/dwc3/gadget.c": [
+    "424b36887408ac074a3ebd568194d9a139265331",
+    "fa7af92a9053e0981007b42effbe2965fc6d36a8"
+  ],
+  "drivers/usb/gadget/composite.c": [
+    "f1af02d8ff439082e769810fa0bfcf57e440b560",
+    "22d8bc081d16a42c52df73e30a5cd5c09bc07d76"
+  ],
+  "drivers/usb/gadget/function/f_uac2.c": [
+    "574a63a655d05b1f714e3251baa30f182cd1cf2d",
+    "e5577d2dc23b47bece7cf367fbd9f8a1dc6a38e5"
+  ],
+  "drivers/usb/gadget/function/rndis.c": [
+    "d1737f27147067ea9044027fbae5cedf8bab6e6c",
+    "496b344742096fe209acc5bcca2c02d06d5aba59"
+  ],
+  "drivers/usb/gadget/legacy/dbgp.c": [
+    "b810f2f92580ab231ce9aedff3630955c03c4d34",
+    "e8818ad973e4bb379f9e0b446dadeab3330b5bfc"
   ],
   "drivers/usb/gadget/legacy/inode.c": [
     "68a1387355f4caf95bef65c5413bac68f25d84bd",
     "673bf0d07455fafb64fbf5d21439c11b46ff6312"
   ],
+  "fs/aio.c": [
+    "2bb6285cb58c323497103ba470cb41424b27e060",
+    "94d748101010d5c1283d0d0502d5a10961b93434"
+  ],
+  "fs/crypto/fname.c": [
+    "63bfe5e8accd2814f49159d541727a77f8fbb2a4",
+    "ce67f9f906e7ceeb76a5c0179db44cf2e32fb06b"
+  ],
   "fs/eventpoll.c": [
     "7b80ce505ee8a1637c21b0bd206f4d705e116227",
     "3baf427278784fa2f5eba906b50cc42c1c14f748"
+  ],
+  "fs/ext4/namei.c": [
+    "06ae969c1600094d151ce0495a0ac6c1a4fd68f6",
+    "5ec67f9089586a0fb23bcd44d8e0120d530115b1"
+  ],
+  "fs/f2fs/gc.c": [
+    "0c03f7d05fa6f6cc6c4e4eeccd103ca98107bae3",
+    "5a82d31cf8b144af1a0a279c1c1b25c41cd4b298"
   ],
   "fs/f2fs/inode.c": [
     "482d267f4a639cd955523378e341c5283a3d4ace",
     "435931836d4bd35c6bd5ce5d3fc48bf3607bdb0c"
   ],
+  "fs/f2fs/namei.c": [
+    "a8959c64bf3a5efe3ff71dbc806c2f08d29c20f0",
+    "4faf9bd038ff96debfa1d5373657e73fe11e1081"
+  ],
+  "fs/f2fs/segment.c": [
+    "9a85de2db377f0c36ab98e23849592b6c7bc4374",
+    "1f3a6e4cb59e9e51403bb3a95d85c926aad9de02"
+  ],
+  "fs/f2fs/super.c": [
+    "3584bd090e635f584f7e3f6a9dfee10099e4accb",
+    "c25f1127591cb0c59e642a0f0d35fd312338af56"
+  ],
+  "fs/fs-writeback.c": [
+    "fb077e20f96045118b761fd1dd4cfda0fb97d9a1",
+    "b64760b02185f7e5d7fd5288af3fc500a319adce"
+  ],
   "fs/fuse/dev.c": [
     "f3d3b0a1b05fd302adc821cab1b91390fd7b6f54",
     "efb84389ea276ff56197e55eb2056dff05341b5a"
+  ],
+  "fs/fuse/file.c": [
+    "3ef6a05f2ff2105654b40fa10eb8758e08a7120e",
+    "b5a20b27fbdd4c61bfd65c891cb930a3e8d3d6d7"
+  ],
+  "fs/notify/fdinfo.c": [
+    "54c1f0d3ff6d4ae66233615cb80139b986f84795",
+    "4679dac2120c70cbfde8a5a7f7d9b9db17c1e5e9"
   ],
   "fs/proc/proc_sysctl.c": [
     "b09447e746ef20700cc2e336e916ecdc61e1ab6e",
@@ -99,9 +243,25 @@
     "160721531f0b4e3d2efe304759b04fe7bd774899",
     "7ceaa6754c96b78f5722c53d5f94989354190c9f"
   ],
+  "include/crypto/chacha.h": [
+    "3d261f5cd156db8cf9892c20fcefb406c5372f86",
+    "7b1936e2d47bd2b565407f3e29565dff4f79ff89"
+  ],
+  "include/crypto/chacha20.h": [
+    null,
+    null
+  ],
   "include/linux/tty.h": [
     "e9f03eefc47ad63739c376238b11e6526ba2c340",
     "964b9e922f144e5df2f68aae4abf061252d2921d"
+  ],
+  "include/linux/wait.h": [
+    "dce263373691c4d26e9d07a5e588e88724ce1361",
+    "6f22077c65838507ec1202d4e310250a0f44780f"
+  ],
+  "include/net/netfilter/nf_queue.h": [
+    "106b49319f69577239e2c0f26d16e57a3b5bdf56",
+    "cbf231c208385eda72c431bb1ee972a5fec8ede8"
   ],
   "include/net/pkt_sched.h": [
     "1ec58108cfb9f691ad6f89bebe4948ad64b2bf97",
@@ -111,6 +271,10 @@
     "cbdd273a3aa52ac17b2f9b3788a745ed2b3bdb99",
     "845bac5d4b97914133914daf46302225b498488d"
   ],
+  "include/net/xfrm.h": [
+    "c57b9e5fe69bb25e9ca960de09bc58ffbb326097",
+    "c995221341022691328e71f120f223fc16eb7a1b"
+  ],
   "init/main.c": [
     "301fb24640b0bf81f3493b2481f915f8f3377b78",
     "4c0832e481b0e2301ee1eb4943676329b72bafa5"
@@ -119,21 +283,57 @@
     "60b1267f960586d04274f0199464f136f8a8228b",
     "60b1267f960586d04274f0199464f136f8a8228b"
   ],
+  "kernel/bpf/verifier.c": [
+    "7594016364fcdcc84480dcfc0743df3770919a5c",
+    "7594016364fcdcc84480dcfc0743df3770919a5c"
+  ],
   "kernel/cpu.c": [
     "c185e19820d608939e1151d7c531722b1d38dabe",
     "4e1abeea32a234209f7cdd49a37fc3e258850879"
+  ],
+  "kernel/events/core.c": [
+    "881ca8b02774b96dc2c74f49a05945015d976dc4",
+    "7addadd444ea6391488b7c27461d1a7e82a88643"
   ],
   "kernel/panic.c": [
     "d99248d4c439d0873bf535a43d32e38bc06f1b15",
     "dfc6f4245b08552b15ece1e1efc2db3bb2fbdc28"
   ],
+  "kernel/sched/fair.c": [
+    "f064df92c234931cd95f2b4a4fea124b15f38ad8",
+    "417227f8209d183121ee3096a0e7d9e1a45c753b"
+  ],
+  "kernel/sched/wait.c": [
+    "41c4297fae15eb5fd676843f9d375c5a01aa6a20",
+    "41c4297fae15eb5fd676843f9d375c5a01aa6a20"
+  ],
+  "kernel/sysctl.c": [
+    "c8aa3d5e356a1919c971cb1cb542ae9799faf843",
+    "cb10728603de3e4a066f000b3abea8fa2fd9e476"
+  ],
   "lib/Makefile": [
     "1d5862a9f6ce6242e19b5bee7cf5d46c7b100fa9",
     "6455532c3947e2932d5783028c6a9df4e1f3c39b"
   ],
+  "lib/chacha20.c": [
+    null,
+    null
+  ],
+  "mm/huge_memory.c": [
+    "c7af0f2be1679bbd1ad6e50fc12bfcc96b7b753c",
+    "ac61d0ec7d9e50ae53ab077bb709189d04efd2b6"
+  ],
+  "mm/mmap.c": [
+    "3809026acf869fe1e75dcc939e819752a173fd75",
+    "3c7043138c0af7849b02d18abb5ee926005a5bb2"
+  ],
   "mm/page_alloc.c": [
     "589528a83fe90a0865187f49227ff2cdc306af22",
     "f3693268183da422fa932ce944beba646f2d29ab"
+  ],
+  "net/core/filter.c": [
+    "b2473dfd6d8f22d7a64e525eec183101405112a3",
+    "d4604779256c416d37cf22f94c019c50fb8c912a"
   ],
   "net/core/skbuff.c": [
     "e0f3fe233c7d3bca2b6ac97427aea3776727a788",
@@ -151,16 +351,64 @@
     "4cb0fa36072035d6a8f9ec02adcd85310911bcb7",
     "1b59f748f311a3cc4f9b2c0d69f9718949e0a92a"
   ],
+  "net/ipv4/sysctl_net_ipv4.c": [
+    "a48122e9f86e053ea464bde73f9518900f0d3fbd",
+    "a7b61cccc1b93270bf86e622d318304f66cdb86f"
+  ],
   "net/ipv4/tcp_ipv4.c": [
     "64df00d29e48bfb69ff62816da4520fb98b6ea91",
     "d947b3f1c85cfc6c900021997da1be21bc2d8dc9"
+  ],
+  "net/ipv4/tcp_output.c": [
+    "cf52fb87d32ce905b155dffd31a7926b56624f86",
+    "7509665ebd72036b20895d2006dc3fe26a12a24b"
+  ],
+  "net/ipv6/af_inet6.c": [
+    "62fa94c8cc0f9d650490b4014f634a3835dc4547",
+    "2124a57ab42943e4449b7a4f3f4bdc1ebda20383"
+  ],
+  "net/ipv6/ip6_output.c": [
+    "47aaf63855a67842db88d9f5e83e6c6e58c79c74",
+    "2e66900a753d56c9edd09c566a288befee194ade"
+  ],
+  "net/ipv6/udp.c": [
+    "5e22ddb21f2ceb3b8348be16e1fa3b940bdd9b25",
+    "5e22ddb21f2ceb3b8348be16e1fa3b940bdd9b25"
+  ],
+  "net/key/af_key.c": [
+    "4413a842232ba364e6963a5b0cab601da7cc668a",
+    "5e55ccc43821008f1da25a7f7eca03122803936f"
   ],
   "net/packet/af_packet.c": [
     "9d07d763fffec07cd236f2561a0e2985ca66a3a0",
     "a0c96f7cc1d7427e7e521c1b6abce64903a06385"
   ],
+  "net/qrtr/qrtr.c": [
+    "f1b5e3b6123d32ae7c0d14eb4eb0b9ec078aa2e5",
+    "f44d2b78316831d6ec5c350d7d4cb1c11052b01f"
+  ],
+  "net/xfrm/xfrm_policy.c": [
+    "b0811d71eb43cff1ce3c7746a6f2243876fae44f",
+    "2886753ce51a3b37096e19ff38a510e74fef3a4e"
+  ],
+  "net/xfrm/xfrm_user.c": [
+    "cf220e77a59dab743f1d950269aca7b90b6417b4",
+    "c03b925ee462698cc11badad5c147a9f77b83bb2"
+  ],
+  "security/selinux/avc.c": [
+    "6f2bd653452e5981b5977405ce099666b703e106",
+    "872fc13ad8f35105ccfeaeafc0798be763448aa5"
+  ],
+  "security/selinux/hooks.c": [
+    "330c9626e9c1b0700956b23bcc6fa7965a3f9ea5",
+    "cb5b451aa632f3ec1137e7add59119daaf0d43b7"
+  ],
   "security/selinux/selinuxfs.c": [
     "2d2090380542419ba9099a283d0bfbac597e45f8",
     "c1432044009cf083a0de44d8185bdabcb76b31e9"
+  ],
+  "sound/usb/stream.c": [
+    "784cc2af304e669ee6eb38ca69c802820f182466",
+    "518c62c10e5b85e554c5e5c42a8ed0e6c44f31ca"
   ]
 }

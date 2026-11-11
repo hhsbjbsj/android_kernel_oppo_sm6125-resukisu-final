@@ -19,6 +19,7 @@ on:
     paths:
       - '.github/workflows/pchm30-a16-run26-resukisu-susfs230.yml'
       - '.github/scripts/apply-kernel-414357.sh'
+      - '.github/patches/reviewed-direct357.*'
       - '.github/scripts/apply-kernel-414190.sh'
       - '.github/scripts/apply-kernel-414200.sh'
       - '.github/patches/resolve-4.14.200-pchm30.patch'

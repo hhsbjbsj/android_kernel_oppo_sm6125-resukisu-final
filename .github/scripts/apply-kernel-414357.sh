@@ -981,8 +981,11 @@ def update_tree(tree, updates):
         env = dict(os.environ, GIT_INDEX_FILE=str(Path(temporary) / "index"))
         subprocess.run(["git", "read-tree", tree], env=env, check=True)
         for path, (mode, oid) in updates.items():
-            subprocess.run(["git", "update-index", "--add", "--cacheinfo", f"{mode},{oid},{path}"],
-                           env=env, check=True)
+            if mode is None:
+                subprocess.run(["git", "update-index", "--force-remove", "--", path], env=env, check=True)
+            else:
+                subprocess.run(["git", "update-index", "--add", "--cacheinfo", f"{mode},{oid},{path}"],
+                               env=env, check=True)
         return subprocess.check_output(["git", "write-tree"], env=env).decode().strip()
 
 
@@ -1137,6 +1140,11 @@ def resolve_direct_reviews():
         folder = Path(temporary)
         for path, (old, new) in manifest.items():
             record = git("--literal-pathspecs", "ls-tree", "-z", vendor, "--", path)
+            if old is None and new is None:
+                if record:
+                    raise SystemExit(f"Legacy ChaCha path has reappeared: {path}")
+                updates[path] = (None, None)
+                continue
             mode, kind, oid = record.split(b"\t", 1)[0].decode().split()
             if kind != "blob" or mode not in {"100644", "100755"} or oid != old:
                 raise SystemExit(f"Reviewed OpenELA preimage differs: {path}")
@@ -1147,6 +1155,8 @@ def resolve_direct_reviews():
             updates[path] = (mode, new)
         subprocess.run(["git", "apply", "--whitespace=nowarn", str(patch)], cwd=folder, check=True)
         for path, (_, expected) in updates.items():
+            if expected is None:
+                continue
             actual = subprocess.check_output(["git", "hash-object", "-w", "--", str(folder / path)]).decode().strip()
             if actual != expected:
                 raise SystemExit(f"Reviewed OpenELA output differs: {path}")
@@ -1175,6 +1185,18 @@ if conflicts and candidate.exists():
     merged_tree = update_tree(merged_tree, {**exact_updates, **donor_updates, **direct_updates})
     excluded -= trial_resolved | exact_updates.keys() | donor_updates.keys() | direct_updates.keys()
 else:
+    if os.environ.get("OPENELA_SCOPE") == "direct357":
+        # The OPPO interfaces need the same source adaptations in a complete merge.
+        merged_tree, _ = resolve_reviewed(merged_tree, trial=True)
+        merged_tree = update_tree(merged_tree, direct_updates)
+        required_chacha = {
+            "include/crypto/chacha.h": b"chacha_init_consts(",
+            "crypto/chacha_generic.c": b"__aligned(sizeof(long))",
+            "lib/chacha.c": b"put_unaligned_le32(",
+        }
+        for path, signature in required_chacha.items():
+            if signature not in git("show", f"{merged_tree}:{path}"):
+                raise SystemExit(f"Missing vendor ChaCha equivalent: {path}")
     excluded = set(conflicts)
 (report / "resolved-paths.txt").write_text("".join(path + "\n" for path in sorted(resolved)))
 changed = git("diff", "--no-renames", "--name-only", "-z", vendor, merged_tree)
@@ -1282,6 +1304,84 @@ for name, symbol in (
 if changes:
     (Path(sys.argv[1]) / "oppo-vendor-runtime.patch").write_text("".join(changes))
 PY
+
+
+if [[ "${OPENELA_SCOPE:-}" == direct357 ]]; then
+    python3 - "$report" <<'PY'
+import difflib
+import hashlib
+from pathlib import Path
+import sys
+
+report = Path(sys.argv[1])
+
+def replace(source, before, after):
+    if source.count(before) != 1:
+        raise SystemExit(f"Unexpected OPPO storage context: {before[:80]!r}")
+    return source.replace(before, after, 1)
+
+def update(path, expected, transform):
+    path = Path(path)
+    original = path.read_bytes()
+    oid = hashlib.sha1(f"blob {len(original)}\0".encode() + original).hexdigest()
+    if oid != expected:
+        raise SystemExit(f"Active OPPO storage source differs from the reviewed commit: {path}")
+    fixed = transform(original)
+    path.write_bytes(fixed)
+    return "".join(difflib.unified_diff(
+        original.decode().splitlines(keepends=True), fixed.decode().splitlines(keepends=True),
+        fromfile=f"a/{path}", tofile=f"b/{path}",
+    ))
+
+def ufs(source):
+    scale = b"\tstart = ktime_get();\n\tret = ufshcd_devfreq_scale(hba, scale_up);\n"
+    fixed = replace(source, scale, (
+        b"\tpm_runtime_get_noresume(hba->dev);\n"
+        b"\tif (!pm_runtime_active(hba->dev)) {\n"
+        b"\t\tpm_runtime_put_noidle(hba->dev);\n"
+        b"\t\tret = -EAGAIN;\n"
+        b"\t\tgoto out;\n"
+        b"\t}\n" + scale + b"\tpm_runtime_put(hba->dev);\n"
+    ))
+    start = fixed.index(b"static int ufshcd_eh_device_reset_handler(")
+    end = fixed.index(b"\n}\n", start)
+    reset = fixed[start:end]
+    reset = replace(reset, b"\tunsigned int tag;\n", b"")
+    reset = replace(reset, b"\tu8 resp = 0xF;\n\tstruct ufshcd_lrb *lrbp;\n", b"\tu8 resp = 0xF, lun;\n")
+    reset = replace(reset, b"\ttag = cmd->request->tag;\n", b"")
+    reset = replace(reset, b"\tlrbp = &hba->lrb[tag];\n", b"\tlun = ufshcd_scsi_to_upiu_lun(cmd->device->lun);\n")
+    reset = reset.replace(b"lrbp->lun", b"lun")
+    return fixed[:start] + reset + fixed[end:]
+
+def mmc(source):
+    anchor = b"\tif (card->ext_csd.rev >= 7) {\n\t\t/* Enhance Strobe"
+    timeout = (
+        b"\t/* A zero partition timeout falls back to GENERIC_CMD6_TIME. */\n"
+        b"\tif (!card->ext_csd.part_time)\n"
+        b"\t\tcard->ext_csd.part_time = card->ext_csd.generic_cmd6_time;\n"
+        b"\tif (card->ext_csd.part_time < MMC_MIN_PART_SWITCH_TIME)\n"
+        b"\t\tcard->ext_csd.part_time = MMC_MIN_PART_SWITCH_TIME;\n\n"
+    )
+    return replace(source, anchor, timeout + anchor)
+
+def f2fs(source):
+    anchor = b"\t\t\tif (!down_write_trylock(\n\t\t\t\t&F2FS_I(inode)->i_gc_rwsem[WRITE]))"
+    skip = (
+        b"\t\t\tif (special_file(inode->i_mode)) {\n"
+        b"\t\t\t\tiput(inode);\n"
+        b"\t\t\t\tcontinue;\n"
+        b"\t\t\t}\n\n"
+    )
+    return replace(source, anchor, skip + anchor)
+
+ports = (
+    ("drivers/scsi/oufs/ufshcd.c", "fda4ad0286249bbc547b9a1e7b3f7f0d9633e69b", ufs),
+    ("drivers/ommc/core/mmc.c", "32619af7d915cf667abcfe2c58f65f263ef6432e", mmc),
+    ("fs/of2fs/gc.c", "eb169c33c8a36f3cce17a2da7342e17f7fe330cc", f2fs),
+)
+(report / "pchm30-active-storage.patch").write_text("".join(update(*port) for port in ports))
+PY
+fi
 
 if [[ -s "$report/conflicts.txt" ]]; then
     echo 'Compiling a partial OpenELA candidate. See the unresolved paths in the artifact.'

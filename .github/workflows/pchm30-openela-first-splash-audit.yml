@@ -145,6 +145,15 @@ jobs:
                           r"cpufeature|calibrate_delay|random_init|parse_early_param", line)):
                       print(line)
           (report / "early-boot-source.diff").write_text("".join(selected))
+          focused = {"arch/arm64/kernel/head.S", "arch/arm64/kernel/vmlinux.lds.S",
+                     "arch/arm64/mm/mmu.c", "drivers/of/fdt.c", "init/main.c"}
+          for section in selected:
+              path = section.splitlines()[0].split(" b/", 1)[-1]
+              if path in focused:
+                  print(section, end="")
+          print("All config differences:")
+          for key, values in changes.items():
+              print(f"{key}: {values[0]} -> {values[1]}")
           boot_config = re.compile(r"CONFIG_(ARM64|KASLR|RANDOMIZE|RELOCATABLE|EFI|OF|CMDLINE|"
                                    r"INITRD|RAMOOPS|PSTORE|DM_VERITY|BLK_DEV|SCSI_UFS|MMC)")
           for key, (old, new) in changes.items():

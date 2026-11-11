@@ -58,6 +58,54 @@ for line in entries[1:]:
         raise SystemExit(f"Unexpected merge index entry: {line!r}")
     conflicts.add(os.fsdecode(match[1]))
 
+# Keep the vendor context around upstream edits which overlap downstream changes.
+vendor_edits = {
+    "Documentation/devicetree/bindings/usb/dwc3.txt": (
+        (b" - snps,dis_metastability_quirk: when set, disable metastability workaround.",
+         b" - snps,parkmode-disable-ss-quirk: when set, all SuperSpeed bus instances in\n\t\t\tpark mode are disabled.\n - snps,dis_metastability_quirk: when set, disable metastability workaround.", 1),
+    ),
+    "drivers/block/loop.c": (
+        (b"kill_bdev(lo->lo_device);",
+         b"invalidate_bdev(lo->lo_device);", 2),
+        (b"/* kill_bdev should have truncated all the pages */",
+         b"/* invalidate_bdev should have truncated all the pages */", 2),
+    ),
+    "drivers/usb/host/xhci-plat.c": (
+        (b"\tret = xhci_resume(xhci, false);\n\tpm_runtime_disable(dev);\n\tpm_runtime_set_active(dev);\n\tpm_runtime_enable(dev);\n\n\treturn ret;",
+         b"\treturn xhci_resume(xhci, false);", 1),
+    ),
+    "include/linux/netdevice.h": (
+        (b"#define XMIT_RECURSION_LIMIT\t10",
+         b"#define XMIT_RECURSION_LIMIT\t8", 1),
+    ),
+    "include/uapi/linux/input-event-codes.h": (
+        (b"\n#define SW_MAX\t\t\t0x20",
+         b"\n/* OPPO assigns switch codes 0x10 through 0x13 to headset events. */\n#define SW_MACHINE_COVER\t0x14  /* set = cover closed */\n#define SW_MAX\t\t\t0x20", 1),
+    ),
+    "kernel/sched/fair.c": (
+        (b"\t\tload = task_h_load(p);\n",
+         b"\t\t/*\n\t\t * Depending of the number of CPUs and tasks and the\n\t\t * cgroup hierarchy, task_h_load() can return a null\n\t\t * value. Make sure that env->imbalance decreases\n\t\t * otherwise detach_tasks() will stop only after\n\t\t * detaching up to loop_max tasks.\n\t\t */\n\t\tload = max_t(unsigned long, task_h_load(p), 1);\n", 1),
+    ),
+    "sound/core/compress_offload.c": (
+        (b"\tretval = stream->ops->trigger(stream, SNDRV_PCM_TRIGGER_STOP);\n\tif (!retval) {\n\t\tstream->runtime->state = SNDRV_PCM_STATE_SETUP;\n\t\twake_up(&stream->runtime->sleep);",
+         b"\tretval = stream->ops->trigger(stream, SNDRV_PCM_TRIGGER_STOP);\n\tif (!retval) {\n\t\t/* Clear flags and stop any drain wait. */\n\t\tstream->partial_drain = false;\n\t\tstream->metadata_set = false;\n\t\tsnd_compr_drain_notify(stream);", 1),
+        (b"\tretval = stream->ops->trigger(stream, SND_COMPR_TRIGGER_PARTIAL_DRAIN);",
+         b"\tstream->partial_drain = true;\n\tretval = stream->ops->trigger(stream, SND_COMPR_TRIGGER_PARTIAL_DRAIN);\n\tif (retval)\n\t\tstream->partial_drain = false;", 1),
+    ),
+}
+
+# Match the reviewed vendor blobs before accepting an existing implementation.
+reviewed_blobs = {
+    "arch/mips/kernel/time.c": (
+        "a6ebc8135112e5c9c22e5598bf25556469f9dbb4", "vendor-has-no-CPU-frequency-notifier"),
+    "arch/sparc/kernel/ptrace_32.c": (
+        "16b50afe7b52fcf8054415660a7fc0705decae8b", "vendor-already-maps-PC-and-Y-registers"),
+    "arch/x86/kernel/fpu/xstate.c": (
+        "87a57b7642d3673420b272fec0f442b9baf76414", "vendor-already-indexes-by-feature-number"),
+    "drivers/usb/gadget/function/f_uac1_legacy.c": (
+        "5cdb2f3227405ec9ce3e70729ae91042ced6c6fe", "vendor-already-locks-playback-queue"),
+}
+
 resolved = {}
 with TemporaryDirectory() as tmp:
     env = dict(os.environ, GIT_INDEX_FILE=str(Path(tmp) / "index"))
@@ -83,6 +131,23 @@ with TemporaryDirectory() as tmp:
                 continue
             after = before.replace(vendor_old, b"", 1)
             result = "adapted-ARM64-alternative-linker-section"
+        elif path in vendor_edits:
+            after = before
+            for old, new, count in vendor_edits[path]:
+                if after.count(old) != count:
+                    raise SystemExit(f"Reviewed 4.14.190 edit no longer matches {path}")
+                after = after.replace(old, new)
+            result = "upstream-change-adapted-to-vendor-code"
+        elif path == "include/linux/mod_devicetable.h":
+            if b"#define INPUT_DEVICE_ID_SW_MAX\t\t0x20\n" not in before:
+                continue
+            after = before
+            result = "vendor-switch-bitmap-already-covers-new-event"
+        elif path in reviewed_blobs:
+            expected_oid, result = reviewed_blobs[path]
+            if oid.decode() != expected_oid:
+                continue
+            after = before
         else:
             patch = git("--literal-pathspecs", "diff", "--binary", "--no-renames", base, target, "--", path)
             if not patch or b"\0" in before or b"\nGIT binary patch" in patch:
@@ -147,6 +212,9 @@ if (b".subsection 1" not in header or b".altinstr_replacement" in header + linke
         or b"return !(pc >= replptr && pc <= (replptr + alt->alt_len));" not in assembly
         or b"KEEP(*(.altinstructions))" not in linker):
     raise SystemExit("ARM64 instruction alternatives and vendor linker retention must be migrated together")
+sound = git("show", f"{tree}:include/sound/compress_driver.h")
+if b"bool partial_drain;" not in sound or b"if (stream->partial_drain)" not in sound:
+    raise SystemExit("Compressed audio requires the matching upstream partial drain notification")
 version = git("show", f"{tree}:Makefile")
 if b"SUBLEVEL = 190\n" not in version:
     raise SystemExit("The merged upstream Makefile does not identify Linux 4.14.190")

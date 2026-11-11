@@ -63,6 +63,33 @@ for line in entries[1:]:
         raise SystemExit(f"Unexpected merge index entry: {line!r}")
     conflicts.add(os.fsdecode(match[1]))
 
+# Scope each reviewed resolution to the exact tested vendor preimage.
+reviewed_edits = {
+    "arch/x86/kernel/vmlinux.lds.S": "2e994fff9164b6fc9d2dbc5cb93ca1d1fe0bf6ea",
+    "drivers/clk/clk.c": "4b56e59e07bf2dab0de2a0bd565e8d8218c13102",
+    "drivers/gpu/drm/msm/msm_drv.c": "727e8b65094b95feaa89968c72fafdc70783c769",
+    "drivers/hid/hid-input.c": "2ce33ae50efa16881d82a1f7d0ab863352eaf0bd",
+    "drivers/hwtracing/coresight/coresight-tmc-etf.c": "6d0cb43361bc6097727fc0faea0381667d963a59",
+    "drivers/mmc/host/sdhci-msm.c": "29a87b31b6de51b81bcb83684b220610b7c6a04d",
+    "drivers/usb/dwc3/gadget.c": "6357b3510e817f9a6f91a7bc810454e2d8263492",
+    "drivers/vfio/vfio_iommu_type1.c": "2c68fa5b02219dc4295c1a0ac9e86040d701dfaf",
+    "include/linux/hid.h": "8e059395fecadd866066bd91b0edad730659949f",
+    "mm/memory.c": "2a228d5d679f8ef7ad0833be490b171b3de066ec",
+    "mm/mmap.c": "84431ea098284d37706ede45da4e5281bf952710",
+    "net/ipv4/inet_connection_sock.c": "df9f54bf24dda66cf1c7618bfcf2ae719078e65f",
+}
+reviewed_vendor = {
+    "drivers/hid/hid-core.c": (
+        "a1ac67b7875bc3f68b84b6c4100e79788801eabb", "vendor-already-validates-HID-report-size"),
+    "fs/f2fs/dir.c": (
+        "7fd0b08d75189aaa69795f2f67fa9435eb0e5185", "vendor-already-checks-F2FS-directory-bounds"),
+    "fs/fs-writeback.c": (
+        "fb077e20f96045118b761fd1dd4cfda0fb97d9a1", "vendor-already-queues-writeback-and-expires-lazytime"),
+    "include/linux/fs.h": (
+        "e4151d687969363a72e459dad27197491bd0fa0f", "vendor-already-uses-new-writeback-state"),
+}
+port = (Path(os.environ["GITHUB_WORKSPACE"]) / "resolve-4.14.200-pchm30.patch").read_bytes()
+
 resolved = {}
 with TemporaryDirectory() as tmp:
     env = dict(os.environ, GIT_INDEX_FILE=str(Path(tmp) / "index"))
@@ -94,8 +121,20 @@ with TemporaryDirectory() as tmp:
                     raise SystemExit("Unexpected vendor ARM64 KVM entry layout")
                 after = after.replace(old, new, 1)
             result = "adapted-KVM-entry-with-vendor-x18-preservation"
+        elif path in reviewed_vendor:
+            expected, result = reviewed_vendor[path]
+            if oid.decode() != expected:
+                continue
+            after = before
         else:
-            patch = git("--literal-pathspecs", "diff", "--binary", "--no-renames", base, target, "--", path)
+            filters = []
+            if path in reviewed_edits:
+                if oid.decode() != reviewed_edits[path]:
+                    continue
+                patch = port
+                filters = [f"--include={path}"]
+            else:
+                patch = git("--literal-pathspecs", "diff", "--binary", "--no-renames", base, target, "--", path)
             if not patch or b"\0" in before or b"\nGIT binary patch" in patch:
                 continue
             file = Path(tmp) / path
@@ -104,7 +143,7 @@ with TemporaryDirectory() as tmp:
             file.chmod(0o755 if mode == b"100755" else 0o644)
 
             def apply(*flags):
-                return subprocess.run(["git", "apply", "--whitespace=nowarn", *flags],
+                return subprocess.run(["git", "apply", "--whitespace=nowarn", *filters, *flags],
                                       cwd=tmp, input=patch, capture_output=True).returncode == 0
 
             forward = apply("--check")
@@ -117,7 +156,8 @@ with TemporaryDirectory() as tmp:
                 after = file.read_bytes()
                 if after == before or not apply("--reverse") or file.read_bytes() != before:
                     continue
-                result = "exact-upstream-hunks-applied"
+                result = ("upstream-change-adapted-to-vendor-code" if filters
+                          else "exact-upstream-hunks-applied")
             else:
                 if not apply("--reverse") or not apply() or file.read_bytes() != before:
                     continue

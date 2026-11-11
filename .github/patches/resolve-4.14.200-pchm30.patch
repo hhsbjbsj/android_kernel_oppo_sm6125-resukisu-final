@@ -1,0 +1,714 @@
+diff --git a/arch/x86/kernel/vmlinux.lds.S b/arch/x86/kernel/vmlinux.lds.S
+--- a/arch/x86/kernel/vmlinux.lds.S
++++ b/arch/x86/kernel/vmlinux.lds.S
+@@ -357,6 +357,7 @@
+ 	.bss : AT(ADDR(.bss) - LOAD_OFFSET) {
+ 		__bss_start = .;
+ 		*(.bss..page_aligned)
++		. = ALIGN(PAGE_SIZE);
+ 		*(BSS_MAIN)
+ 		. = ALIGN(PAGE_SIZE);
+ 		__bss_stop = .;
+diff --git a/drivers/clk/clk.c b/drivers/clk/clk.c
+--- a/drivers/clk/clk.c
++++ b/drivers/clk/clk.c
+@@ -47,6 +47,17 @@
+ static HLIST_HEAD(clk_orphan_list);
+ static LIST_HEAD(clk_notifier_list);
+ 
++static struct hlist_head *all_lists[] = {
++	&clk_root_list,
++	&clk_orphan_list,
++	NULL,
++};
++
++static struct hlist_head *orphan_list[] = {
++	&clk_orphan_list,
++	NULL,
++};
++
+ struct clk_handoff_vdd {
+ 	struct list_head list;
+ 	struct clk_vdd_class *vdd_class;
+@@ -2695,17 +2706,6 @@
+ static DEFINE_MUTEX(clk_debug_lock);
+ static HLIST_HEAD(clk_debug_list);
+ 
+-static struct hlist_head *all_lists[] = {
+-	&clk_root_list,
+-	&clk_orphan_list,
+-	NULL,
+-};
+-
+-static struct hlist_head *orphan_list[] = {
+-	&clk_orphan_list,
+-	NULL,
+-};
+-
+ static void clk_state_subtree(struct clk_core *c)
+ {
+ 	int vdd_level = 0;
+@@ -3991,6 +3991,34 @@
+ 	.set_parent	= clk_nodrv_set_parent,
+ };
+ 
++static void clk_core_evict_parent_cache_subtree(struct clk_core *root,
++						struct clk_core *target)
++{
++	int i;
++	struct clk_core *child;
++
++	for (i = 0; i < root->num_parents; i++)
++		if (root->parents[i] == target)
++			root->parents[i] = NULL;
++
++	hlist_for_each_entry(child, &root->children, child_node)
++		clk_core_evict_parent_cache_subtree(child, target);
++}
++
++/* Remove this clk from all parent caches */
++static void clk_core_evict_parent_cache(struct clk_core *core)
++{
++	struct hlist_head **lists;
++	struct clk_core *root;
++
++	lockdep_assert_held(&prepare_lock);
++
++	for (lists = all_lists; *lists; lists++)
++		hlist_for_each_entry(root, *lists, child_node)
++			clk_core_evict_parent_cache_subtree(root, core);
++
++}
++
+ /**
+  * clk_unregister - unregister a currently registered clock
+  * @clk: clock to unregister
+@@ -4028,6 +4056,8 @@
+ 					  child_node)
+ 			clk_core_set_parent(child, NULL);
+ 	}
++
++	clk_core_evict_parent_cache(clk->core);
+ 
+ 	hlist_del_init(&clk->core->child_node);
+ 
+diff --git a/drivers/gpu/drm/msm/msm_drv.c b/drivers/gpu/drm/msm/msm_drv.c
+--- a/drivers/gpu/drm/msm/msm_drv.c
++++ b/drivers/gpu/drm/msm/msm_drv.c
+@@ -40,6 +40,7 @@
+ #include <linux/of_address.h>
+ #include <linux/kthread.h>
+ #include <uapi/linux/sched/types.h>
++#include <drm/drm_atomic_helper.h>
+ #include <drm/drm_of.h>
+ #include <soc/qcom/boot_stats.h>
+ #include "msm_drv.h"
+@@ -2138,6 +2139,8 @@
+ 	}
+ 
+ 	msm_lastclose(ddev);
++	if (priv->fbdev)
++		drm_atomic_helper_shutdown(ddev);
+ 
+ 	/* set this after lastclose to allow kickoff from lastclose */
+ 	priv->shutdown_in_progress = true;
+diff --git a/drivers/hid/hid-input.c b/drivers/hid/hid-input.c
+--- a/drivers/hid/hid-input.c
++++ b/drivers/hid/hid-input.c
+@@ -362,13 +362,13 @@
+ 	u8 *buf;
+ 	int ret;
+ 
+-	buf = kmalloc(2, GFP_KERNEL);
++	buf = kmalloc(4, GFP_KERNEL);
+ 	if (!buf)
+ 		return -ENOMEM;
+ 
+-	ret = hid_hw_raw_request(dev, dev->battery_report_id, buf, 2,
++	ret = hid_hw_raw_request(dev, dev->battery_report_id, buf, 4,
+ 				 dev->battery_report_type, HID_REQ_GET_REPORT);
+-	if (ret != 2) {
++	if (ret < 2) {
+ 		kfree(buf);
+ 		return -ENODATA;
+ 	}
+@@ -1116,6 +1116,10 @@
+ 	}
+ 
+ mapped:
++	/* Mapping failed, bail out */
++	if (!bit)
++		return;
++
+ 	/* Mapping failed, bail out */
+ 	if (!bit)
+ 		return;
+diff --git a/drivers/hwtracing/coresight/coresight-tmc-etf.c b/drivers/hwtracing/coresight/coresight-tmc-etf.c
+--- a/drivers/hwtracing/coresight/coresight-tmc-etf.c
++++ b/drivers/hwtracing/coresight/coresight-tmc-etf.c
+@@ -662,17 +662,16 @@
+ 
+ 	spin_lock_irqsave(&drvdata->spinlock, flags);
+ 
+-	if (drvdata->enable) {
+-		/* There is no point in reading a TMC in HW FIFO mode */
+-		mode = readl_relaxed(drvdata->base + TMC_MODE);
+-		if (mode != TMC_MODE_CIRCULAR_BUFFER) {
+-			spin_unlock_irqrestore(&drvdata->spinlock, flags);
+-			return -EINVAL;
+-		}
+-	}
+-
+ 	/* Re-enable the TMC if need be */
+ 	if (drvdata->mode == CS_MODE_SYSFS) {
++		if (drvdata->enable) {
++			/* There is no point in reading a TMC in HW FIFO mode */
++			mode = readl_relaxed(drvdata->base + TMC_MODE);
++			if (mode != TMC_MODE_CIRCULAR_BUFFER) {
++				spin_unlock_irqrestore(&drvdata->spinlock, flags);
++				return -EINVAL;
++			}
++		}
+ 		/*
+ 		 * The trace run will continue with the same allocated trace
+ 		 * buffer. As such zero-out the buffer so that we don't end
+diff --git a/drivers/mmc/host/sdhci-msm.c b/drivers/mmc/host/sdhci-msm.c
+--- a/drivers/mmc/host/sdhci-msm.c
++++ b/drivers/mmc/host/sdhci-msm.c
+@@ -1202,7 +1202,7 @@
+ int sdhci_msm_execute_tuning(struct sdhci_host *host, u32 opcode)
+ {
+ 	unsigned long flags;
+-	int tuning_seq_cnt = 3;
++	int tuning_seq_cnt = 10;
+ 	u8 phase, *data_buf, tuned_phases[NUM_TUNING_PHASES], tuned_phase_cnt;
+ 	const u32 *tuning_block_pattern = tuning_block_64;
+ 	int size = sizeof(tuning_block_64); /* Tuning pattern size in bytes */
+@@ -1398,6 +1398,22 @@
+ 		sdhci_msm_set_mmc_drv_type(host, opcode, 0);
+ 
+ 	if (tuned_phase_cnt) {
++		if (tuned_phase_cnt == NUM_TUNING_PHASES) {
++			/*
++			 * All phases valid is _almost_ as bad as no phases
++			 * valid.  Probably all phases are not really reliable
++			 * but we didn't detect where the unreliable place is.
++			 * That means we'll essentially be guessing and hoping
++			 * we get a good phase.  Better to try a few times.
++			 */
++			dev_dbg(mmc_dev(mmc), "%s: All phases valid; try again\n",
++				mmc_hostname(mmc));
++			if (--tuning_seq_cnt) {
++				tuned_phase_cnt = 0;
++				goto retry;
++			}
++		}
++
+ 		rc = msm_find_most_appropriate_phase(host, tuned_phases,
+ 							tuned_phase_cnt);
+ 		if (rc < 0)
+diff --git a/drivers/usb/dwc3/gadget.c b/drivers/usb/dwc3/gadget.c
+--- a/drivers/usb/dwc3/gadget.c
++++ b/drivers/usb/dwc3/gadget.c
+@@ -394,7 +394,7 @@
+ {
+ 	const struct usb_endpoint_descriptor *desc = dep->endpoint.desc;
+ 	struct dwc3		*dwc = dep->dwc;
+-	u32			timeout = 3000;
++	u32			timeout = 5000;
+ 	u32			saved_config = 0;
+ 	u32			reg;
+ 
+diff --git a/drivers/vfio/vfio_iommu_type1.c b/drivers/vfio/vfio_iommu_type1.c
+--- a/drivers/vfio/vfio_iommu_type1.c
++++ b/drivers/vfio/vfio_iommu_type1.c
+@@ -336,6 +336,32 @@
+ 	return 0;
+ }
+ 
++static int follow_fault_pfn(struct vm_area_struct *vma, struct mm_struct *mm,
++			    unsigned long vaddr, unsigned long *pfn,
++			    bool write_fault)
++{
++	int ret;
++
++	ret = follow_pfn(vma, vaddr, pfn);
++	if (ret) {
++		bool unlocked = false;
++
++		ret = fixup_user_fault(NULL, mm, vaddr,
++				       FAULT_FLAG_REMOTE |
++				       (write_fault ?  FAULT_FLAG_WRITE : 0),
++				       &unlocked);
++		if (unlocked)
++			return -EAGAIN;
++
++		if (ret)
++			return ret;
++
++		ret = follow_pfn(vma, vaddr, pfn);
++	}
++
++	return ret;
++}
++
+ static int vaddr_get_pfn(struct mm_struct *mm, unsigned long vaddr,
+ 			 int prot, unsigned long *pfn)
+ {
+@@ -373,16 +399,19 @@
+ 		return 0;
+ 	}
+ 
+-	down_read(&mm->mmap_sem);
+-
+ 	vaddr = untagged_addr(vaddr);
++	down_read(&mm->mmap_sem);
+ 
++retry:
+ 	vma = find_vma_intersection(mm, vaddr, vaddr + 1);
+ 
+ 	if (vma && vma->vm_flags & VM_PFNMAP) {
+-		if (!follow_pfn(vma, vaddr, pfn) &&
+-		    is_invalid_reserved_pfn(*pfn))
+-			ret = 0;
++		ret = follow_fault_pfn(vma, mm, vaddr, pfn, prot & IOMMU_WRITE);
++		if (ret == -EAGAIN)
++			goto retry;
++
++		if (!ret && !is_invalid_reserved_pfn(*pfn))
++			ret = -EFAULT;
+ 	}
+ 
+ 	up_read(&mm->mmap_sem);
+@@ -1088,13 +1117,16 @@
+ static int vfio_iommu_replay(struct vfio_iommu *iommu,
+ 			     struct vfio_domain *domain)
+ {
+-	struct vfio_domain *d;
++	struct vfio_domain *d = NULL;
+ 	struct rb_node *n;
+ 	unsigned long limit = rlimit(RLIMIT_MEMLOCK) >> PAGE_SHIFT;
+ 	int ret;
+ 
+ 	/* Arbitrarily pick the first domain in the list for lookups */
+-	d = list_first_entry(&iommu->domain_list, struct vfio_domain, next);
++	if (!list_empty(&iommu->domain_list))
++		d = list_first_entry(&iommu->domain_list,
++				     struct vfio_domain, next);
++
+ 	n = rb_first(&iommu->dma_list);
+ 
+ 	for (; n; n = rb_next(n)) {
+@@ -1112,6 +1144,11 @@
+ 				phys_addr_t p;
+ 				dma_addr_t i;
+ 
++				if (WARN_ON(!d)) { /* mapped w/o a domain?! */
++					ret = -EINVAL;
++					goto unwind;
++				}
++
+ 				phys = iommu_iova_to_phys(d->domain, iova);
+ 
+ 				if (WARN_ON(!phys)) {
+@@ -1141,7 +1178,7 @@
+ 				if (npage <= 0) {
+ 					WARN_ON(!npage);
+ 					ret = (int)npage;
+-					return ret;
++					goto unwind;
+ 				}
+ 
+ 				phys = pfn << PAGE_SHIFT;
+@@ -1150,14 +1187,67 @@
+ 
+ 			ret = iommu_map(domain->domain, iova, phys,
+ 					size, dma->prot | domain->prot);
+-			if (ret)
+-				return ret;
++			if (ret) {
++				if (!dma->iommu_mapped)
++					vfio_unpin_pages_remote(dma, iova,
++							phys >> PAGE_SHIFT,
++							size >> PAGE_SHIFT,
++							true);
++				goto unwind;
++			}
+ 
+ 			iova += size;
+ 		}
++	}
++
++	/* All dmas are now mapped, defer to second tree walk for unwind */
++	for (n = rb_first(&iommu->dma_list); n; n = rb_next(n)) {
++		struct vfio_dma *dma = rb_entry(n, struct vfio_dma, node);
++
+ 		dma->iommu_mapped = true;
+ 	}
++
+ 	return 0;
++
++unwind:
++	for (; n; n = rb_prev(n)) {
++		struct vfio_dma *dma = rb_entry(n, struct vfio_dma, node);
++		dma_addr_t iova;
++
++		if (dma->iommu_mapped) {
++			iommu_unmap(domain->domain, dma->iova, dma->size);
++			continue;
++		}
++
++		iova = dma->iova;
++		while (iova < dma->iova + dma->size) {
++			phys_addr_t phys, p;
++			size_t size;
++			dma_addr_t i;
++
++			phys = iommu_iova_to_phys(domain->domain, iova);
++			if (!phys) {
++				iova += PAGE_SIZE;
++				continue;
++			}
++
++			size = PAGE_SIZE;
++			p = phys + size;
++			i = iova + size;
++			while (i < dma->iova + dma->size &&
++			       p == iommu_iova_to_phys(domain->domain, i)) {
++				size += PAGE_SIZE;
++				p += PAGE_SIZE;
++				i += PAGE_SIZE;
++			}
++
++			iommu_unmap(domain->domain, iova, size);
++			vfio_unpin_pages_remote(dma, iova, phys >> PAGE_SHIFT,
++						size >> PAGE_SHIFT, true);
++		}
++	}
++
++	return ret;
+ }
+ 
+ /*
+diff --git a/include/linux/hid.h b/include/linux/hid.h
+--- a/include/linux/hid.h
++++ b/include/linux/hid.h
+@@ -974,7 +974,7 @@
+  */
+ static inline void hid_map_usage_clear(struct hid_input *hidinput,
+ 		struct hid_usage *usage, unsigned long **bit, int *max,
+-		__u8 type, __u16 c)
++		__u8 type, unsigned int c)
+ {
+ 	hid_map_usage(hidinput, usage, bit, max, type, c);
+ 	if (*bit)
+diff --git a/mm/memory.c b/mm/memory.c
+--- a/mm/memory.c
++++ b/mm/memory.c
+@@ -124,6 +124,18 @@
+ 					2;
+ #endif
+ 
++#ifndef arch_faults_on_old_pte
++static inline bool arch_faults_on_old_pte(void)
++{
++	/*
++	 * Those arches which don't have hw access flag feature need to
++	 * implement their own helper. By default, "true" means pagefault
++	 * will be hit on old pte.
++	 */
++	return true;
++}
++#endif
++
+ static int __init disable_randmaps(char *s)
+ {
+ 	randomize_va_space = 0;
+@@ -2491,32 +2503,106 @@
+ 	return ret;
+ }
+ 
+-static inline void cow_user_page(struct page *dst, struct page *src, unsigned long va, struct vm_area_struct *vma)
++static inline bool cow_user_page(struct page *dst, struct page *src,
++				 struct vm_fault *vmf)
+ {
++	bool ret;
++	void *kaddr;
++	void __user *uaddr;
++	bool locked = false;
++	struct vm_area_struct *vma = vmf->vma;
++	unsigned long addr = vmf->address;
++
+ 	debug_dma_assert_idle(src);
+ 
++	if (likely(src)) {
++		copy_user_highpage(dst, src, addr, vma);
++		return true;
++	}
++
+ 	/*
+ 	 * If the source page was a PFN mapping, we don't have
+ 	 * a "struct page" for it. We do a best-effort copy by
+ 	 * just copying from the original user address. If that
+ 	 * fails, we just zero-fill it. Live with it.
+ 	 */
+-	if (unlikely(!src)) {
+-		void *kaddr = kmap_atomic(dst);
+-		void __user *uaddr = (void __user *)(va & PAGE_MASK);
++	kaddr = kmap_atomic(dst);
++	uaddr = (void __user *)(addr & PAGE_MASK);
+ 
++	/*
++	 * On architectures with software "accessed" bits, we would
++	 * take a double page fault, so mark it accessed here.
++	 */
++	if (arch_faults_on_old_pte() && !pte_young(vmf->orig_pte)) {
++		pte_t entry;
++
++		if (!pte_map_lock(vmf)) {
++			ret = false;
++			goto pte_unlock;
++		}
++		locked = true;
++		if (!likely(pte_same(*vmf->pte, vmf->orig_pte))) {
++			/*
++			 * Other thread has already handled the fault
++			 * and we don't need to do anything. If it's
++			 * not the case, the fault will be triggered
++			 * again on the same address.
++			 */
++			ret = false;
++			goto pte_unlock;
++		}
++
++		entry = pte_mkyoung(vmf->orig_pte);
++		if (ptep_set_access_flags(vma, addr, vmf->pte, entry, 0))
++			update_mmu_cache(vma, addr, vmf->pte);
++	}
++
++	/*
++	 * This really shouldn't fail, because the page is there
++	 * in the page tables. But it might just be unreadable,
++	 * in which case we just give up and fill the result with
++	 * zeroes.
++	 */
++	if (__copy_from_user_inatomic(kaddr, uaddr, PAGE_SIZE)) {
++		if (locked)
++			goto warn;
++
++		/* Re-validate under PTL if the page is still mapped */
++		if (!pte_map_lock(vmf)) {
++			ret = false;
++			goto pte_unlock;
++		}
++		locked = true;
++		if (!likely(pte_same(*vmf->pte, vmf->orig_pte))) {
++			/* The PTE changed under us. Retry page fault. */
++			ret = false;
++			goto pte_unlock;
++		}
++
+ 		/*
+-		 * This really shouldn't fail, because the page is there
+-		 * in the page tables. But it might just be unreadable,
+-		 * in which case we just give up and fill the result with
+-		 * zeroes.
++		 * The same page can be mapped back since last copy attempt.
++		 * Try to copy again under PTL.
+ 		 */
+-		if (__copy_from_user_inatomic(kaddr, uaddr, PAGE_SIZE))
++		if (__copy_from_user_inatomic(kaddr, uaddr, PAGE_SIZE)) {
++			/*
++			 * Give a warn in case there can be some obscure
++			 * use-case
++			 */
++warn:
++			WARN_ON_ONCE(1);
+ 			clear_page(kaddr);
+-		kunmap_atomic(kaddr);
+-		flush_dcache_page(dst);
+-	} else
+-		copy_user_highpage(dst, src, va, vma);
++		}
++	}
++
++	ret = true;
++
++pte_unlock:
++	if (locked)
++		pte_unmap_unlock(vmf->pte, vmf->ptl);
++	kunmap_atomic(kaddr);
++	flush_dcache_page(dst);
++
++	return ret;
+ }
+ 
+ static gfp_t __get_fault_gfp_mask(struct vm_area_struct *vma)
+@@ -2675,7 +2761,10 @@
+ 				vmf->address);
+ 		if (!new_page)
+ 			goto out;
+-		cow_user_page(new_page, old_page, vmf->address, vma);
++		if (!cow_user_page(new_page, old_page, vmf)) {
++			ret = vmf->flags & FAULT_FLAG_SPECULATIVE ? VM_FAULT_RETRY : 0;
++			goto out_free_new;
++		}
+ 	}
+ 
+ 	if (mem_cgroup_try_charge(new_page, mm, GFP_KERNEL, &memcg, false))
+diff --git a/mm/mmap.c b/mm/mmap.c
+--- a/mm/mmap.c
++++ b/mm/mmap.c
+@@ -2273,6 +2273,7 @@
+ 	info.low_limit = mm->mmap_base;
+ 	info.high_limit = TASK_SIZE;
+ 	info.align_mask = 0;
++	info.align_offset = 0;
+ 	return vm_unmapped_area(&info);
+ }
+ #endif
+@@ -2309,6 +2310,7 @@
+ 			return addr;
+ 	}
+ 
++	info.align_offset = 0;
+ 	info.flags = VM_UNMAPPED_AREA_TOPDOWN;
+ 	info.length = len;
+ 	info.low_limit = max(PAGE_SIZE, mmap_min_addr);
+@@ -2319,7 +2321,6 @@
+ 	if (check_reserve_mmap_doing(mm)) {
+ 		info.high_limit = (gpu_compat_high_limit_addr < mm->mmap_base) ?
+ 			gpu_compat_high_limit_addr : mm->mmap_base;
+-		info.align_offset = 0;
+ 		info.align_mask = RESERVE_AREA_ALIGN_SIZE - 1;
+ 	} else {
+ 		info.high_limit = mm->mmap_base;
+@@ -3422,6 +3423,7 @@
+ 		if (vma->vm_flags & VM_ACCOUNT)
+ 			nr_accounted += vma_pages(vma);
+ 		vma = remove_vma(vma);
++		cond_resched();
+ 	}
+ 	vm_unacct_memory(nr_accounted);
+ }
+diff --git a/net/ipv4/inet_connection_sock.c b/net/ipv4/inet_connection_sock.c
+--- a/net/ipv4/inet_connection_sock.c
++++ b/net/ipv4/inet_connection_sock.c
+@@ -276,6 +276,57 @@
+ 				    ipv6_only_sock(sk), true);
+ }
+ 
++void inet_csk_update_fastreuse(struct inet_bind_bucket *tb,
++			       struct sock *sk)
++{
++	kuid_t uid = sock_i_uid(sk);
++	bool reuse = sk->sk_reuse && sk->sk_state != TCP_LISTEN;
++
++	if (hlist_empty(&tb->owners)) {
++		tb->fastreuse = reuse;
++		if (sk->sk_reuseport) {
++			tb->fastreuseport = FASTREUSEPORT_ANY;
++			tb->fastuid = uid;
++			tb->fast_rcv_saddr = sk->sk_rcv_saddr;
++			tb->fast_ipv6_only = ipv6_only_sock(sk);
++			tb->fast_sk_family = sk->sk_family;
++#if IS_ENABLED(CONFIG_IPV6)
++			tb->fast_v6_rcv_saddr = sk->sk_v6_rcv_saddr;
++#endif
++		} else {
++			tb->fastreuseport = 0;
++		}
++	} else {
++		if (!reuse)
++			tb->fastreuse = 0;
++		if (sk->sk_reuseport) {
++			/* We didn't match or we don't have fastreuseport set on
++			 * the tb, but we have sk_reuseport set on this socket
++			 * and we know that there are no bind conflicts with
++			 * this socket in this tb, so reset our tb's reuseport
++			 * settings so that any subsequent sockets that match
++			 * our current socket will be put on the fast path.
++			 *
++			 * If we reset we need to set FASTREUSEPORT_STRICT so we
++			 * do extra checking for all subsequent sk_reuseport
++			 * socks.
++			 */
++			if (!sk_reuseport_match(tb, sk)) {
++				tb->fastreuseport = FASTREUSEPORT_STRICT;
++				tb->fastuid = uid;
++				tb->fast_rcv_saddr = sk->sk_rcv_saddr;
++				tb->fast_ipv6_only = ipv6_only_sock(sk);
++				tb->fast_sk_family = sk->sk_family;
++#if IS_ENABLED(CONFIG_IPV6)
++				tb->fast_v6_rcv_saddr = sk->sk_v6_rcv_saddr;
++#endif
++			}
++		} else {
++			tb->fastreuseport = 0;
++		}
++	}
++}
++
+ /* Obtain a reference to a local port for the given sock,
+  * if snum is zero it means select any available local port.
+  * We try to allocate an odd port (and leave even ports for connect())
+@@ -288,7 +339,6 @@
+ 	struct inet_bind_hashbucket *head;
+ 	struct net *net = sock_net(sk);
+ 	struct inet_bind_bucket *tb = NULL;
+-	kuid_t uid = sock_i_uid(sk);
+ 
+ 	if (!port) {
+ 		head = inet_csk_find_open_port(sk, &tb, &port);
+@@ -328,49 +378,8 @@
+ 			goto fail_unlock;
+ 	}
+ success:
+-	if (hlist_empty(&tb->owners)) {
+-		tb->fastreuse = reuse;
+-		if (sk->sk_reuseport) {
+-			tb->fastreuseport = FASTREUSEPORT_ANY;
+-			tb->fastuid = uid;
+-			tb->fast_rcv_saddr = sk->sk_rcv_saddr;
+-			tb->fast_ipv6_only = ipv6_only_sock(sk);
+-			tb->fast_sk_family = sk->sk_family;
+-#if IS_ENABLED(CONFIG_IPV6)
+-			tb->fast_v6_rcv_saddr = sk->sk_v6_rcv_saddr;
+-#endif
+-		} else {
+-			tb->fastreuseport = 0;
+-		}
+-	} else {
+-		if (!reuse)
+-			tb->fastreuse = 0;
+-		if (sk->sk_reuseport) {
+-			/* We didn't match or we don't have fastreuseport set on
+-			 * the tb, but we have sk_reuseport set on this socket
+-			 * and we know that there are no bind conflicts with
+-			 * this socket in this tb, so reset our tb's reuseport
+-			 * settings so that any subsequent sockets that match
+-			 * our current socket will be put on the fast path.
+-			 *
+-			 * If we reset we need to set FASTREUSEPORT_STRICT so we
+-			 * do extra checking for all subsequent sk_reuseport
+-			 * socks.
+-			 */
+-			if (!sk_reuseport_match(tb, sk)) {
+-				tb->fastreuseport = FASTREUSEPORT_STRICT;
+-				tb->fastuid = uid;
+-				tb->fast_rcv_saddr = sk->sk_rcv_saddr;
+-				tb->fast_ipv6_only = ipv6_only_sock(sk);
+-				tb->fast_sk_family = sk->sk_family;
+-#if IS_ENABLED(CONFIG_IPV6)
+-				tb->fast_v6_rcv_saddr = sk->sk_v6_rcv_saddr;
+-#endif
+-			}
+-		} else {
+-			tb->fastreuseport = 0;
+-		}
+-	}
++	inet_csk_update_fastreuse(tb, sk);
++
+ 	if (!inet_csk(sk)->icsk_bind_hash)
+ 		inet_bind_hash(sk, tb, port);
+ 	WARN_ON(inet_csk(sk)->icsk_bind_hash != tb);

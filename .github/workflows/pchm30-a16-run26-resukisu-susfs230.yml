@@ -21,6 +21,7 @@ on:
       - '.github/scripts/apply-kernel-414357.sh'
       - '.github/scripts/apply-kernel-414190.sh'
       - '.github/scripts/apply-kernel-414200.sh'
+      - '.github/patches/resolve-4.14.200-pchm30.patch'
       - '.github/scripts/apply-openela-357-fixes.sh'
 
 concurrency:
@@ -192,6 +193,7 @@ jobs:
                 git fetch --no-tags --depth=1 origin "$RUN194_ARCHIVE_REF"
                 git show "$RUN194_ARCHIVE_REF:.github/patches/patch-4.14.186-to-190-pchm30.patch" > "$GITHUB_WORKSPACE/run194-4.14.190.patch"
                 git show "$GITHUB_SHA:.github/scripts/apply-kernel-414200.sh" > "$GITHUB_WORKSPACE/apply-kernel-414200.sh"
+                git show "$GITHUB_SHA:.github/patches/resolve-4.14.200-pchm30.patch" > "$GITHUB_WORKSPACE/resolve-4.14.200-pchm30.patch"
                 ;;
             esac
             # Leave clock probing at the phone-tested baseline.

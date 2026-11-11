@@ -64,7 +64,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        scope: ['${{ inputs.scope || 'stable190' }}']
+        scope: ["${{ inputs.scope || 'stable190' }}"]
     env:
       OPENELA_SCOPE: ${{ matrix.scope }}
     runs-on: ubuntu-22.04

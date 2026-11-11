@@ -1,0 +1,137 @@
+name: PCHM30 first-splash regression audit
+
+on:
+  push:
+    branches: [pchm30-openela-414357-integration]
+    paths: [.github/workflows/pchm30-openela-first-splash-audit.yml]
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  compare:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Fetch the phone-verified Run 152 artifacts
+        uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          run-id: 41267234453
+          name: PCHM30-A16-RUN26-RESUKISU-SUSFS230-414357-152
+          path: evidence/152
+      - name: Fetch the Run 186 artifacts
+        uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          run-id: 42931649281
+          name: PCHM30-OpenELA-full-186
+          path: evidence/186
+      - name: Compare the installer, ARM64 Image header and configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p report
+          python3 - <<'PY'
+          import hashlib
+          import json
+          import re
+          import struct
+          import zipfile
+          from pathlib import Path
+
+          report = Path("report")
+          inputs = {
+              "152": ("PCHM30-A16-RUN26-RESUKISU-SUSFS230-414357-AK3-152.zip",
+                      "02527fd22775a72e312783f8f5babf2b54f823009929043b201e5a0dc4ba550a"),
+              "186": ("PCHM30-OpenELA-candidate-AK3.zip",
+                      "4e2f027a207d9efb16bc94b0fe1b6dfa687c60bfa8313667ad63c8b2011bbe81"),
+          }
+          configs = {}
+          results = {}
+          for run, (filename, expected_sha) in inputs.items():
+              folder = Path("evidence") / run
+              package, = folder.rglob(filename)
+              actual_sha = hashlib.sha256(package.read_bytes()).hexdigest()
+              if actual_sha != expected_sha:
+                  raise SystemExit(f"Unexpected Run {run} AK3 checksum: {actual_sha}")
+              with zipfile.ZipFile(package) as archive:
+                  image = archive.read("Image")
+                  files = {
+                      item.filename: hashlib.sha256(archive.read(item)).hexdigest()
+                      for item in archive.infolist()
+                      if not item.is_dir() and item.filename != "Image"
+                  }
+              if len(image) < 64 or image[56:60] != b"ARM\x64":
+                  raise SystemExit(f"Run {run} Image has an unexpected ARM64 boot header")
+              offset, size, flags = struct.unpack_from("<3Q", image, 8)
+              dtb_offsets = []
+              scan = 0
+              while (found := image.find(b"\xd0\x0d\xfe\xed", scan)) >= 0:
+                  scan = found + 4
+                  if len(image) - found < 40:
+                      continue
+                  _, total, struct_at, strings_at, reserve_at, version, compatible, _, string_size, struct_size = (
+                      struct.unpack_from(">10I", image, found)
+                  )
+                  if (version == 17 and compatible <= 17 and 40 <= reserve_at < total <= len(image) - found
+                          and 40 <= struct_at < struct_at + struct_size <= total
+                          and 40 <= strings_at <= strings_at + string_size <= total):
+                      dtb_offsets.append(found)
+              cfg_files = sorted(p for p in folder.rglob("*") if p.is_file() and
+                                 (p.name == ".config" or p.suffix == ".config" or p.name == "kernel-config.txt"))
+              configs[run] = {}
+              for config in cfg_files:
+                  for line in config.read_text(errors="replace").splitlines():
+                      setting = re.fullmatch(r"(CONFIG_\w+)=(.*)", line)
+                      disabled = re.fullmatch(r"# (CONFIG_\w+) is not set", line)
+                      if setting:
+                          configs[run][setting[1]] = setting[2]
+                      elif disabled:
+                          configs[run][disabled[1]] = "n"
+              raw = list(folder.rglob("Image"))
+              results[run] = {
+                  "ak3_sha256": actual_sha,
+                  "image_sha256": hashlib.sha256(image).hexdigest(),
+                  "image_bytes": len(image),
+                  "text_offset": hex(offset),
+                  "image_size": size,
+                  "flags": hex(flags),
+                  "entry_words": image[:8].hex(),
+                  "validated_fdt_offsets_in_image": dtb_offsets,
+                  "standalone_image_matches_ak3": all(p.read_bytes() == image for p in raw) if raw else None,
+                  "config_files": [str(p.relative_to(folder)) for p in cfg_files],
+                  "installer_files": files,
+              }
+
+          old_files = results["152"]["installer_files"]
+          new_files = results["186"]["installer_files"]
+          changed = sorted(path for path in old_files.keys() | new_files.keys()
+                           if old_files.get(path) != new_files.get(path))
+          changes = {
+              key: [configs["152"].get(key), configs["186"].get(key)]
+              for key in sorted(configs["152"].keys() | configs["186"].keys())
+              if configs["152"].get(key) != configs["186"].get(key)
+          } if all(configs.values()) else {}
+          (report / "comparison.json").write_text(json.dumps({
+              "runs": results, "changed_non_image_entries": changed, "config_changes": changes
+          }, indent=2) + "\n")
+          print("Changed non-Image AK3 files:", ", ".join(changed) or "none")
+          for run, values in results.items():
+              print(f"Run {run}: " + json.dumps({k: v for k, v in values.items() if k != "installer_files"}))
+          print(f"Configuration differences: {len(changes)}" if all(configs.values()) else
+                "A build configuration was missing from an artifact.")
+          boot_config = re.compile(r"CONFIG_(ARM64|KASLR|RANDOMIZE|RELOCATABLE|EFI|OF|CMDLINE|"
+                                   r"INITRD|RAMOOPS|PSTORE|DM_VERITY|BLK_DEV|SCSI_UFS|MMC)")
+          for key, (old, new) in changes.items():
+              if boot_config.match(key):
+                  print(f"{key}: {old} -> {new}")
+          PY
+      - name: Upload comparison evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pchm30-first-splash-152-vs-186
+          path: report/

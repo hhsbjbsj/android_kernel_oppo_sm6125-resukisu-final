@@ -1,0 +1,166 @@
+{
+  "Documentation/ABI/testing/sysfs-devices-system-cpu": [
+    "9ebca6a750f33b218341b6b9a708726f05890c36",
+    "a02e671d9027a8d1f6dfc6f4710dbcdedd63d7af"
+  ],
+  "Documentation/admin-guide/hw-vuln/index.rst": [
+    "0795e3c2643f2946c3f1a58418bc6d28c376ec06",
+    "245468b0f2be8014fd70d286fd7c1b01854879d2"
+  ],
+  "arch/Kconfig": [
+    "82437946208dce5ef9e3fd5a855b11c493d949e7",
+    "d7a438987f002d2049c3fcb647524b171c39bdb2"
+  ],
+  "arch/arm64/Kconfig": [
+    "981b4dd47205ff21a88f474a79ee9b75f8c525f4",
+    "5a1bfffc3fec6524fed017e5d517bdb596315961"
+  ],
+  "arch/x86/include/asm/cpufeatures.h": [
+    "157cfaf1064c9e874185a0ee154f2e975c5835b3",
+    "3a52d1d79acc63de4a3e5b70d49dd73cae823c91"
+  ],
+  "arch/x86/include/asm/msr-index.h": [
+    "5761a86b88e028c1d0f5b5b87c9cef519b9a6dfe",
+    "e9c27496270e3aeb0b26ea4a10ed59ba24965cee"
+  ],
+  "arch/x86/kernel/cpu/cpu.h": [
+    "db10a63687d346e993c6b6c26efca656f97f72a9",
+    "accfc16104c9a238d8725f804ec4d9b76e4efc0a"
+  ],
+  "drivers/block/zram/zram_drv.c": [
+    "bce0d613d04d2004364004079427c6817f0857b3",
+    "985af9fb075f2eb38065c01bfb36ffcaa27eacec"
+  ],
+  "drivers/char/random.c": [
+    "a5ce77b609c1356f93f52f79c8f0bab77aea1f0b",
+    "3b69c261d3c6858e677053a24d6c4dc38b292396"
+  ],
+  "drivers/clk/clk.c": [
+    "11f1972ff70f53c676c184ce0f611fd5d1313160",
+    "9bf0eb3cd21836f3a215deb41b8751a65adc648f"
+  ],
+  "drivers/devfreq/devfreq.c": [
+    "e66ea89537923a3b8232a568e150d173b33f4cc6",
+    "9ac8f98516ec147535610fe4b939e8c29c4460f5"
+  ],
+  "drivers/gpu/drm/msm/msm_drv.c": [
+    "d3b6ca7f55a37635558e65134c3a5decff67a4b2",
+    "de0d60435e152f1c2e3961b34220d9f3dcd3e16e"
+  ],
+  "drivers/hid/hid-chicony.c": [
+    "06065f8093bf0ff2715f3e22881dd3d770675ea6",
+    "218f0e090f638e48b587f70e5bf7e946d9ba0ce4"
+  ],
+  "drivers/hid/hid-holtek-kbd.c": [
+    "544743ea255453a4ce1e7df063c32aee5d7e32bb",
+    "de801ed91d45a66b5626ddf35d6856224841c536"
+  ],
+  "drivers/hid/hid-holtek-mouse.c": [
+    "27c08ddab0e1a4c098ff2d7bb55855212a46d997",
+    "96db7e96fcea9940c8a7848f9438d1cedb630908"
+  ],
+  "drivers/hid/wacom_sys.c": [
+    "d9130aff935854487baf5d6d8ea72b9c75f86d30",
+    "b4c25afb3a365565a3d42dabb102dc1fc7a28df6"
+  ],
+  "drivers/infiniband/ulp/srpt/ib_srpt.c": [
+    "5f1055c94d662a25e4ea12808b59e76bf357be35",
+    "ea3c0ac0c01c358d76301e8f9a8376c1060a191c"
+  ],
+  "drivers/md/dm-verity-target.c": [
+    "f77665642eb9f1dd6557c06bcec072d5ddab863f",
+    "38ed41f1c222a3289f0fc7f9b823cc295b4c4064"
+  ],
+  "drivers/rpmsg/qcom_glink_native.c": [
+    "eb7af8245f8518a8afb2289f8b677de2a8338fcc",
+    "03a31677e030d372d182b9535e45c581507b336d"
+  ],
+  "drivers/usb/gadget/legacy/inode.c": [
+    "68a1387355f4caf95bef65c5413bac68f25d84bd",
+    "673bf0d07455fafb64fbf5d21439c11b46ff6312"
+  ],
+  "fs/eventpoll.c": [
+    "7b80ce505ee8a1637c21b0bd206f4d705e116227",
+    "3baf427278784fa2f5eba906b50cc42c1c14f748"
+  ],
+  "fs/f2fs/inode.c": [
+    "482d267f4a639cd955523378e341c5283a3d4ace",
+    "435931836d4bd35c6bd5ce5d3fc48bf3607bdb0c"
+  ],
+  "fs/fuse/dev.c": [
+    "f3d3b0a1b05fd302adc821cab1b91390fd7b6f54",
+    "efb84389ea276ff56197e55eb2056dff05341b5a"
+  ],
+  "fs/proc/proc_sysctl.c": [
+    "b09447e746ef20700cc2e336e916ecdc61e1ab6e",
+    "e384b4a9619167c8e47090767506e7eb6549f15d"
+  ],
+  "fs/select.c": [
+    "160721531f0b4e3d2efe304759b04fe7bd774899",
+    "7ceaa6754c96b78f5722c53d5f94989354190c9f"
+  ],
+  "include/linux/tty.h": [
+    "e9f03eefc47ad63739c376238b11e6526ba2c340",
+    "964b9e922f144e5df2f68aae4abf061252d2921d"
+  ],
+  "include/net/pkt_sched.h": [
+    "1ec58108cfb9f691ad6f89bebe4948ad64b2bf97",
+    "80d5597c0f90daf6e9458c275a3b386659068bd7"
+  ],
+  "include/net/sock.h": [
+    "cbdd273a3aa52ac17b2f9b3788a745ed2b3bdb99",
+    "845bac5d4b97914133914daf46302225b498488d"
+  ],
+  "init/main.c": [
+    "301fb24640b0bf81f3493b2481f915f8f3377b78",
+    "4c0832e481b0e2301ee1eb4943676329b72bafa5"
+  ],
+  "kernel/bpf/core.c": [
+    "60b1267f960586d04274f0199464f136f8a8228b",
+    "60b1267f960586d04274f0199464f136f8a8228b"
+  ],
+  "kernel/cpu.c": [
+    "c185e19820d608939e1151d7c531722b1d38dabe",
+    "4e1abeea32a234209f7cdd49a37fc3e258850879"
+  ],
+  "kernel/panic.c": [
+    "d99248d4c439d0873bf535a43d32e38bc06f1b15",
+    "dfc6f4245b08552b15ece1e1efc2db3bb2fbdc28"
+  ],
+  "lib/Makefile": [
+    "1d5862a9f6ce6242e19b5bee7cf5d46c7b100fa9",
+    "6455532c3947e2932d5783028c6a9df4e1f3c39b"
+  ],
+  "mm/page_alloc.c": [
+    "589528a83fe90a0865187f49227ff2cdc306af22",
+    "f3693268183da422fa932ce944beba646f2d29ab"
+  ],
+  "net/core/skbuff.c": [
+    "e0f3fe233c7d3bca2b6ac97427aea3776727a788",
+    "bbd2bd1b6c4b3ce9a8c8340e50b680e0e241bb4b"
+  ],
+  "net/ipv4/af_inet.c": [
+    "153c09436210165c3b1fa21f21dda3d9e6089bae",
+    "6af0a278d0044f3a3f24b9b64552345990fa8a8a"
+  ],
+  "net/ipv4/igmp.c": [
+    "6881bccf1e82fb19ed243ba34e9f39a0611c5776",
+    "42c7b412da2ac2df91e8e38e264ee1969cf86dda"
+  ],
+  "net/ipv4/ip_gre.c": [
+    "4cb0fa36072035d6a8f9ec02adcd85310911bcb7",
+    "1b59f748f311a3cc4f9b2c0d69f9718949e0a92a"
+  ],
+  "net/ipv4/tcp_ipv4.c": [
+    "64df00d29e48bfb69ff62816da4520fb98b6ea91",
+    "d947b3f1c85cfc6c900021997da1be21bc2d8dc9"
+  ],
+  "net/packet/af_packet.c": [
+    "9d07d763fffec07cd236f2561a0e2985ca66a3a0",
+    "a0c96f7cc1d7427e7e521c1b6abce64903a06385"
+  ],
+  "security/selinux/selinuxfs.c": [
+    "2d2090380542419ba9099a283d0bfbac597e45f8",
+    "c1432044009cf083a0de44d8185bdabcb76b31e9"
+  ]
+}

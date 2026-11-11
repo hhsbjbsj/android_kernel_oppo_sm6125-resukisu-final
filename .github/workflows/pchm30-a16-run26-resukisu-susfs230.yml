@@ -206,6 +206,9 @@ jobs:
                   git fetch --no-tags --depth=1 origin "$RUN197_ARCHIVE_REF"
                   git show "$RUN197_ARCHIVE_REF:.github/patches/patch-4.14.190-to-200-pchm30.patch" > "$GITHUB_WORKSPACE/run197-4.14.200.patch"
                   git show "$GITHUB_SHA:.github/scripts/apply-kernel-414357.sh" > "$GITHUB_WORKSPACE/apply-kernel-direct357.sh"
+                  for extension in patch json; do
+                    git show "$GITHUB_SHA:.github/patches/reviewed-direct357.$extension" > "$GITHUB_WORKSPACE/reviewed-direct357.$extension"
+                  done
                 else
                   git show "$GITHUB_SHA:.github/scripts/apply-kernel-414200.sh" > "$GITHUB_WORKSPACE/apply-kernel-414200.sh"
                   git show "$GITHUB_SHA:.github/patches/resolve-4.14.200-pchm30.patch" > "$GITHUB_WORKSPACE/resolve-4.14.200-pchm30.patch"

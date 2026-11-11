@@ -1124,14 +1124,44 @@ def donor_target_matches(conflicts):
     return updates, results
 
 
+def resolve_direct_reviews():
+    from tempfile import TemporaryDirectory
+
+    if os.environ.get("OPENELA_SCOPE") != "direct357":
+        return {}
+    workspace = Path(os.environ["GITHUB_WORKSPACE"])
+    manifest = json.loads((workspace / "reviewed-direct357.json").read_text())
+    patch = workspace / "reviewed-direct357.patch"
+    updates = {}
+    with TemporaryDirectory() as temporary:
+        folder = Path(temporary)
+        for path, (old, new) in manifest.items():
+            record = git("--literal-pathspecs", "ls-tree", "-z", vendor, "--", path)
+            mode, kind, oid = record.split(b"\t", 1)[0].decode().split()
+            if kind != "blob" or mode not in {"100644", "100755"} or oid != old:
+                raise SystemExit(f"Reviewed OpenELA preimage differs: {path}")
+            output = folder / path
+            output.parent.mkdir(parents=True, exist_ok=True)
+            output.write_bytes(git("cat-file", "blob", old))
+            output.chmod(0o755 if mode == "100755" else 0o644)
+            updates[path] = (mode, new)
+        subprocess.run(["git", "apply", "--whitespace=nowarn", str(patch)], cwd=folder, check=True)
+        for path, (_, expected) in updates.items():
+            actual = subprocess.check_output(["git", "hash-object", "-w", "--", str(folder / path)]).decode().strip()
+            if actual != expected:
+                raise SystemExit(f"Reviewed OpenELA output differs: {path}")
+    return updates
+
+
 merged_tree, conflicts = read_merge(report / "merge-tree.bin")
 merged_tree, resolved = resolve_reviewed(merged_tree)
-conflicts -= resolved
+direct_updates = resolve_direct_reviews()
+conflicts -= resolved | direct_updates.keys()
 exact_updates, exact_results = resolve_exact_patches(conflicts)
 conflicts -= exact_updates.keys()
 donor_updates, donor_results = donor_target_matches(conflicts)
 conflicts -= donor_updates.keys()
-merged_tree = update_tree(merged_tree, {**exact_updates, **donor_updates})
+merged_tree = update_tree(merged_tree, {**exact_updates, **donor_updates, **direct_updates})
 (report / "donor-resolutions.tsv").write_text(
     "".join(f"{path}\t{status}\n" for path, status in sorted(donor_results.items()))
 )
@@ -1142,8 +1172,8 @@ candidate = report / "compile-merge-tree.bin"
 if conflicts and candidate.exists():
     merged_tree, excluded = read_merge(candidate)
     merged_tree, trial_resolved = resolve_reviewed(merged_tree, trial=True)
-    merged_tree = update_tree(merged_tree, {**exact_updates, **donor_updates})
-    excluded -= trial_resolved | exact_updates.keys() | donor_updates.keys()
+    merged_tree = update_tree(merged_tree, {**exact_updates, **donor_updates, **direct_updates})
+    excluded -= trial_resolved | exact_updates.keys() | donor_updates.keys() | direct_updates.keys()
 else:
     excluded = set(conflicts)
 (report / "resolved-paths.txt").write_text("".join(path + "\n" for path in sorted(resolved)))
@@ -1166,7 +1196,7 @@ proof = {
     "prepared_vendor_commit": vendor,
     "source_merge_clean": not conflicts,
     "conflict_count": len(conflicts),
-    "reviewed_resolutions": sorted(resolved),
+    "reviewed_resolutions": sorted(resolved | direct_updates.keys()),
     "exact_resolutions": exact_results,
     "donor_target_identical_resolutions": donor_results,
     "candidate_strategy": "vendor-overlap-hunks" if candidate.exists() else "strict",

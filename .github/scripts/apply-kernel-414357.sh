@@ -560,10 +560,18 @@ def resolve_reviewed(tree, trial=False):
 
             path = "lib/Makefile"
             content = git("show", f"{tree}:{path}")
-            if b" chacha.o " not in content and b" chacha20.o " in content:
-                if content.count(b" chacha20.o ") != 1:
+            fixed = content
+            if b" chacha.o " not in fixed and b" chacha20.o " in fixed:
+                if fixed.count(b" chacha20.o ") != 1:
                     raise SystemExit("Unexpected ChaCha object selection")
-                stage_trial(path, content.replace(b" chacha20.o ", b" chacha.o ", 1))
+                fixed = fixed.replace(b" chacha20.o ", b" chacha.o ", 1)
+            crypto = b"obj-y += crypto/\n"
+            if not re.search(rb"(?m)^obj-y\s*\+=\s*crypto/\s*$", fixed):
+                upstream = git("show", f"{target}:{path}")
+                if crypto in upstream:
+                    fixed = fixed.rstrip(b"\n") + b"\n\n" + crypto
+            if fixed != content:
+                stage_trial(path, fixed)
 
             path = "lib/vsprintf.c"
             content = git("show", f"{tree}:{path}")
@@ -617,6 +625,72 @@ def resolve_reviewed(tree, trial=False):
                 start = source.index(signature)
                 end = source.index(b"\n}\n", start) + len(b"\n}\n")
                 return source[start:end]
+
+
+            path = "kernel/panic.c"
+            content = git("show", f"{tree}:{path}")
+            signature = b"void check_panic_on_warn("
+            if signature not in content and b'check_panic_on_warn("kernel");' in content:
+                upstream = git("show", f"{target}:{path}")
+                declarations = (
+                    b"static unsigned int warn_limit __read_mostly;\n",
+                    b"static atomic_t warn_count = ATOMIC_INIT(0);\n",
+                )
+                anchor = b"static long no_blink(int state)"
+                setup = b""
+                for declaration in declarations:
+                    if declaration not in content:
+                        setup += declaration
+                for guard, marker, key in (
+                    (b"CONFIG_SYSCTL", b"static struct ctl_table kern_panic_table[]", b'"warn_limit"'),
+                    (b"CONFIG_SYSFS", b"static ssize_t warn_count_show(", b"warn_count_show("),
+                ):
+                    if key not in content:
+                        start = upstream.index(b"#ifdef " + guard + b"\n" + marker)
+                        end = upstream.index(b"\n#endif\n", start) + len(b"\n#endif\n")
+                        setup += b"\n" + upstream[start:end]
+                if setup:
+                    content = content.replace(anchor, setup + b"\n" + anchor, 1)
+                if b"sysfs_emit(" in content and b"#include <linux/sysfs.h>" not in content:
+                    header = b"#include <linux/init.h>\n"
+                    content = content.replace(header, header + b"#include <linux/sysfs.h>\n", 1)
+                anchor = b"EXPORT_SYMBOL(nmi_panic);\n"
+                content = content.replace(anchor, anchor + b"\n" + function(upstream, signature), 1)
+                signature = b"void panic(const char *fmt, ...)"
+                body = function(content, signature)
+                if b"panic_on_warn = 0;" not in body:
+                    upstream_panic = function(upstream, signature)
+                    begin = upstream_panic.index(b"\tif (panic_on_warn) {")
+                    end = upstream_panic.index(b"\n\t}\n", begin) + len(b"\n\t}\n")
+                    reset = upstream_panic[begin:end]
+                    anchor = b"\ttrace_kernel_panic(0);\n"
+                    if anchor in body:
+                        content = content.replace(body, body.replace(anchor, reset + b"\n" + anchor, 1), 1)
+                stage_trial(path, content)
+
+            path = "drivers/usb/gadget/function/f_accessory.c"
+            content = git("show", f"{tree}:{path}")
+            signature = b"int acc_ctrlrequest_composite("
+            anchor = b"EXPORT_SYMBOL_GPL(acc_ctrlrequest);\n"
+            if signature not in content and content.count(anchor) == 1:
+                # Match the Note 8 EP0 length guard without changing the
+                # caller's control request in place.
+                wrapper = (
+                    b"\nint acc_ctrlrequest_composite(struct usb_composite_dev *cdev,\n"
+                    b"\t\t\t      const struct usb_ctrlrequest *ctrl)\n"
+                    b"{\n"
+                    b"\tstruct usb_ctrlrequest bounded;\n\n"
+                    b"\tif (le16_to_cpu(ctrl->wLength) <= USB_COMP_EP0_BUFSIZ)\n"
+                    b"\t\treturn acc_ctrlrequest(cdev, ctrl);\n"
+                    b"\tif (!(ctrl->bRequestType & USB_DIR_IN))\n"
+                    b"\t\treturn -EINVAL;\n\n"
+                    b"\tbounded = *ctrl;\n"
+                    b"\tbounded.wLength = cpu_to_le16(USB_COMP_EP0_BUFSIZ);\n"
+                    b"\treturn acc_ctrlrequest(cdev, &bounded);\n"
+                    b"}\n"
+                    b"EXPORT_SYMBOL_GPL(acc_ctrlrequest_composite);\n"
+                )
+                stage_trial(path, content.replace(anchor, anchor + wrapper, 1))
 
             path = "mm/rmap.c"
             content = git("show", f"{tree}:{path}")

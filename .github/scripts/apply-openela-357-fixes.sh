@@ -76,6 +76,33 @@ git diff --exit-code "$base" "$target" -- fs/ext4/ialloc.c fs/ext4/xattr.c
 apply_group ext4-inode-allocation "$ext4_base" "$base" fs/ext4/ialloc.c
 apply_group ext4-xattr-locks "$ext4_base" "$base" fs/ext4/xattr.c
 
+# PCHM30 selects OPPO's external oext4 tree in fs/Makefile. The link points
+# into the reconstructed vendor checkout, so these patches are not staged in
+# the kernel Git index. Record the exact upstream hunks and the vendor result.
+if [[ "$TARGET_PRODUCT" != qssi ]]; then
+    active_ext4=$(realpath -e fs/oext4)
+    case "$active_ext4/" in
+        "$GITHUB_WORKSPACE"/source/android/vendor/oplus/kernel_4.14/ext4/) ;;
+        *) printf 'Unexpected PCHM30 ext4 path: %s\n' "$active_ext4" >&2; exit 1 ;;
+    esac
+    for group in ext4-inode-allocation ext4-xattr-locks; do
+        patch_file="$report/$group.patch"
+        patch_log="$report/oext4-$group.log"
+        if patch --directory="$active_ext4" -p3 --fuzz=0 --force --reverse --dry-run \
+            < "$patch_file" > "$patch_log" 2>&1; then
+            status=already-present
+        else
+            patch --directory="$active_ext4" -p3 --fuzz=0 --force --forward --dry-run \
+                < "$patch_file" >> "$patch_log" 2>&1
+            patch --directory="$active_ext4" -p3 --fuzz=0 --force --forward --no-backup-if-mismatch \
+                < "$patch_file" >> "$patch_log" 2>&1
+            status=applied
+        fi
+        printf 'oext4-%s\t%s\n' "$group" "$status" | tee -a "$report/fixes.tsv"
+    done
+    sha256sum "$active_ext4/ialloc.c" "$active_ext4/xattr.c" > "$report/oext4-patched-sources.sha256"
+fi
+
 grep -Eq $'\t(applied|applied-three-way|already-present)$' "$report/fixes.tsv"
 git diff --stat --ignore-submodules=all HEAD -- \
     drivers/clk/clk-devres.c fs/ocfs2 include/linux/skbuff.h net/core/sock_destructor.h \

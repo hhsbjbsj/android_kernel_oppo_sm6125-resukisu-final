@@ -1177,6 +1177,14 @@ proof = {
 (report / "conflicts.txt").write_text("".join(path + "\n" for path in sorted(conflicts)))
 (report / "candidate-paths.txt").write_text("".join(path + "\n" for path in applied))
 if os.environ.get("OPENELA_SCOPE") == "direct357":
+    for label, end in (("vendor", vendor), ("upstream", os.environ["OPENELA_TARGET"])):
+        if conflicts:
+            with (report / f"conflicts-{label}.patch").open("wb") as output:
+                subprocess.run(
+                    ["git", "--literal-pathspecs", "diff", "--binary", "--no-renames",
+                     os.environ["OPENELA_BASE"], end, "--", *sorted(conflicts)],
+                    check=True, stdout=output,
+                )
     early_boot = (
         "arch/arm64/include/asm/alternative.h", "arch/arm64/include/asm/fixmap.h",
         "arch/arm64/kernel/head.S", "arch/arm64/kernel/entry.S",

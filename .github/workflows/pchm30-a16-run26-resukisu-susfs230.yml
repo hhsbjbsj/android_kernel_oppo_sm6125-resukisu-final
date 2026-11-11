@@ -347,7 +347,16 @@ jobs:
               build = "run_step 'Build BTF EXP2 kernel'\n"
               if s.count(build) != 1:
                   raise SystemExit("Cannot locate the final kernel build")
-              s = s.replace(build, f'bash "$GITHUB_WORKSPACE/{stable_script}"\n' + build, 1)
+              prepare = f'bash "$GITHUB_WORKSPACE/{stable_script}"\n'
+              if stable_script == "apply-kernel-direct357.sh":
+                  prepare += (
+                      'cp "$OUT_DIR/.config" "$GITHUB_WORKSPACE/openela-report/config-before-openela"\n'
+                      'make O="$OUT_DIR" ARCH=arm64 LOCALVERSION=+ CC="$CC" REAL_CC="$REAL_CC" '
+                      'LD="$LD" CROSS_COMPILE="$CROSS_COMPILE" CROSS_COMPILE_ARM32="$CROSS_COMPILE_ARM32" '
+                      'CLANG_TRIPLE="$CLANG_TRIPLE" olddefconfig\n'
+                      'cp "$OUT_DIR/.config" "$GITHUB_WORKSPACE/openela-report/config-after-openela"\n'
+                  )
+              s = s.replace(build, prepare + build, 1)
           p.write_text(s)
           PY
 

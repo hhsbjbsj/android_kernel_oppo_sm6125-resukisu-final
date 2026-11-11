@@ -169,20 +169,10 @@ with (report / "fixes.tsv").open("a") as log:
         print(row, file=log)
 PY
 
-grep -Eq git diff --stat --ignore-submodules=all HEAD -- \
+grep -Eq '[[:blank:]](applied|applied-three-way|already-present)$' "$report/fixes.tsv"
+git diff --stat --ignore-submodules=all HEAD -- \
     drivers/clk/clk-devres.c fs/ocfs2 include/linux/skbuff.h net/core/sock_destructor.h \
     net/ipv4/inet_fragment.c net/ipv4/ip_fragment.c net/ipv6/netfilter/nf_conntrack_reasm.c \
     security/integrity/ima fs/ext4/ialloc.c fs/ext4/xattr.c kernel/cpu_pm.c \
     include/net/netfilter/nf_conntrack.h net/netfilter/nf_conntrack_core.c > "$report/applied-stat.txt"
-! grep -Fxq 'SUBLEVEL = 357' Makefile
-\t(applied|applied-three-way|already-present)git diff --stat --ignore-submodules=all HEAD -- \
-    drivers/clk/clk-devres.c fs/ocfs2 include/linux/skbuff.h net/core/sock_destructor.h \
-    net/ipv4/inet_fragment.c net/ipv4/ip_fragment.c net/ipv6/netfilter/nf_conntrack_reasm.c \
-    security/integrity/ima fs/ext4/ialloc.c fs/ext4/xattr.c > "$report/applied-stat.txt"
-! grep -Fxq 'SUBLEVEL = 357' Makefile
- "$report/fixes.tsv"
-git diff --stat --ignore-submodules=all HEAD -- \
-    drivers/clk/clk-devres.c fs/ocfs2 include/linux/skbuff.h net/core/sock_destructor.h \
-    net/ipv4/inet_fragment.c net/ipv4/ip_fragment.c net/ipv6/netfilter/nf_conntrack_reasm.c \
-    security/integrity/ima fs/ext4/ialloc.c fs/ext4/xattr.c > "$report/applied-stat.txt"
 ! grep -Fxq 'SUBLEVEL = 357' Makefile

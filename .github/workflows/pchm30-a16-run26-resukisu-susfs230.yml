@@ -20,6 +20,7 @@ on:
       - '.github/workflows/pchm30-a16-run26-resukisu-susfs230.yml'
       - '.github/scripts/apply-kernel-414357.sh'
       - '.github/scripts/apply-kernel-414357-bootfix.sh'
+      - '.github/patches/pchm30-openela-early-rng.patch'
       - '.github/patches/reviewed-direct357.*'
       - '.github/scripts/apply-kernel-414190.sh'
       - '.github/scripts/apply-kernel-414200.sh'
@@ -219,6 +220,7 @@ jobs:
                 fi
                 if [ "$OPENELA_SCOPE" = bootfix357 ]; then
                   git show "$GITHUB_SHA:.github/scripts/apply-kernel-414357-bootfix.sh" > "$GITHUB_WORKSPACE/apply-kernel-414357-bootfix.sh"
+                  git show "$GITHUB_SHA:.github/patches/pchm30-openela-early-rng.patch" > "$GITHUB_WORKSPACE/pchm30-openela-early-rng.patch"
                 elif [ "$OPENELA_SCOPE" = direct357 ]; then
                   git show "$GITHUB_SHA:.github/scripts/apply-kernel-414357.sh" > "$GITHUB_WORKSPACE/apply-kernel-direct357.sh"
                   for extension in patch json; do
@@ -591,7 +593,10 @@ jobs:
             cp "$GITHUB_WORKSPACE/kernel-version-proof.txt" "$report/"
             if [ "$OPENELA_SCOPE" = bootfix357 ]; then
               test -s "$report/boot-compatibility-paths.txt"
-              package=PCHM30-OpenELA-4.14.357-bootfix-AK3.zip
+              test -s "$report/early-rng-order.patch"
+              grep -Fxq 'CONFIG_QCOM_EARLY_RANDOM=y' "$report/kernel.config"
+              grep -Eq '[[:xdigit:]]+[[:space:]]+[Tt][[:space:]]+init_random_pool$' "$OUT_DIR/System.map"
+              package=PCHM30-OpenELA-4.14.357-rng-boot-test-AK3.zip
             else
               package=PCHM30-OpenELA-4.14.357-boot-test-AK3.zip
             fi

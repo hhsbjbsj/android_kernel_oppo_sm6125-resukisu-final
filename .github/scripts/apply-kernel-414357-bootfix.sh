@@ -46,6 +46,12 @@ git --literal-pathspecs restore --source="$vendor" --staged --worktree \
     --pathspec-from-file="$report/boot-compatibility-paths.bin" --pathspec-file-nul
 git diff --cached --quiet "$vendor" -- "${boot_paths[@]}"
 git diff --quiet -- "${boot_paths[@]}"
+# Keep the TrustZone RNG sample before the initial stack canary, but wait for
+# the boot CPU's clock initialization before crediting the sample in OpenELA.
+rng_patch="$GITHUB_WORKSPACE/pchm30-openela-early-rng.patch"
+git apply --index "$rng_patch"
+cp "$rng_patch" "$report/early-rng-order.patch"
+
 git diff --cached --no-renames --binary "$vendor" > "$report/candidate.patch"
 git diff --cached --stat "$vendor" > "$report/applied-stat.txt"
 grep -Fxq 'SUBLEVEL = 357' Makefile
@@ -72,6 +78,7 @@ source["candidate_paths"] = subprocess.check_output(
 ).count(b"\0")
 source["boot_compatibility_paths"] = (report / "boot-compatibility-paths.txt").read_text().splitlines()
 source["boot_compatibility_reference"] = "Run 197"
+source["startup_adjustment"] = "Qualcomm early RNG runs after time_init and before random_init"
 (report / "merge-summary.json").write_text(json.dumps(source, indent=2) + "\n")
 print(f"OpenELA source paths applied: {source['candidate_paths']}")
 print(f"ARM64 and FDT paths retained from Run 197: {len(source['boot_compatibility_paths'])}")

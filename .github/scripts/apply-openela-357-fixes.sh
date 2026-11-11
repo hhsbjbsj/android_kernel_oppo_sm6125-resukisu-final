@@ -103,7 +103,84 @@ if [[ "$TARGET_PRODUCT" != qssi ]]; then
     sha256sum "$active_ext4/ialloc.c" "$active_ext4/xattr.c" > "$report/oext4-patched-sources.sha256"
 fi
 
-grep -Eq $'\t(applied|applied-three-way|already-present)$' "$report/fixes.tsv"
+# The legacy 4.14.186 step reports conflicts for these paths. Carry
+# the exact fixes over the vendor interfaces without replacing either file.
+python3 - "$report" <<'PY'
+import difflib
+import sys
+from pathlib import Path
+
+report = Path(sys.argv[1])
+old_counter = b"\n{\n\tint nr_calls;\n"
+new_counter = b"\n{\n\tint nr_calls = 0;\n"
+groups = {
+    "baseline-cpu-pm": {
+        "kernel/cpu_pm.c": [
+            (signature + old_counter, signature + new_counter)
+            for signature in (
+                b"int cpu_pm_enter(void)",
+                b"int cpu_cluster_pm_enter(unsigned long aff_level)",
+            )
+        ],
+    },
+    "baseline-conntrack": {
+        "include/net/netfilter/nf_conntrack.h": [
+            (b"\tu8 __nfct_init_offset[0];\n", b"\tstruct { } __nfct_init_offset;\n"),
+        ],
+        "net/netfilter/nf_conntrack_core.c": [
+            (b"\tmemset(&ct->__nfct_init_offset[0], 0,\n",
+             b"\tmemset(&ct->__nfct_init_offset, 0,\n"),
+            (b"\t       offsetof(struct nf_conn, __nfct_init_offset[0]));\n",
+             b"\t       offsetof(struct nf_conn, __nfct_init_offset));\n"),
+        ],
+    },
+}
+
+changes = {}
+results = {}
+for group, files in groups.items():
+    changed = False
+    for name, edits in files.items():
+        source = Path(name)
+        original = source.read_bytes()
+        fixed = original
+        for old, new in edits:
+            if fixed.count(old) == 1 and new not in fixed:
+                fixed = fixed.replace(old, new, 1)
+            elif old in fixed or fixed.count(new) != 1:
+                raise SystemExit(f"Unexpected vendor source context in {source}")
+        if fixed != original:
+            changes[source] = (original, fixed)
+            changed = True
+    results[group] = "applied" if changed else "already-present"
+
+patch = []
+for source, (original, fixed) in changes.items():
+    source.write_bytes(fixed)
+    patch.extend(difflib.diff_bytes(
+        difflib.unified_diff, original.splitlines(keepends=True), fixed.splitlines(keepends=True),
+        fromfile=f"a/{source}".encode(), tofile=f"b/{source}".encode(),
+    ))
+(report / "baseline-4.14.186-reconciled.patch").write_bytes(b"".join(patch))
+with (report / "fixes.tsv").open("a") as log:
+    for group, status in results.items():
+        row = f"{group}\t{status}"
+        print(row)
+        print(row, file=log)
+PY
+
+grep -Eq git diff --stat --ignore-submodules=all HEAD -- \
+    drivers/clk/clk-devres.c fs/ocfs2 include/linux/skbuff.h net/core/sock_destructor.h \
+    net/ipv4/inet_fragment.c net/ipv4/ip_fragment.c net/ipv6/netfilter/nf_conntrack_reasm.c \
+    security/integrity/ima fs/ext4/ialloc.c fs/ext4/xattr.c kernel/cpu_pm.c \
+    include/net/netfilter/nf_conntrack.h net/netfilter/nf_conntrack_core.c > "$report/applied-stat.txt"
+! grep -Fxq 'SUBLEVEL = 357' Makefile
+\t(applied|applied-three-way|already-present)git diff --stat --ignore-submodules=all HEAD -- \
+    drivers/clk/clk-devres.c fs/ocfs2 include/linux/skbuff.h net/core/sock_destructor.h \
+    net/ipv4/inet_fragment.c net/ipv4/ip_fragment.c net/ipv6/netfilter/nf_conntrack_reasm.c \
+    security/integrity/ima fs/ext4/ialloc.c fs/ext4/xattr.c > "$report/applied-stat.txt"
+! grep -Fxq 'SUBLEVEL = 357' Makefile
+ "$report/fixes.tsv"
 git diff --stat --ignore-submodules=all HEAD -- \
     drivers/clk/clk-devres.c fs/ocfs2 include/linux/skbuff.h net/core/sock_destructor.h \
     net/ipv4/inet_fragment.c net/ipv4/ip_fragment.c net/ipv6/netfilter/nf_conntrack_reasm.c \

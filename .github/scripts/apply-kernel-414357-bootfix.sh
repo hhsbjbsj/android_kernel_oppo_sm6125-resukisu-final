@@ -35,6 +35,8 @@ boot_paths=(
     arch/arm64/kvm
     arch/arm64/mm
     drivers/of/fdt.c
+    # OpenELA defines UL in linux/const.h for both C and assembly.
+    ':(exclude)arch/arm64/include/asm/memory.h'
 )
 git diff --cached --no-renames --name-only -z "$vendor" -- "${boot_paths[@]}" > "$report/boot-compatibility-paths.bin"
 test -s "$report/boot-compatibility-paths.bin"

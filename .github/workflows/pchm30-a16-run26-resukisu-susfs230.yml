@@ -12,8 +12,8 @@ on:
       scope:
         description: Kernel source scope
         type: choice
-        options: [stable200, stable190, point-release, full]
-        default: stable200
+        options: [direct357, stable200, stable190, point-release, full]
+        default: direct357
   push:
     branches: [pchm30-openela-414357-integration]
     paths:
@@ -48,6 +48,7 @@ env:
   RUN152_SOURCE_REF: f3b4ee6a48a03a67ece3b6699d3e07b4f278dca8
   RUN191_SOURCE_REF: 4b792a0a141744d05c5937e01da820888e430228
   RUN194_ARCHIVE_REF: b9fbbe85263c4a64615dac68addf755a8ab573f5
+  RUN197_ARCHIVE_REF: e55856b8ab006f49621d3f9483bb0988d3585346
   ROOT_SUCCESS_BRANCH: pchm30-a16-resukisu-susfs220
   ROOT_SUCCESS_WORKFLOW: .github/workflows/pchm30-a16-resukisu-susfs220-build.yml
   EXP1_BRANCH: pchm30-a16-btf-sockmap-exp1
@@ -67,7 +68,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        scope: ["${{ inputs.scope || 'stable200' }}"]
+        scope: ["${{ inputs.scope || 'direct357' }}"]
     env:
       OPENELA_SCOPE: ${{ matrix.scope }}
     runs-on: ubuntu-22.04
@@ -133,6 +134,15 @@ jobs:
           name: PCHM30-OpenELA-stable190-194
           path: run194-reference
 
+      - name: Fetch the phone-tested Run 197 reference image
+        if: matrix.scope == 'direct357'
+        uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          run-id: 42973424849
+          name: PCHM30-OpenELA-stable200-197
+          path: run197-reference
+
       - name: Install BTF host tooling
         shell: bash
         run: |
@@ -155,7 +165,7 @@ jobs:
       - name: Build Run17 ReSukiSU stack with SUSFS 2.3 overlay and KPM off
         working-directory: source/android/kernel/msm-4.14
         env:
-          MAKEFLAGS: ${{ (matrix.scope == 'full' || matrix.scope == 'stable200') && '-k' || '' }}
+          MAKEFLAGS: ${{ (matrix.scope == 'full' || matrix.scope == 'stable200' || matrix.scope == 'direct357') && '-k' || '' }}
         shell: bash
         run: |
           set -Eeuo pipefail
@@ -181,7 +191,7 @@ jobs:
           git show "$source_ref:.github/scripts/apply-kernel-414186.sh" > "$GITHUB_WORKSPACE/apply-kernel-414186.sh"
           if [ "$OPENELA_SCOPE" != full ]; then
             point_ref="$GITHUB_SHA"
-            if [[ "$OPENELA_SCOPE" = stable190 || "$OPENELA_SCOPE" = stable200 ]]; then
+            if [[ "$OPENELA_SCOPE" = stable* || "$OPENELA_SCOPE" = direct357 ]]; then
               point_ref="$RUN191_SOURCE_REF"
               git fetch --no-tags --depth=1 origin "$point_ref"
             fi
@@ -189,11 +199,17 @@ jobs:
               stable190)
                 git show "$GITHUB_SHA:.github/scripts/apply-kernel-414190.sh" > "$GITHUB_WORKSPACE/apply-kernel-414190.sh"
                 ;;
-              stable200)
+              stable200|direct357)
                 git fetch --no-tags --depth=1 origin "$RUN194_ARCHIVE_REF"
                 git show "$RUN194_ARCHIVE_REF:.github/patches/patch-4.14.186-to-190-pchm30.patch" > "$GITHUB_WORKSPACE/run194-4.14.190.patch"
-                git show "$GITHUB_SHA:.github/scripts/apply-kernel-414200.sh" > "$GITHUB_WORKSPACE/apply-kernel-414200.sh"
-                git show "$GITHUB_SHA:.github/patches/resolve-4.14.200-pchm30.patch" > "$GITHUB_WORKSPACE/resolve-4.14.200-pchm30.patch"
+                if [ "$OPENELA_SCOPE" = direct357 ]; then
+                  git fetch --no-tags --depth=1 origin "$RUN197_ARCHIVE_REF"
+                  git show "$RUN197_ARCHIVE_REF:.github/patches/patch-4.14.190-to-200-pchm30.patch" > "$GITHUB_WORKSPACE/run197-4.14.200.patch"
+                  git show "$GITHUB_SHA:.github/scripts/apply-kernel-414357.sh" > "$GITHUB_WORKSPACE/apply-kernel-direct357.sh"
+                else
+                  git show "$GITHUB_SHA:.github/scripts/apply-kernel-414200.sh" > "$GITHUB_WORKSPACE/apply-kernel-414200.sh"
+                  git show "$GITHUB_SHA:.github/patches/resolve-4.14.200-pchm30.patch" > "$GITHUB_WORKSPACE/resolve-4.14.200-pchm30.patch"
+                fi
                 ;;
             esac
             # Leave clock probing at the phone-tested baseline.
@@ -324,6 +340,7 @@ jobs:
           stable_scripts = {
               "stable190": "apply-kernel-414190.sh",
               "stable200": "apply-kernel-414200.sh",
+              "direct357": "apply-kernel-direct357.sh",
           }
           stable_script = stable_scripts.get(os.environ["OPENELA_SCOPE"])
           if stable_script:
@@ -471,7 +488,7 @@ jobs:
           cp "$OUT_DIR/.config" "$report/kernel.config"
           cp "$OUT_DIR/include/config/kernel.release" "$report/kernel.release"
           image="$OUT_DIR/arch/arm64/boot/Image"
-          if [ "$OPENELA_SCOPE" != full ]; then
+          if [[ "$OPENELA_SCOPE" != full && "$OPENELA_SCOPE" != direct357 ]]; then
             case "$OPENELA_SCOPE" in
               stable200)
                 reference_run=42963068114
@@ -522,6 +539,29 @@ jobs:
             printf 'baseline_run=%s\nbaseline_image_sha256=%s\nkernel_release=%s\n' \
               "$reference_run" "$reference_sha" "$(cat "$report/kernel.release")" > "$report/boot-baseline.txt"
             cat "$report/fixes.tsv"
+          elif [ "$OPENELA_SCOPE" = direct357 ]; then
+            if [ -s "$report/conflicts.txt" ]; then
+              echo "::warning::Direct OpenELA build has $(wc -l < "$report/conflicts.txt") unresolved paths."
+              exit 0
+            fi
+            grep -Eq '^4\.14\.357([+.-]|$)' "$report/kernel.release"
+            readelf -SW "$OUT_DIR/vmlinux" > "$report/elf-sections.txt"
+            grep -Eq '\.altinstructions[[:space:]]' "$report/elf-sections.txt"
+            ! grep -Fq '.altinstr_replacement' "$report/elf-sections.txt"
+            python3 - "$GITHUB_WORKSPACE/run197-reference/openela-report/Image" "$image" <<'PY'
+          import hashlib
+          import sys
+          from pathlib import Path
+
+          baseline, candidate = (Path(path).read_bytes() for path in sys.argv[1:3])
+          if hashlib.sha256(baseline).hexdigest() != "84ff35ab9d364dd95af812bd7961634d31218910182b247162d9e067ea6eba3b":
+              raise SystemExit("Reference Image does not match the phone-tested Run 197 artifact")
+          if candidate[56:60] != b"ARM\x64" or candidate[8:16] != baseline[8:16] or candidate[24:32] != baseline[24:32]:
+              raise SystemExit("ARM64 image loading fields changed from Run 197")
+          print("Run 197 ARM64 Image magic, text offset and flags verified")
+          PY
+            cp "$GITHUB_WORKSPACE/kernel-version-proof.txt" "$report/"
+            package=PCHM30-OpenELA-4.14.357-boot-test-AK3.zip
           elif [ -s "$report/conflicts.txt" ]; then
             ! grep -Eq '^4\.14\.357([+.-]|$)' "$report/kernel.release"
             package=PCHM30-OpenELA-candidate-AK3.zip

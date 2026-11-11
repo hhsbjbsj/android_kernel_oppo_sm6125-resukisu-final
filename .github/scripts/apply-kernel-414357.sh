@@ -11,6 +11,11 @@ rm -f -- "$GITHUB_WORKSPACE/kernel-version-proof.txt"
 
 base=ab9dfda232481dcfaf549ce774004d116fc80c13
 target=1e6347375d088ecc896aabb067131d0f9e3c0575
+base_tag=v4.14.180
+if [[ "${OPENELA_SCOPE:-}" == direct357 ]]; then
+    base=bae31eef2a167ef160ab2703b6a2f5bbecd98d92
+    base_tag=v4.14.200
+fi
 # The legacy preparation flow stages generated files and nested vendor
 # repositories. Snapshot remaining tracked source edits without changing any
 # nested repository's commit or collecting untracked build outputs.
@@ -24,9 +29,21 @@ if ! git diff --cached --quiet --ignore-submodules=all; then
         commit -m 'ci: snapshot prepared PCHM30 source'
 fi
 git diff --quiet --ignore-submodules=all HEAD --
+
+if [[ "${OPENELA_SCOPE:-}" == direct357 ]]; then
+    run194="$GITHUB_WORKSPACE/run194-4.14.190.patch"
+    run197="$GITHUB_WORKSPACE/run197-4.14.200.patch"
+    test "$(git hash-object "$run194")" = 586292d51f13443b0b609e842344b36f0fe579a6
+    test "$(git hash-object "$run197")" = 06fa2f6f585fc399c27530aa221746dbdf12395f
+    git apply --index "$run194"
+    git apply --index "$run197"
+    git -c user.name='PCHM30 OpenELA CI' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' \
+        commit -m 'kernel: reconstruct the exact phone-tested Run 197 source delta'
+    grep -Fxq 'SUBLEVEL = 200' Makefile
+fi
 vendor=$(git rev-parse HEAD)
 
-timeout 300 git fetch --no-tags --depth=1 https://github.com/gregkh/linux.git refs/tags/v4.14.180
+timeout 300 git fetch --no-tags --depth=1 https://github.com/gregkh/linux.git "refs/tags/$base_tag"
 test "$(git rev-parse 'FETCH_HEAD^{commit}')" = "$base"
 timeout 300 git fetch --no-tags --depth=1 https://github.com/openela/kernel-lts.git refs/tags/v4.14.357-openela
 test "$(git rev-parse 'FETCH_HEAD^{commit}')" = "$target"
@@ -49,7 +66,7 @@ grep -Fxq 'SUBLEVEL = 357' "$report/lineage-version.txt"
 git show "$target:Makefile" > "$report/upstream-makefile.txt"
 grep -Fxq 'SUBLEVEL = 357' "$report/upstream-makefile.txt"
 
-# The vendor snapshot has independent Git history. Make the stable 4.14.180
+# The vendor snapshot has independent Git history. Make the matching stable
 # tree the explicit comparison base without importing vendor-incompatible
 # source wholesale. The temporary commits only exist on this runner.
 snapshot() {
@@ -1159,6 +1176,23 @@ proof = {
 (report / "merge-summary.json").write_text(json.dumps(proof, indent=2) + "\n")
 (report / "conflicts.txt").write_text("".join(path + "\n" for path in sorted(conflicts)))
 (report / "candidate-paths.txt").write_text("".join(path + "\n" for path in applied))
+if os.environ.get("OPENELA_SCOPE") == "direct357":
+    early_boot = (
+        "arch/arm64/include/asm/alternative.h", "arch/arm64/include/asm/fixmap.h",
+        "arch/arm64/kernel/head.S", "arch/arm64/kernel/entry.S",
+        "arch/arm64/kernel/setup.c", "arch/arm64/kernel/vmlinux.lds.S",
+        "arch/arm64/kernel/cpufeature.c", "arch/arm64/mm/mmu.c",
+        "drivers/of/fdt.c", "drivers/clk/clk-devres.c", "drivers/clk/clk.c",
+        "drivers/char/random.c", "drivers/soc/qcom/early_random.c", "init/main.c",
+    )
+    for label, start, end in (
+        ("upstream", os.environ["OPENELA_BASE"], os.environ["OPENELA_TARGET"]),
+        ("candidate", vendor, merged_tree),
+    ):
+        (report / f"arm64-boot-{label}.patch").write_bytes(
+            git("diff", "--no-renames", start, end, "--", *early_boot)
+        )
+
 print(json.dumps(proof), flush=True)
 if conflicts and os.environ.get("OPENELA_COMPILE_CANDIDATE") != "1":
     raise SystemExit("OpenELA has unresolved source conflicts. See conflicts.txt.")

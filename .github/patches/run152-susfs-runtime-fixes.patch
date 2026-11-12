@@ -1,0 +1,176 @@
+Fix legacy 4.14 object lifetimes after the selected SUSFS 2.4 backport.
+
+diff --git a/fs/namei.c b/fs/namei.c
+--- a/fs/namei.c
++++ b/fs/namei.c
+@@ -3913,14 +3913,28 @@
+ 	}
+ #ifdef CONFIG_KSU_SUSFS_OPEN_REDIRECT
+ 		if (!error && old_dfd != -1 &&
+-			SUSFS_IS_INODE_OPEN_REDIRECT_WITHOUT_UID_CHECK(nd->path.dentry->d_inode))
++			SUSFS_IS_INODE_OPEN_REDIRECT_WITHOUT_UID_CHECK(file_inode(file)))
+ 		{
+-			fake_filename = susfs_open_redirect_spoof_do_sys_openat(nd->path.dentry->d_inode);
++			fake_filename = susfs_open_redirect_spoof_do_sys_openat(file_inode(file));
+ 			if (fake_filename && !IS_ERR(fake_filename)) {
+ 				const char *new_s = NULL;
+ 				terminate_walk(nd);
+ 				restore_nameidata();
+ 				set_nameidata(nd, old_dfd, fake_filename);
++				/*
++				 * do_last() has already opened the original file. Its
++				 * path, fops and write references belong to that file;
++				 * never reopen it or merely clear FILE_OPENED.
++				 */
++				fput(file);
++				file = get_empty_filp();
++				if (IS_ERR(file)) {
++					nd->name = old_name;
++					putname(fake_filename);
++					return file;
++				}
++				file->f_flags = op->open_flag;
++				opened = 0;
+ 				new_s = path_init(nd, flags);
+ 				if (IS_ERR(new_s)) {
+ 					nd->name = old_name;
+diff --git a/fs/susfs.c b/fs/susfs.c
+--- a/fs/susfs.c
++++ b/fs/susfs.c
+@@ -1427,7 +1427,9 @@
+ 		is_uid_filter_set_before = true;
+ 	mutex_unlock(&susfs_mutex_lock_priority_uid_filter);
+ 
+-	kfree_rcu(old_bitmap, rcu);
++	/* The legacy 4.14 kfree_rcu() does not accept NULL. */
++	if (old_bitmap)
++		kfree_rcu(old_bitmap, rcu);
+ 
+ 	SUSFS_LOGI("the priority uid filter is set\n");
+ 	err = 0;
+@@ -1485,7 +1487,8 @@
+ 	new_bitmap = NULL;
+ 	mutex_unlock(&susfs_mutex_lock_priority_uid_filter);
+ 
+-	kfree_rcu(old_bitmap, rcu);
++	if (old_bitmap)
++		kfree_rcu(old_bitmap, rcu);
+ 
+ 	SUSFS_LOGI("the uids of the priority uid filter are resolved again\n");
+ 
+@@ -1707,10 +1710,12 @@
+ 
+ static unsigned long sdcard_cleanup_scheduled;
+ static struct delayed_work sdcard_cleanup_dwork;
++static DEFINE_MUTEX(susfs_sdcard_watch_lock);
+ 
+ static void susfs_sdcard_cleanup_fn(struct work_struct *work)
+ {
+ 	struct fsnotify_group *grp;
++	struct fsnotify_mark *mark;
+ 	struct inode *inode;
+ 
+ 	if (static_key_enabled(&susfs_is_sdcard_android_data_not_decrypted))
+@@ -1718,9 +1723,15 @@
+ 	SUSFS_LOGI("/sdcard is decrypted\n");
+ 	SUSFS_LOGI("cleaning up fsnotify sdcard watch\n");
+ 
++	/* Registration may still be completing when an event queues us. */
++	mutex_lock(&susfs_sdcard_watch_lock);
++	mark = xchg(&g_watch.mark, NULL);
+ 	grp = xchg(&g, NULL);
+ 	if (grp)
+ 		fsnotify_destroy_group(grp);
++	/* Drop the caller reference acquired by fsnotify_init_mark(). */
++	if (mark)
++		fsnotify_put_mark(mark);
+ 
+ 	inode = xchg(&g_watch.inode, NULL);
+ 	if (inode)
+@@ -1730,6 +1741,7 @@
+ 		path_put(&g_watch.kpath);
+ 		memset(&g_watch.kpath, 0, sizeof(g_watch.kpath));
+ 	}
++	mutex_unlock(&susfs_sdcard_watch_lock);
+ }
+ 
+ static int watch_one_dir(struct watch_dir *wd)
+@@ -1743,6 +1755,7 @@
+ 	if (!wd->inode) {
+ 		SUSFS_LOGE("wd->inode is NULL\n");
+ 		path_put(&wd->kpath);
++		memset(&wd->kpath, 0, sizeof(wd->kpath));
+ 		return -ENOENT;
+ 	}
+ 	ihold(wd->inode);
+@@ -1753,6 +1766,7 @@
+ 		iput(wd->inode);
+ 		wd->inode = NULL;
+ 		path_put(&wd->kpath);
++		memset(&wd->kpath, 0, sizeof(wd->kpath));
+ 		return ret;
+ 	}
+ 	SUSFS_LOGI("watching %s\n", wd->path);
+@@ -1780,15 +1794,20 @@
+ 	return 0;
+ }
+ 
++static void m_free(struct fsnotify_mark *m);
++
+ static const struct fsnotify_ops fsnotify_ops = {
+ #if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 9, 0)
+ 	.handle_inode_event = susfs_handle_sdcard_inode_event,
+ #else
+ 	.handle_event = susfs_handle_sdcard_inode_event,
+ #endif
++#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 12, 0)
++	.free_mark = m_free,
++#endif
+ };
+ 
+-static void __maybe_unused m_free(struct fsnotify_mark *m)
++static void m_free(struct fsnotify_mark *m)
+ {
+ 	if (m) {
+ 		kfree(m);
+@@ -1822,7 +1841,7 @@
+ 
+ 	if (ret) {
+ 		fsnotify_put_mark(m);
+-		return -EINVAL;
++		return ret;
+ 	}
+ 	*out = m;
+ 	return 0;
+@@ -1851,20 +1870,29 @@
+ 
+ 	INIT_DELAYED_WORK(&sdcard_cleanup_dwork, susfs_sdcard_cleanup_fn);
+ 
++	mutex_lock(&susfs_sdcard_watch_lock);
+ #if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 0, 0)
+ 	g = fsnotify_alloc_group(&fsnotify_ops, 0);
+ #else
+ 	g = fsnotify_alloc_group(&fsnotify_ops);
+ #endif
+ 	if (IS_ERR(g)) {
+-		return PTR_ERR(g);
++		ret = PTR_ERR(g);
++		g = NULL;
++		mutex_unlock(&susfs_sdcard_watch_lock);
++		return ret;
+ 	}
+ 
+ 	ret = watch_one_dir(&g_watch);
++	if (ret) {
++		fsnotify_destroy_group(g);
++		g = NULL;
++	}
++	mutex_unlock(&susfs_sdcard_watch_lock);
+ 
+ 	SUSFS_LOGI("ret: %d\n", ret);
+ 
+-	return 0;
++	return ret;
+ }
+ 
+ void susfs_start_sdcard_monitor_fn(void) {

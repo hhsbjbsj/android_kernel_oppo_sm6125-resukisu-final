@@ -4,9 +4,10 @@ on:
   workflow_dispatch:
   push:
     branches: [pchm30-run152-bakasu-main-susfs240]
-    paths:
-      - '.github/workflows/pchm30-run152-bakasu-main-susfs240.yml'
-      - '.github/patches/run152-susfs240-backport.patch'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 env:
   TOOLCHAIN_RELEASE_TAG: pchm30-build-environment-20260810
@@ -26,13 +27,15 @@ env:
   RESUKISU_COMMIT: 548d1dda060ca198823d8808804d01f5209ef4a9
   RUN152_WORKFLOW_REF: f3b4ee6a48a03a67ece3b6699d3e07b4f278dca8
   SUSFS_240_UPSTREAM: 5436438b5cc77f146e04f71070da153dabe17a9d
-  ROOT_SUCCESS_BRANCH: pchm30-a16-resukisu-susfs220
+  # Legacy variable names are retained by the nested step runners, but all
+  # workflow inputs are immutable commit IDs rather than moving branches.
+  ROOT_SUCCESS_BRANCH: 8c5504ca40cf4d2eea2ee03900afb59f3597a4c6
   ROOT_SUCCESS_WORKFLOW: .github/workflows/pchm30-a16-resukisu-susfs220-build.yml
-  EXP1_BRANCH: pchm30-a16-btf-sockmap-exp1
+  EXP1_BRANCH: 03d3358a4843cc2d9c6b66297be992038c862599
   EXP1_WORKFLOW: .github/workflows/pchm30-a16-btf-sockmap-exp1-v2.yml
-  WIFI_SUCCESS_BRANCH: pchm30-a16-wifi-abi-exp1
+  WIFI_SUCCESS_BRANCH: 8a34bec6dba9008efae807eea060ab34fcf288e1
   WIFI_SUCCESS_WORKFLOW: .github/workflows/pchm30-a16-wifi-abi-exp1-build.yml
-  EXP2_BRANCH: pchm30-a16-btf-exp2-diagnose
+  EXP2_BRANCH: 1bca57fe1a2afcf686083431b0cac29b32414201
   EXP2_WORKFLOW: .github/workflows/pchm30-a16-btf-exp2-diagnose.yml
   UPSTREAM_BTF_UAPI: f063c889c9458354a92b235a51cbb60d30321070
   UPSTREAM_BTF_KERNEL: 1dc92851849cc2235a1efef8f8d5a9255efc5f13
@@ -85,6 +88,10 @@ jobs:
           git show "$GITHUB_SHA:.github/scripts/run17-bbg-lz4kd.sh" > "$GITHUB_WORKSPACE/run17-bbg-lz4kd.sh"
           git show "$GITHUB_SHA:.github/scripts/run25-susfs230-adapt.sh" > "$GITHUB_WORKSPACE/run25-susfs230-adapt.sh"
           git show "$GITHUB_SHA:.github/patches/run152-susfs240-backport.patch" > "$GITHUB_WORKSPACE/run152-susfs240-backport.patch"
+          git show "$GITHUB_SHA:.github/patches/run152-susfs-runtime-fixes.patch" > "$GITHUB_WORKSPACE/run152-susfs-runtime-fixes.patch"
+          git show "$GITHUB_SHA:.github/tests/test-run152-susfs.py" > "$GITHUB_WORKSPACE/test-run152-susfs.py"
+          git show "$GITHUB_SHA:.github/tests/test-run152-bakasu.py" > "$GITHUB_WORKSPACE/test-run152-bakasu.py"
+          git show "$GITHUB_SHA:.github/tests/test-run152-build-config.py" > "$GITHUB_WORKSPACE/test-run152-build-config.py"
           git show "$GITHUB_SHA:.github/scripts/run26-disable-kpm.sh" > "$GITHUB_WORKSPACE/run26-disable-kpm.sh"
           git show "$GITHUB_SHA:.github/scripts/rewrite-susfs230-hooks.py" > "$GITHUB_WORKSPACE/rewrite-susfs230-hooks.py"
           git show "$GITHUB_SHA:.github/scripts/adapt-ksu-sucompat230.sh" > "$GITHUB_WORKSPACE/adapt-ksu-sucompat230.sh"
@@ -95,6 +102,7 @@ jobs:
           git show "$GITHUB_SHA:.github/scripts/apply-cgroup-v2-freezer.sh" > "$GITHUB_WORKSPACE/apply-cgroup-v2-freezer.sh"
           git show "$GITHUB_SHA:.github/scripts/apply-kernel-414186.sh" > "$GITHUB_WORKSPACE/apply-kernel-414186.sh"
           git show "$GITHUB_SHA:.github/scripts/apply-kernel-414357.sh" > "$GITHUB_WORKSPACE/apply-kernel-414357.sh"
+          git show "$GITHUB_SHA:.github/scripts/package-pchm30-run17-ak3.sh" > "$GITHUB_WORKSPACE/package-pchm30-run17-ak3.sh"
           git show "$GITHUB_SHA:.github/patches/patch-4.14.180-to-186.patch" > "$GITHUB_WORKSPACE/patch-4.14.180-to-186.patch"
           git show "$RUN17_BTF_FIX_COMMIT:.github/scripts/run17-btf-kprobe-scene-fix.sh" > "$GITHUB_WORKSPACE/run17-btf-kprobe-scene-fix.sh"
           sed -i 's/\r$//' "$GITHUB_WORKSPACE"/*.sh || true
@@ -114,6 +122,9 @@ jobs:
             "$GITHUB_WORKSPACE/apply-kernel-414186.sh" \
             "$GITHUB_WORKSPACE/apply-kernel-414357.sh"
 
+          python3 "$GITHUB_WORKSPACE/test-run152-build-config.py" \
+            --kernel-dir "$PWD" --scripts-dir "$GITHUB_WORKSPACE"
+
           python3 - <<'PY'
           from pathlib import Path
           import os
@@ -124,6 +135,9 @@ jobs:
               "run_step 'Layer verified ReSukiSU SUSFS hooks'\n"
               '"$GITHUB_WORKSPACE/run25-susfs230-adapt.sh"\n'
               'git apply "$GITHUB_WORKSPACE/run152-susfs240-backport.patch"\n'
+              'git apply --check "$GITHUB_WORKSPACE/run152-susfs-runtime-fixes.patch"\n'
+              'git apply "$GITHUB_WORKSPACE/run152-susfs-runtime-fixes.patch"\n'
+              'python3 "$GITHUB_WORKSPACE/test-run152-susfs.py" --kernel-dir "$PWD"\n'
           )
           if old_hooks not in s:
               raise SystemExit('cannot locate ReSukiSU hook layer step')
@@ -133,6 +147,7 @@ jobs:
               "run_step 'Prepare proven A16 root config'\n"
               '"$GITHUB_WORKSPACE/run26-disable-kpm.sh"\n'
               '"$GITHUB_WORKSPACE/run29-manager-handshake.sh"\n'
+              'python3 "$GITHUB_WORKSPACE/test-run152-bakasu.py" --kernel-dir "$PWD"\n'
           )
           if old_cfg not in s:
               raise SystemExit('cannot locate root-config step')
@@ -221,9 +236,19 @@ jobs:
           test -s "$GITHUB_WORKSPACE/run28-extra-features-proof.txt"
           grep -Fq 'droidspaces=off' "$GITHUB_WORKSPACE/run28-extra-features-proof.txt"
           grep -Eq 'rekernel=y-hooks|rekernel=y-source-hooks-partial' "$GITHUB_WORKSPACE/run28-extra-features-proof.txt"
-          grep -Fq 'tcp_brutal=y' "$GITHUB_WORKSPACE/run28-extra-features-proof.txt"
-          grep -Fq 'adios=mq-deadline-4.14-port' "$GITHUB_WORKSPACE/run28-extra-features-proof.txt"
-          grep -Fq 'network_enhance=y' "$GITHUB_WORKSPACE/run28-extra-features-proof.txt"
+          grep -Fxq 'tcp_brutal=disabled' "$GITHUB_WORKSPACE/run28-extra-features-proof.txt"
+          grep -Fxq 'adios=not_integrated' "$GITHUB_WORKSPACE/run28-extra-features-proof.txt"
+          grep -Fxq 'network_enhance=configuration_only' "$GITHUB_WORKSPACE/run28-extra-features-proof.txt"
+          grep -Fxq 'io_scheduler=mq-deadline-built' "$GITHUB_WORKSPACE/run28-extra-features-proof.txt"
+          grep -Fxq 'CONFIG_DEFAULT_BBR=y' "$CONFIG"
+          grep -Fxq 'CONFIG_DEFAULT_TCP_CONG="bbr"' "$CONFIG"
+          grep -Fxq 'CONFIG_MQ_IOSCHED_DEADLINE=y' "$CONFIG"
+          ! grep -Eq '^CONFIG_TCP_CONG_BRUTAL=[ym]$' "$CONFIG"
+          ! grep -Eq '^CONFIG_MQ_IOSCHED_ADIOS=[ym]$' "$CONFIG"
+          # Repeat lifetime checks against the final staged sources after all
+          # later compatibility layers have run, not only after patching.
+          python3 "$GITHUB_WORKSPACE/test-run152-susfs.py" --kernel-dir "$PWD"
+          python3 "$GITHUB_WORKSPACE/test-run152-bakasu.py" --kernel-dir "$PWD"
           grep -Fxq 'susfs_to=v2.3.0' "$GITHUB_WORKSPACE/run25-susfs230-proof.txt"
           grep -Fxq 'priority_uid_filter=enabled' "$GITHUB_WORKSPACE/run25-susfs230-proof.txt"
           grep -Fxq 'is_statically=bool' "$GITHUB_WORKSPACE/run25-susfs230-proof.txt"
@@ -256,9 +281,13 @@ jobs:
           grep -Fq 'hook_guard=CONFIG_KSU' "$GITHUB_WORKSPACE/run29-manager-handshake-proof.txt"
           grep -Fq 'custom_manager_size=0x039a' "$GITHUB_WORKSPACE/run29-manager-handshake-proof.txt"
           grep -Fq 'custom_manager_hash=366aa724f4ed84d589fb47077cee4dc6aac45c37c4a50a6e1eaed4446bb3bc03' "$GITHUB_WORKSPACE/run29-manager-handshake-proof.txt"
+          grep -Fxq 'cloexec_policy=upstream_preserved' "$GITHUB_WORKSPACE/run29-manager-handshake-proof.txt"
+          grep -Fxq 'preinit=disabled_missing_legacy_exec_hooks' "$GITHUB_WORKSPACE/run29-manager-handshake-proof.txt"
+          ! grep -Eq '[[:space:]]ksu_setup_preinit_file$|[[:space:]]ksu_preinit_handle_post_execveat$' "$GITHUB_WORKSPACE/run16-vmlinux-nm-all.txt"
           test -s "$GITHUB_WORKSPACE/kernel-version-proof.txt"
-          grep -Fxq 'kernel_version=4.14.357' "$GITHUB_WORKSPACE/kernel-version-proof.txt"
-          grep -Fxq 'sublevel=357' "$GITHUB_WORKSPACE/kernel-version-proof.txt"
+          grep -Fxq 'kernel_release_label=4.14.357-perf+' "$GITHUB_WORKSPACE/kernel-version-proof.txt"
+          grep -Fxq 'release_label_only=yes' "$GITHUB_WORKSPACE/kernel-version-proof.txt"
+          grep -Fxq 'full_4.14.357_backport=no' "$GITHUB_WORKSPACE/kernel-version-proof.txt"
           grep -q '^SUBLEVEL = 357$' Makefile
           test -s "$GITHUB_WORKSPACE/binder-419-proof.txt"
           grep -Fq 'wake_up_pollfree=applied' "$GITHUB_WORKSPACE/binder-419-proof.txt"
@@ -272,6 +301,15 @@ jobs:
           grep -Fxq 'cgroup.freeze=supported' "$GITHUB_WORKSPACE/cgroup-v2-freezer-proof.txt"
           grep -Fxq 'cgroup.events=supported' "$GITHUB_WORKSPACE/cgroup-v2-freezer-proof.txt"
           grep -Fxq 'freezer_trap=supported' "$GITHUB_WORKSPACE/cgroup-v2-freezer-proof.txt"
+          grep -Fxq 'freezer_inherit_flags=freeze+frozen' "$GITHUB_WORKSPACE/cgroup-v2-freezer-proof.txt"
+          python3 - <<'PY_FREEZER'
+          from pathlib import Path
+          source = Path('kernel/cgroup/cgroup.c').read_text()
+          start = source.index('cgrp->freezer.e_freeze = parent->freezer.e_freeze;')
+          inherited = source[start:source.index('spin_lock_irq(&css_set_lock);', start)]
+          assert 'set_bit(CGRP_FREEZE, &cgrp->flags);' in inherited
+          assert 'set_bit(CGRP_FROZEN, &cgrp->flags);' in inherited
+          PY_FREEZER
           test -s "$GITHUB_WORKSPACE/binder-freeze-proof.txt"
           grep -Fxq 'binder_freeze=applied' "$GITHUB_WORKSPACE/binder-freeze-proof.txt"
           grep -Fxq 'binder_freeze_race_fix=applied' "$GITHUB_WORKSPACE/binder-freeze-proof.txt"
@@ -312,22 +350,54 @@ jobs:
           done
 
           python3 - <<'PY_MANIFEST'
-          import json, os
+          import hashlib, json, os, subprocess
           from pathlib import Path
 
           stage_dir = Path(os.environ.get("STAGE_DIR") or (os.environ.get("GITHUB_WORKSPACE", "") + "/out_artifacts"))
           stage_dir.mkdir(parents=True, exist_ok=True)
+          source_paths = [
+              'fs/susfs.c', 'fs/namei.c', 'fs/exec.c',
+              'kernel/cgroup/freezer.c', 'kernel/cgroup/cgroup.c',
+              'KernelSU/kernel/tools/code_generation/code_generation.mk',
+              'KernelSU/kernel/sulog/fd.c',
+          ]
+          def sha256(path):
+              return hashlib.sha256(Path(path).read_bytes()).hexdigest()
+          final_config = dict(
+              line.split('=', 1) for line in (stage_dir / 'kernel.config').read_text().splitlines()
+              if line.startswith('CONFIG_') and '=' in line
+          )
           manifest = {
               "target_device": "OPPO A11x / PCHM30 (sm6125)",
               "os_target": "LineageOS 24 (Android 17)",
               "baseline_run": 152,
               "baseline_commit": os.environ["RUN152_WORKFLOW_REF"],
+              "workflow_commit": os.environ["GITHUB_SHA"],
+              "workflow_run_id": os.environ["GITHUB_RUN_ID"],
+              "staged_git_head": subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip(),
               "kernel_release_label": "4.14.357-perf+",
+              "kernel_release_label_only": True,
+              "full_4.14.357_backport": False,
               "rootless_checkout": "0789fcca2cbcb74143492a70afc6c3b5a59251b7",
               "bakasu_commit": os.environ.get("RESUKISU_COMMIT", "auto"),
               "susfs_version": "v2.4.0-pchm30",
               "susfs_upstream_commit": os.environ["SUSFS_240_UPSTREAM"],
               "susfs_port_scope": ["priority UID package lookup", "open redirect retry lifetime", "mount lookup fast path"],
+              "runtime_fixes": ["nullable RCU bitmap retirement", "fresh file for redirect retry", "fsnotify mark ownership", "freezer child inheritance"],
+              "preinit_status": "disabled_missing_legacy_exec_hooks",
+              "fd_cloexec_policy": "upstream_preserved",
+              "tcp_default_from_final_config": final_config['CONFIG_DEFAULT_TCP_CONG'].strip('"'),
+              "tcp_brutal_status": "disabled_incomplete_implementation",
+              "adios_status": "not_integrated",
+              "io_scheduler_available": "mq-deadline",
+              "reused_workflows": {
+                  key: os.environ[key] for key in
+                  ["ROOT_SUCCESS_BRANCH", "EXP1_BRANCH", "WIFI_SUCCESS_BRANCH", "EXP2_BRANCH"]
+              },
+              "source_file_sha256": {path: sha256(path) for path in source_paths},
+              "image_sha256": sha256(stage_dir / 'Image'),
+              "config_sha256": sha256(stage_dir / 'kernel.config'),
+              "runtime_fix_patch_sha256": sha256(Path(os.environ['GITHUB_WORKSPACE']) / 'run152-susfs-runtime-fixes.patch'),
               "manager_dual_signatures": ["0x039a", "0x38b"],
               "kpm_status": "disabled",
               "capabilities": {

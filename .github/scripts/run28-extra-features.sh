@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# CI-only overlay: network enhance, BBR/Brutal, ADIOS (4.14 mq-deadline),
-# Re:Kernel (4.14 stubs), confirm Baseband-guard. No Droidspaces.
+# CI-only overlay: BBR configuration, in-tree mq-deadline, Re:Kernel and
+# Baseband-guard. No TCP Brutal stand-in, ADIOS alias, or Droidspaces.
 # Does not commit kernel source; mutates the runner checkout only.
 set -Eeuo pipefail
 
@@ -23,14 +23,26 @@ test -x scripts/config
 
 enable_opt() {
   local opt="$1"
-  scripts/config --file "$OUT_DIR/.config" -e "$opt" || true
+  scripts/config --file "$OUT_DIR/.config" -e "$opt"
 }
 disable_opt() {
   local opt="$1"
-  scripts/config --file "$OUT_DIR/.config" -d "$opt" || true
+  scripts/config --file "$OUT_DIR/.config" -d "$opt"
 }
 
-echo '===== STAGE NETWORK ENHANCE + BBR / BRUTAL ====='
+select_bbr_default() {
+  # DEFAULT_TCP_CONG is a derived string. Set the Kconfig choice itself so
+  # olddefconfig cannot restore the previous DEFAULT_CUBIC selection.
+  local opt
+  for opt in DEFAULT_BIC DEFAULT_CUBIC DEFAULT_HTCP DEFAULT_HYBLA \
+    DEFAULT_VEGAS DEFAULT_VENO DEFAULT_WESTWOOD DEFAULT_DCTCP DEFAULT_CDG \
+    DEFAULT_RENO; do
+    disable_opt "$opt"
+  done
+  enable_opt DEFAULT_BBR
+}
+
+echo '===== STAGE NETWORK CONFIGURATION + BBR ====='
 for opt in \
   TCP_CONG_ADVANCED TCP_CONG_BBR TCP_CONG_CUBIC TCP_CONG_WESTWOOD \
   NET_SCHED NET_SCH_FQ NET_SCH_FQ_CODEL \
@@ -55,143 +67,14 @@ for opt in \
   TCP_CONG_CDG TCP_MD5SIG; do
   disable_opt "$opt"
 done
-scripts/config --file "$OUT_DIR/.config" --set-str DEFAULT_TCP_CONG bbr || true
+select_bbr_default
 
-if [ ! -f net/ipv4/tcp_brutal.c ]; then
-  cat > net/ipv4/tcp_brutal.c <<'EOF'
-/* SPDX-License-Identifier: GPL-2.0 */
-/* TCP Brutal, 4.14-adapted from Hysteria/HyNetworks tcp-brutal ABI. */
-#include <linux/module.h>
-#include <linux/mm.h>
-#include <net/tcp.h>
+# The previous stand-in fixed TCP pacing at 125000 bytes/s and did not
+# implement the TCP Brutal control API. Stop compiling that feature.
+disable_opt TCP_CONG_BRUTAL
 
-#define BRUTAL_MIN_PACING_RATE (125000u)
-
-struct brutal {
-	u32 pacing_rate;
-};
-
-static void brutal_init(struct sock *sk)
-{
-	struct brutal *b = inet_csk_ca(sk);
-
-	b->pacing_rate = BRUTAL_MIN_PACING_RATE;
-	cmpxchg(&sk->sk_pacing_status, SK_PACING_NONE, SK_PACING_NEEDED);
-	sk->sk_pacing_rate = b->pacing_rate;
-}
-
-static void brutal_cong_control(struct sock *sk, const struct rate_sample *rs)
-{
-	struct tcp_sock *tp = tcp_sk(sk);
-	struct brutal *b = inet_csk_ca(sk);
-	u32 rate = b->pacing_rate;
-
-	if (rs->delivered < 0 || rs->interval_us <= 0)
-		return;
-	if (rate < BRUTAL_MIN_PACING_RATE)
-		rate = BRUTAL_MIN_PACING_RATE;
-	sk->sk_pacing_rate = rate;
-	tp->snd_cwnd = max_t(u32, 4U, (rate / 1500U) + 4U);
-}
-
-static u32 brutal_ssthresh(struct sock *sk)
-{
-	return max(tcp_sk(sk)->snd_cwnd >> 1, 2U);
-}
-
-static void brutal_cong_avoid(struct sock *sk, u32 ack, u32 acked)
-{
-}
-
-static u32 brutal_undo_cwnd(struct sock *sk)
-{
-	return tcp_sk(sk)->snd_cwnd;
-}
-
-static struct tcp_congestion_ops tcp_brutal __read_mostly = {
-	.flags = TCP_CONG_NON_RESTRICTED,
-	.name = "brutal",
-	.owner = THIS_MODULE,
-	.init = brutal_init,
-	.ssthresh = brutal_ssthresh,
-	.cong_avoid = brutal_cong_avoid,
-	.undo_cwnd = brutal_undo_cwnd,
-	.cong_control = brutal_cong_control,
-};
-
-static int __init brutal_register(void)
-{
-	BUILD_BUG_ON(sizeof(struct brutal) > ICSK_CA_PRIV_SIZE);
-	return tcp_register_congestion_control(&tcp_brutal);
-}
-
-static void __exit brutal_unregister(void)
-{
-	tcp_unregister_congestion_control(&tcp_brutal);
-}
-
-module_init(brutal_register);
-module_exit(brutal_unregister);
-MODULE_LICENSE("GPL");
-MODULE_DESCRIPTION("TCP Brutal congestion control (4.14)");
-EOF
-fi
-
-python3 - <<'PY'
-from pathlib import Path
-
-mk = Path('net/ipv4/Makefile')
-ms = mk.read_text()
-if 'CONFIG_TCP_CONG_BRUTAL' not in ms:
-    marker = 'obj-$(CONFIG_TCP_CONG_BBR) += tcp_bbr.o\n'
-    addition = 'obj-$(CONFIG_TCP_CONG_BRUTAL) += tcp_brutal.o\n'
-    if marker in ms:
-        mk.write_text(ms.replace(marker, marker + addition, 1))
-    else:
-        mk.write_text(ms + '\n' + addition)
-
-k = Path('net/ipv4/Kconfig')
-s = k.read_text()
-if 'config TCP_CONG_BRUTAL' not in s:
-    block = (
-        'config TCP_CONG_BRUTAL\n'
-        '\ttristate "Brutal TCP congestion control"\n'
-        '\tdefault y\n'
-        '\thelp\n'
-        '\t  TCP Brutal pacing-based congestion control for 4.14.\n\n'
-    )
-    if 'config TCP_CONG_BBR\n' in s:
-        s = s.replace('config TCP_CONG_BBR\n', block + 'config TCP_CONG_BBR\n', 1)
-    else:
-        s += '\n' + block
-    k.write_text(s)
-PY
-enable_opt TCP_CONG_BRUTAL
-
-echo '===== STAGE ADIOS (4.14 maps to mq-deadline; do not enable legacy deadline) ====='
-enable_opt MQ_IOSCHED_DEADLINE
-python3 - <<'PY'
-from pathlib import Path
-k = Path('block/Kconfig.iosched')
-s = k.read_text()
-if 'config MQ_IOSCHED_ADIOS' not in s:
-    block = (
-        'config MQ_IOSCHED_ADIOS\n'
-        '\tbool "Adaptive Deadline I/O scheduler (4.14 mq-deadline port)"\n'
-        '\tselect MQ_IOSCHED_DEADLINE\n'
-        '\tdefault y\n'
-        '\thelp\n'
-        '\t  On Linux 4.14, full firelzrd/adios needs blk-mq APIs from 5.10+.\n'
-        '\t  This option maps ADIOS to the in-tree mq-deadline scheduler.\n\n'
-    )
-    if 'config MQ_IOSCHED_KYBER\n' in s:
-        s = s.replace('config MQ_IOSCHED_KYBER\n', block + 'config MQ_IOSCHED_KYBER\n', 1)
-    else:
-        s += '\n' + block
-    k.write_text(s)
-print('adios kconfig=alias-to-mq-deadline')
-PY
-enable_opt MQ_IOSCHED_ADIOS
+# Keep the actual in-tree scheduler; an extra Kconfig alias is not ADIOS.
+disable_opt MQ_IOSCHED_ADIOS
 enable_opt MQ_IOSCHED_DEADLINE
 
 echo '===== STAGE REKERNEL ====='
@@ -321,7 +204,7 @@ if binder.exists():
         '\t\tbinder_trans_handler(t->from->proc->pid, t->from->proc->tsk, to_proc->pid, to_proc->tsk, false, tr);\n'
         '\telse {\n'
         '\t\tbinder_trans_handler(task_tgid_nr(current), current, to_proc->pid, to_proc->tsk, true, tr);\n'
-        '\t\ttarget_alloc = \&to_proc->alloc;\n'
+        '\t\ttarget_alloc = &to_proc->alloc;\n'
         '\t\tif (target_alloc->free_async_space < (target_alloc->buffer_size / 10 + 0x300))\n'
         '\t\t\tbinder_overflow_handler(task_tgid_nr(current), current, to_proc->pid, to_proc->tsk, true, tr);\n'
         '\t}\n'
@@ -377,38 +260,53 @@ else
   BBG_STATE='missing-run17-not-applied'
 fi
 
-echo '===== OLDDEFCONFIG (answer remaining NEW symbols with defaults) ====='
-yes '' | make O="$OUT_DIR" ARCH=arm64 olddefconfig || \
-  make O="$OUT_DIR" ARCH=arm64 olddefconfig || true
+# Request all required options before Kconfig resolves their dependencies.
 enable_opt TCP_CONG_ADVANCED
 enable_opt TCP_CONG_BBR
 enable_opt TCP_CONG_CUBIC
 enable_opt TCP_CONG_WESTWOOD
-enable_opt TCP_CONG_BRUTAL
+disable_opt TCP_CONG_BRUTAL
 enable_opt NET_SCH_FQ
 enable_opt NET_SCH_FQ_CODEL
 enable_opt MQ_IOSCHED_DEADLINE
-enable_opt MQ_IOSCHED_ADIOS
+disable_opt MQ_IOSCHED_ADIOS
 enable_opt REKERNEL
 disable_opt REKERNEL_NETWORK
-scripts/config --file "$OUT_DIR/.config" --set-str DEFAULT_TCP_CONG bbr || true
+select_bbr_default
+
+echo '===== RESOLVE AND VERIFY FINAL CONFIGURATION ====='
+# olddefconfig is noninteractive. A failure must stop the build, rather than
+# emitting a proof for options which Kconfig has never accepted.
+make_args=(O="$OUT_DIR" ARCH=arm64 LOCALVERSION=+)
+for compiler_var in CC REAL_CC LD CROSS_COMPILE CROSS_COMPILE_ARM32 CLANG_TRIPLE; do
+  if [ -n "${!compiler_var:-}" ]; then
+    make_args+=("$compiler_var=${!compiler_var}")
+  fi
+done
+make "${make_args[@]}" olddefconfig
+grep -Fxq 'CONFIG_TCP_CONG_BBR=y' "$OUT_DIR/.config"
+grep -Fxq 'CONFIG_DEFAULT_BBR=y' "$OUT_DIR/.config"
+grep -Fxq 'CONFIG_DEFAULT_TCP_CONG="bbr"' "$OUT_DIR/.config"
+grep -Fxq 'CONFIG_NET_SCH_FQ=y' "$OUT_DIR/.config"
+grep -Fxq 'CONFIG_MQ_IOSCHED_DEADLINE=y' "$OUT_DIR/.config"
+grep -Fxq 'CONFIG_REKERNEL=y' "$OUT_DIR/.config"
+! grep -Eq '^CONFIG_(TCP_CONG_BRUTAL|MQ_IOSCHED_ADIOS)=[ym]$' "$OUT_DIR/.config"
 
 {
   echo "rekernel_commit=$REKERNEL_COMMIT"
   echo 'droidspaces=off'
-  echo 'network_enhance=y'
+  echo 'network_enhance=configuration_only'
   echo 'tcp_cong_default=bbr'
-  echo 'tcp_brutal=y'
-  echo 'adios=mq-deadline-4.14-port'
+  echo 'tcp_brutal=disabled'
+  echo 'adios=not_integrated'
+  echo 'io_scheduler=mq-deadline-built'
   echo "bbg=$BBG_STATE"
   echo "rekernel=$REK_STATE"
-  echo '===== CONFIG REQUESTS ====='
-  grep -E '^CONFIG_(TCP_CONG_BBR|TCP_CONG_BRUTAL|TCP_CONG_BIC|TCP_CONG_ADVANCED|DEFAULT_TCP_CONG|NET_SCH_FQ|MQ_IOSCHED_ADIOS|MQ_IOSCHED_DEADLINE|REKERNEL|BBG|IP_SET|WIREGUARD|CIFS|TUN|VETH)=' "$OUT_DIR/.config" || true
+  echo '===== RESOLVED CONFIGURATION ====='
+  grep -E '^CONFIG_(TCP_CONG_BBR|TCP_CONG_BRUTAL|TCP_CONG_BIC|TCP_CONG_ADVANCED|DEFAULT_BBR|DEFAULT_TCP_CONG|NET_SCH_FQ|MQ_IOSCHED_ADIOS|MQ_IOSCHED_DEADLINE|REKERNEL|BBG|IP_SET|WIREGUARD|CIFS|TUN|VETH)=' "$OUT_DIR/.config"
   echo '===== SOURCE MARKERS ====='
-  test -f net/ipv4/tcp_brutal.c && echo 'tcp_brutal.c=yes'
-  grep -Fq 'config MQ_IOSCHED_ADIOS' block/Kconfig.iosched && echo 'adios_kconfig=yes'
   test -f drivers/rekernel/rekernel.c && echo 'rekernel.c=yes'
   grep -Fq 'REKERNEL_SIGNAL' drivers/rekernel/rekernel.h && echo 'rekernel_enum_prefixed=yes'
 } | tee "$PROOF"
 
-echo "[PASS] Run28 staged BBR/Brutal + ADIOS + Re:Kernel + BBG overlay (rekernel=$REK_STATE bbg=$BBG_STATE)"
+echo "[PASS] BBR default and mq-deadline configuration verified; TCP Brutal and ADIOS disabled (rekernel=$REK_STATE bbg=$BBG_STATE)"

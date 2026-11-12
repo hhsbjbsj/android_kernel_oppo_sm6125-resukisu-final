@@ -615,8 +615,10 @@ static ssize_t cgroup_freeze_write(struct kernfs_open_file *of,
 \t\tgoto out_idr_free;
 
 \tcgrp->freezer.e_freeze = parent->freezer.e_freeze;
-\tif (cgrp->freezer.e_freeze)
+\tif (cgrp->freezer.e_freeze) {
+\t\tset_bit(CGRP_FREEZE, &cgrp->flags);
 \t\tset_bit(CGRP_FROZEN, &cgrp->flags);
+\t}
 """
     assert idr_anchor in ct, "cannot find idr anchor in cgroup.c"
     ct = ct.replace(idr_anchor, idr_repl, 1)
@@ -664,6 +666,26 @@ static ssize_t cgroup_freeze_write(struct kernfs_open_file *of,
 
     cg_path.write_text(ct, encoding="utf-8")
     print("[PASS] kernel/cgroup/cgroup.c updated")
+
+# Repair a tree staged by the earlier version of this backport as well.
+# A new empty child is already frozen, and must also inherit the request bit
+# used by cgroup_task_freeze() and task migration/fork handling.
+old_inherit = (
+    "\tcgrp->freezer.e_freeze = parent->freezer.e_freeze;\n"
+    "\tif (cgrp->freezer.e_freeze)\n"
+    "\t\tset_bit(CGRP_FROZEN, &cgrp->flags);\n"
+)
+new_inherit = (
+    "\tcgrp->freezer.e_freeze = parent->freezer.e_freeze;\n"
+    "\tif (cgrp->freezer.e_freeze) {\n"
+    "\t\tset_bit(CGRP_FREEZE, &cgrp->flags);\n"
+    "\t\tset_bit(CGRP_FROZEN, &cgrp->flags);\n"
+    "\t}\n"
+)
+if old_inherit in ct:
+    ct = ct.replace(old_inherit, new_inherit, 1)
+    cg_path.write_text(ct, encoding="utf-8")
+assert ct.count(new_inherit) == 1, "missing unique freezer inheritance flags"
 
 # 10. kernel/fork.c
 fork_path = Path("kernel/fork.c")
@@ -759,6 +781,7 @@ proof_lines.append("cgroup_v2_freezer=applied")
 proof_lines.append("cgroup.freeze=supported")
 proof_lines.append("cgroup.events=supported")
 proof_lines.append("freezer_trap=supported")
+proof_lines.append("freezer_inherit_flags=freeze+frozen")
 proof_lines.append("leave_frozen_ptrace_fix=05b289263772")
 
 proof_text = "\n".join(proof_lines) + "\n"

@@ -15,6 +15,7 @@ test -f fs/stat.c
 
 python3 -u - <<'PY'
 from pathlib import Path
+import os
 
 files = ['fs/exec.c', 'fs/open.c', 'fs/stat.c', 'kernel/reboot.c']
 changed = []
@@ -52,20 +53,45 @@ if 'ksu_handle_sys_reboot' not in rt:
     reboot.write_text(rt.replace(needle, insert, 1))
     print('kernel/reboot.c: injected CONFIG_KSU sys_reboot hook', flush=True)
 
-cloexec_hits = 0
 root = Path('KernelSU')
+preinit_status = 'not_present'
 if root.exists():
-    for p in list(root.rglob('*.c')) + list(root.rglob('*.h')):
-        text = p.read_text(errors='ignore')
-        orig = text
-        text = text.replace('ksu_install_fd_with_permissions(O_CLOEXEC, 0)',
-                            'ksu_install_fd_with_permissions(0, 0)')
-        text = text.replace('get_unused_fd_flags(O_CLOEXEC)',
-                            'get_unused_fd_flags(0)')
-        if text != orig:
-            p.write_text(text)
-            cloexec_hits += 1
-            print(f'cloexec_relax={p}', flush=True)
+    # Keep upstream FD lifetimes, including the ordinary reboot handshake.
+    # Removing CLOEXEC globally also leaks the single-reader sulog descriptor
+    # into executed children and changes preinit/file-wrapper ownership.
+    ksu_dir = root / 'kernel' if (root / 'kernel').is_dir() else root
+    preinit_header = ksu_dir / 'preinit' / 'preinit.h'
+    if preinit_header.exists():
+        # Legacy 4.14 SUSFS exec hooks do not hand PID 1 to the preinit runner.
+        # Do not advertise a runner that is never invoked. Use upstream's
+        # no-preinit stubs and omit the runner generator and both objects.
+        # Defining KSU_NO_PREINIT while still compiling preinit.c would cause
+        # duplicate definitions, so the build include must be disabled too.
+        disabled_stub = (
+            'static inline bool ksu_preinit_enabled_param(void)\n'
+            '{\n'
+            '    return false;\n'
+            '}'
+        )
+        header = preinit_header.read_text()
+        if '#ifndef KSU_NO_PREINIT' not in header or header.count(disabled_stub) != 1:
+            raise SystemExit('cannot verify upstream KSU_NO_PREINIT capability stub')
+        codegen_path = ksu_dir / 'tools' / 'code_generation' / 'code_generation.mk'
+        if not codegen_path.is_file():
+            raise SystemExit('cannot find preinit code-generation include')
+        codegen = codegen_path.read_text()
+        runner_include = 'include $(KSU_SRC)/tools/code_generation/preinit_runner/preinit_runner.mk\n'
+        disabled_preinit = (
+            '# PCHM30 legacy SUSFS exec hooks have no preinit handoff or failure recovery.\n'
+            '# Keep upstream no-preinit stubs until the complete hook contract is ported.\n'
+            'ccflags-y += -DKSU_NO_PREINIT\n'
+        )
+        if codegen.count(runner_include) == 1 and disabled_preinit not in codegen:
+            codegen_path.write_text(codegen.replace(runner_include, disabled_preinit, 1))
+        elif codegen.count(disabled_preinit) != 1 or runner_include in codegen:
+            raise SystemExit('unexpected preinit code-generation layout')
+        preinit_status = 'disabled_missing_legacy_exec_hooks'
+        print('preinit: disabled runner build and PREINIT capability via upstream stubs', flush=True)
 
     ms_path = root / 'kernel' / 'manager' / 'manager_sign.h'
     if not ms_path.exists():
@@ -123,10 +149,12 @@ if root.exists():
             kb += '\nccflags-y += -DEXPECTED_SIZE=0x039a -DEXPECTED_HASH=\\"366aa724f4ed84d589fb47077cee4dc6aac45c37c4a50a6e1eaed4446bb3bc03\\"\n'
             kb_path.write_text(kb)
             print('injected ccflags-y custom manager flags into KernelSU Kbuild', flush=True)
-print(f'cloexec_files={cloexec_hits}', flush=True)
-Path('/tmp/run29-notes.txt').write_text(
+print('cloexec_policy=upstream_preserved', flush=True)
+(Path(os.environ['GITHUB_WORKSPACE']) / 'run29-notes.txt').write_text(
     'hook_guard_rewrites=' + (','.join(changed) if changed else 'none') + '\n' +
-    f'cloexec_files={cloexec_hits}\n'
+    'cloexec_files=0\n' +
+    'cloexec_policy=upstream_preserved\n' +
+    f'preinit={preinit_status}\n'
 )
 PY
 
@@ -151,7 +179,7 @@ fi
   echo 'prctl_not_required=latest_manager_uses_reboot_fd'
   echo 'custom_manager_size=0x039a'
   echo 'custom_manager_hash=366aa724f4ed84d589fb47077cee4dc6aac45c37c4a50a6e1eaed4446bb3bc03'
-  if [[ -f /tmp/run29-notes.txt ]]; then cat /tmp/run29-notes.txt; fi
+  if [[ -f "$GITHUB_WORKSPACE/run29-notes.txt" ]]; then cat "$GITHUB_WORKSPACE/run29-notes.txt"; fi
   if [[ -n "${OUT_DIR:-}" && -f "$OUT_DIR/.config" ]]; then
     grep -E '^CONFIG_KSU(_MANUAL_HOOK|_SUSFS|_TRACEPOINT_HOOK|_KPROBES_HOOK)?=' "$OUT_DIR/.config" || true
   fi
